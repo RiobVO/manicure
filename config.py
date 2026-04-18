@@ -44,3 +44,7 @@ TZ: Final[ZoneInfo] = ZoneInfo(TIMEZONE)
 # Пример: https://my.click.uz/services/pay?service_id=XXX&amount={amount}&transaction_param={appt_id}
 PAYMENT_URL: Final[str | None] = os.getenv("PAYMENT_URL") or None
 PAYMENT_LABEL: Final[str] = os.getenv("PAYMENT_LABEL", "Оплатить")
+
+# Redis для персистентного FSM-storage. Пусто → MemoryStorage (FSM теряется при рестарте).
+# Формат: redis://[:password@]host:port/db, например redis://redis:6379/0.
+REDIS_URL: Final[str] = os.getenv("REDIS_URL", "")
