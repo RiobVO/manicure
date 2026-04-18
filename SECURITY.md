@@ -5,7 +5,7 @@
 Please do **not** open a public GitHub issue for security problems.
 
 Email: _set this up with your domain before first sale_
-Telegram: [@RiobVO](https://t.me/RiobVO)
+Telegram: [@plssog](https://t.me/RiobVO)
 
 Include: reproducer or steps, affected version/commit, your Telegram/email
 for follow-up. Expect first response within 72 hours.

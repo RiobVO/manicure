@@ -101,7 +101,7 @@ Restoring from a backup: [docs/RESTORE.md](docs/RESTORE.md).
 
 Per-salon annual license, paid yearly. Installation and first-month
 support included. See [LICENSE.md](LICENSE.md) for terms. Contact
-[@RiobVO](https://t.me/RiobVO) for pricing.
+[@plssog](https://t.me/RiobVO) for pricing.
 
 ## Roadmap
 
@@ -185,6 +185,6 @@ docs/                    LICENSING.md, INSTALL.md, RESTORE.md
 
 ## Contact
 
-- Sales / support: [@RiobVO](https://t.me/RiobVO)
+- Sales / support: [@plssog](https://t.me/RiobVO)
 - Security: see [SECURITY.md](SECURITY.md)
 - Issues: open a GitHub issue (public repo) or DM the Telegram handle above
