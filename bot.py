@@ -9,9 +9,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from config import BOT_TOKEN, ADMIN_IDS
+from config import BOT_TOKEN, ADMIN_IDS, REDIS_URL
 from db import init_db, close_db
 from handlers import client, admin
 from handlers import admin_appointments, admin_clients, admin_services
@@ -19,19 +20,39 @@ from handlers import admin_stats, admin_settings, admin_blocks, admin_manage
 from handlers import reviews, admin_export, admin_masters
 from handlers import client_reminders, client_history
 from scheduler import setup_scheduler
-from middlewares.fsm_guard import FSMGuardMiddleware
 from utils.admin import refresh_admins_cache
 from utils.panel import set_reply_kb
 from keyboards.inline import admin_reply_keyboard
 
 
+async def _build_storage() -> BaseStorage:
+    """
+    Выбирает FSM-storage: Redis при заданном REDIS_URL и успешном ping,
+    иначе MemoryStorage. Любая ошибка Redis → warning + fallback, бот не падает.
+    """
+    if not REDIS_URL:
+        logger.info("REDIS_URL не задан → MemoryStorage (FSM теряется при рестарте)")
+        return MemoryStorage()
+    try:
+        # Локальные импорты: redis — опциональная зависимость на этапе Phase 1.
+        from aiogram.fsm.storage.redis import RedisStorage
+        from redis.asyncio import Redis
+
+        client = Redis.from_url(REDIS_URL)
+        await client.ping()
+        logger.info("FSM storage: RedisStorage (%s)", REDIS_URL)
+        return RedisStorage(redis=client)
+    except Exception as exc:
+        # Redis лёг или URL кривой — логируем и работаем без персиста.
+        logger.warning(
+            "Redis недоступен (%s): %s → fallback на MemoryStorage", REDIS_URL, exc
+        )
+        return MemoryStorage()
+
+
 async def main() -> None:
     bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
-    # Один инстанс на оба типа — иначе UUID session-маркера расходится
-    _fsm_guard = FSMGuardMiddleware()
-    dp.message.middleware(_fsm_guard)
-    dp.callback_query.middleware(_fsm_guard)
+    dp = Dispatcher(storage=await _build_storage())
 
     # Админские роутеры регистрируются ПЕРЕД клиентским,
     # чтобы catch-all fallback_message не перехватил их сообщения
@@ -70,7 +91,7 @@ async def main() -> None:
     except asyncio.CancelledError:
         logger.info("Polling cancelled, shutting down")
     finally:
-        logger.info("Бот останавливается. Активные FSM-сессии будут сброшены при следующем запуске (FSMGuardMiddleware).")
+        logger.info("Бот останавливается.")
         scheduler.shutdown()
         await close_db()
         await bot.session.close()
