@@ -26,6 +26,7 @@ from constants import (
     format_date_ru,
 )
 from utils.timezone import now_local, get_tz
+from utils.error_reporter import report_error
 from db import (
     get_upcoming_appointments,
     mark_reminder_sent,
@@ -195,11 +196,28 @@ async def run_backup(bot: Bot) -> None:
         )
 
 
+async def _safe_send_reminders(bot: Bot) -> None:
+    """Обёртка: любая непойманная ошибка → алерт и лог, но джоба не падает молча."""
+    try:
+        await send_reminders(bot)
+    except Exception as exc:
+        logger.error("send_reminders упала", exc_info=True)
+        await report_error(bot, exc, context="scheduler.send_reminders")
+
+
+async def _safe_run_backup(bot: Bot) -> None:
+    try:
+        await run_backup(bot)
+    except Exception as exc:
+        logger.error("run_backup упала", exc_info=True)
+        await report_error(bot, exc, context="scheduler.run_backup")
+
+
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     tz = get_tz()
     scheduler = AsyncIOScheduler(timezone=tz)
     scheduler.add_job(
-        send_reminders,
+        _safe_send_reminders,
         trigger="interval",
         minutes=REMINDER_POLL_INTERVAL_MIN,
         args=[bot],
@@ -207,7 +225,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     # RPO=6ч: для салона это разница между «потеряли сегодняшние записи»
     # и «потеряли вторую половину дня». Больше — клиентам больно.
     scheduler.add_job(
-        run_backup,
+        _safe_run_backup,
         trigger="interval",
         hours=6,
         args=[bot],
