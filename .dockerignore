@@ -1,0 +1,29 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+
+# Секреты и локальное состояние — не должны попадать в образ
+.env
+.env.bak
+.env.local
+
+# Локальная БД и бэкапы — монтируются через volumes
+manicure.db
+manicure.db-shm
+manicure.db-wal
+backups/
+data/
+
+# Dev-мусор
+*.rar
+*.log
+design_preview.html
+docs/
+tests/
+pytest.ini
+requirements-dev.txt
+business_plan/
