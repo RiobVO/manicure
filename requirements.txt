@@ -4,3 +4,4 @@ apscheduler
 python-dotenv
 openpyxl
 redis==5.2.1
+cryptography==43.0.3
