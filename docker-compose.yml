@@ -1,0 +1,46 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: manicure-redis-${TENANT_SLUG:-default}
+    command: redis-server --appendonly yes
+    restart: always
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+        tag: "manicure-${TENANT_SLUG:-default}-redis"
+
+  bot:
+    build: .
+    container_name: manicure-bot-${TENANT_SLUG:-default}
+    env_file: .env
+    # Жёсткие override для контейнерной среды: сервис-имена и volume-пути
+    # не должны зависеть от того, что осталось в .env у разработчика.
+    environment:
+      DB_PATH: /app/data/manicure.db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        tag: "manicure-${TENANT_SLUG:-default}-bot"
+
+volumes:
+  redis-data:
+    name: manicure-redis-${TENANT_SLUG:-default}
