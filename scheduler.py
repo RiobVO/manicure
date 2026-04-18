@@ -8,13 +8,15 @@
 Окна и интервал опроса — в constants.py.
 """
 import logging
+import os
 from datetime import datetime
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from config import BACKUP_CHAT_ID, TENANT_SLUG
 from constants import (
     REMINDER_2H_MAX,
     REMINDER_2H_MIN,
@@ -152,14 +154,45 @@ async def _send_2h_reminder(
     await mark_reminder_sent(appt_id, "reminder_2h")
 
 
-async def run_backup() -> None:
-    """Задача бэкапа БД."""
+async def run_backup(bot: Bot) -> None:
+    """
+    Задача бэкапа БД: локальная копия + (опционально) отправка в Telegram-канал.
+
+    Локальный бэкап — первичная копия, всегда. Telegram — страховка от гибели
+    диска/дроплета. Ошибка отправки в TG не должна ронять задачу: локальная
+    копия уже сделана, это и есть главное.
+    """
     try:
-        result = await backup_db()
-        if result:
-            logger.info("Бэкап создан: %s", result)
+        path = await backup_db()
     except Exception:
-        logger.error("Ошибка бэкапа", exc_info=True)
+        logger.error("Ошибка локального бэкапа", exc_info=True)
+        return
+
+    if not path:
+        return
+
+    logger.info("Локальный бэкап: %s", path)
+
+    if BACKUP_CHAT_ID is None:
+        return
+
+    try:
+        size_mb = os.path.getsize(path) / (1024 * 1024)
+        timestamp = now_local().strftime("%Y-%m-%d %H:%M")
+        caption = f"[{TENANT_SLUG}] backup {timestamp} • {size_mb:.1f} MB"
+        await bot.send_document(
+            chat_id=BACKUP_CHAT_ID,
+            document=FSInputFile(path),
+            caption=caption,
+        )
+        logger.info("Бэкап отправлен в Telegram chat=%s", BACKUP_CHAT_ID)
+    except Exception as exc:
+        # TG лёг / chat_id кривой / бот выкинут — локальная копия уже есть,
+        # это страховка, а не жизненно важный путь.
+        logger.warning(
+            "Не удалось отправить бэкап в Telegram chat=%s: %s",
+            BACKUP_CHAT_ID, exc,
+        )
 
 
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
@@ -171,9 +204,12 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         minutes=REMINDER_POLL_INTERVAL_MIN,
         args=[bot],
     )
+    # RPO=6ч: для салона это разница между «потеряли сегодняшние записи»
+    # и «потеряли вторую половину дня». Больше — клиентам больно.
     scheduler.add_job(
         run_backup,
         trigger="interval",
-        hours=24,
+        hours=6,
+        args=[bot],
     )
     return scheduler
