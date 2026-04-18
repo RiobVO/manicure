@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design Directions · Manicure Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&family=Italiana&family=Jost:wght@300;400;500&family=Manrope:wght@300;400;500;600&family=Cormorant:ital,wght@0,300;0,400;1,300&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #6a6660;
+  --page: #f4f1ec;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: 'Manrope', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-weight: 300;
+}
+
+body {
+  padding: 56px 24px 120px;
+  min-height: 100vh;
+}
+
+/* ─── HEADER ────────────────────────────────────── */
+
+.page-head {
+  max-width: 1320px;
+  margin: 0 auto 72px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 40px;
+  align-items: end;
+  padding-bottom: 32px;
+  border-bottom: 1px solid rgba(26,26,26,.14);
+}
+.eyebrow {
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: .32em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 18px;
+}
+h1.title {
+  font-family: 'Fraunces', serif;
+  font-weight: 300;
+  font-size: clamp(42px, 6vw, 88px);
+  line-height: .95;
+  letter-spacing: -.02em;
+  font-variation-settings: 'opsz' 144;
+}
+h1.title em {
+  font-style: italic;
+  font-weight: 300;
+}
+.subtitle {
+  font-family: 'Cormorant', serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: 20px;
+  color: var(--ink-soft);
+  max-width: 380px;
+  text-align: right;
+  line-height: 1.5;
+}
+
+/* ─── GALLERY ───────────────────────────────────── */
+
+.gallery {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 48px;
+}
+@media (max-width: 1100px) {
+  .gallery { grid-template-columns: 1fr; gap: 96px; }
+}
+
+.column-head {
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(26,26,26,.14);
+}
+.col-num {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+.col-name {
+  font-family: 'Fraunces', serif;
+  font-weight: 300;
+  font-size: 32px;
+  letter-spacing: -.01em;
+  margin-bottom: 6px;
+}
+.col-name em { font-style: italic; }
+.col-desc {
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 320px;
+}
+
+/* ─── iPHONE FRAME ──────────────────────────────── */
+
+.phone {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  aspect-ratio: 380 / 760;
+  background: #0a0a0a;
+  border-radius: 48px;
+  padding: 14px;
+  box-shadow:
+    0 40px 80px -20px rgba(0,0,0,.25),
+    0 0 0 1px rgba(255,255,255,.04),
+    inset 0 0 0 2px rgba(255,255,255,.03);
+  position: relative;
+}
+.phone::before {
+  content: '';
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 28px;
+  background: #0a0a0a;
+  border-radius: 20px;
+  z-index: 3;
+}
+
+.screen {
+  width: 100%;
+  height: 100%;
+  border-radius: 36px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* status bar */
+.status {
+  position: absolute;
+  top: 14px;
+  left: 0; right: 0;
+  padding: 0 32px;
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 2;
+}
+
+/* tg header */
+.tg-head {
+  padding: 56px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid transparent;
+  z-index: 1;
+}
+.tg-back { font-size: 22px; font-weight: 300; opacity: .55; }
+.tg-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: 'Fraunces', serif;
+  font-size: 15px;
+  letter-spacing: .04em;
+}
+.tg-meta { display: flex; flex-direction: column; line-height: 1.2; }
+.tg-name {
+  font-family: 'Manrope', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+.tg-status {
+  font-size: 10px;
+  opacity: .55;
+  margin-top: 2px;
+}
+
+/* chat area */
+.chat {
+  flex: 1;
+  overflow: hidden;
+  padding: 16px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.msg {
+  max-width: 82%;
+  padding: 10px 13px;
+  border-radius: 18px 18px 18px 4px;
+  font-size: 13px;
+  line-height: 1.42;
+  white-space: pre-line;
+  letter-spacing: .005em;
+}
+.msg.solo { border-radius: 18px; }
+.msg b { font-weight: 500; }
+.msg i { font-style: italic; }
+.msg code {
+  font-family: 'Fraunces', serif;
+  font-weight: 300;
+  font-size: 12.5px;
+  letter-spacing: .01em;
+}
+.msg .rule {
+  display: block;
+  margin: 6px 0;
+  opacity: .3;
+  letter-spacing: .2em;
+}
+.msg .meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Fraunces', serif;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* inline keyboard */
+.kb {
+  max-width: 82%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: -4px;
+  padding: 2px;
+  border-radius: 14px;
+}
+.kb-row { display: flex; gap: 2px; }
+.kb-btn {
+  flex: 1;
+  padding: 9px 10px;
+  font-size: 12px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 400;
+  text-align: center;
+  border-radius: 9px;
+  letter-spacing: .01em;
+  border: 0;
+  cursor: pointer;
+}
+
+/* ─── DIRECTION 01 · BOUDOIR PEARL ─────────────── */
+
+.dir-01 .screen {
+  background:
+    radial-gradient(120% 80% at 0% 0%, #eadfd1 0%, transparent 50%),
+    radial-gradient(120% 80% at 100% 100%, #f2e3d5 0%, transparent 50%),
+    #f7f1e8;
+  color: #2a231d;
+}
+.dir-01 .status { color: #2a231d; }
+.dir-01 .tg-head {
+  background: rgba(247,241,232,.7);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(42,35,29,.08);
+}
+.dir-01 .tg-back { color: #C9A961; }
+.dir-01 .tg-avatar {
+  background: linear-gradient(135deg, #f2e3d5, #d4ba98);
+  color: #2a231d;
+}
+.dir-01 .msg {
+  background: #fffdf9;
+  color: #2a231d;
+  box-shadow: 0 1px 2px rgba(42,35,29,.04);
+}
+.dir-01 .msg b { color: #1a1410; }
+.dir-01 .msg code { color: #8a6a3a; }
+.dir-01 .msg .rule { color: #C9A961; }
+.dir-01 .kb-btn {
+  background: #fffdf9;
+  color: #2a231d;
+  box-shadow: inset 0 0 0 1px rgba(201,169,97,.25);
+}
+.dir-01 .kb-btn.primary {
+  background: #2a231d;
+  color: #f7f1e8;
+  box-shadow: inset 0 0 0 1px #2a231d;
+}
+
+/* ─── DIRECTION 02 · VELVET NOIR ────────────────── */
+
+.dir-02 .screen {
+  background:
+    radial-gradient(140% 100% at 30% 0%, #2a0f1a 0%, transparent 60%),
+    radial-gradient(120% 100% at 100% 100%, #1a0d0d 0%, transparent 50%),
+    #0a0608;
+  color: #e6d9c2;
+}
+.dir-02 .status { color: #e6d9c2; }
+.dir-02 .tg-head {
+  background: rgba(14,6,10,.65);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(212,175,55,.15);
+}
+.dir-02 .tg-back { color: #D4AF37; }
+.dir-02 .tg-avatar {
+  background: linear-gradient(135deg, #3B0A1A, #8a1538);
+  color: #D4AF37;
+  box-shadow: inset 0 0 0 1px #D4AF37;
+}
+.dir-02 .tg-name { color: #e6d9c2; }
+.dir-02 .msg {
+  background: rgba(26,13,13,.65);
+  color: #e6d9c2;
+  box-shadow: inset 0 0 0 1px rgba(212,175,55,.14);
+  backdrop-filter: blur(4px);
+}
+.dir-02 .msg b {
+  color: #D4AF37;
+  font-family: 'Italiana', serif;
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: .04em;
+}
+.dir-02 .msg code { color: #D4AF37; }
+.dir-02 .msg .rule { color: #D4AF37; opacity: .4; }
+.dir-02 .kb-btn {
+  background: transparent;
+  color: #e6d9c2;
+  box-shadow: inset 0 0 0 1px rgba(212,175,55,.35);
+}
+.dir-02 .kb-btn.primary {
+  background: #D4AF37;
+  color: #0a0608;
+  box-shadow: inset 0 0 0 1px #D4AF37;
+  font-weight: 500;
+}
+
+/* ─── DIRECTION 03 · JARDIN BLANC ──────────────── */
+
+.dir-03 .screen {
+  background:
+    radial-gradient(100% 80% at 0% 0%, #e8ebe1 0%, transparent 50%),
+    radial-gradient(100% 80% at 100% 100%, #f5e6e0 0%, transparent 50%),
+    #fafaf5;
+  color: #33352b;
+}
+.dir-03 .status { color: #33352b; }
+.dir-03 .tg-head {
+  background: rgba(250,250,245,.7);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(51,53,43,.08);
+}
+.dir-03 .tg-back { color: #8a7268; }
+.dir-03 .tg-avatar {
+  background: linear-gradient(135deg, #cdd4c5, #d4a5a5);
+  color: #fafaf5;
+  font-family: 'Cormorant', serif;
+  font-style: italic;
+}
+.dir-03 .msg {
+  background: #ffffff;
+  color: #33352b;
+  box-shadow: 0 1px 2px rgba(51,53,43,.04);
+}
+.dir-03 .msg b {
+  color: #33352b;
+  font-family: 'Cormorant', serif;
+  font-weight: 500;
+  font-size: 17px;
+  letter-spacing: .005em;
+}
+.dir-03 .msg i { color: #8a7268; }
+.dir-03 .msg code { color: #8a7268; }
+.dir-03 .msg .rule { color: #b9a598; }
+.dir-03 .kb-btn {
+  background: #ffffff;
+  color: #33352b;
+  box-shadow: inset 0 0 0 1px rgba(51,53,43,.12);
+}
+.dir-03 .kb-btn.primary {
+  background: #33352b;
+  color: #fafaf5;
+  box-shadow: inset 0 0 0 1px #33352b;
+}
+
+/* ─── PALETTE / SPECS UNDER PHONE ─────────────── */
+
+.specs {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 20px 24px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  font-family: 'Manrope', sans-serif;
+}
+.specs dt {
+  font-family: 'Jost', sans-serif;
+  font-size: 10px;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding-top: 2px;
+}
+.palette {
+  display: flex;
+  gap: 6px;
+}
+.sw {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+}
+
+.verdict {
+  margin-top: 20px;
+  padding: 16px 18px;
+  background: rgba(0,0,0,.03);
+  border-left: 2px solid currentColor;
+  font-family: 'Cormorant', serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.choose-row {
+  margin-top: 26px;
+  display: flex;
+  gap: 8px;
+}
+.choose {
+  flex: 1;
+  padding: 16px;
+  background: var(--ink);
+  color: var(--page);
+  border: 0;
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  letter-spacing: .32em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform .25s ease, background .25s ease;
+}
+.choose:hover { background: #000; transform: translateY(-1px); }
+.choose small {
+  display: block;
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  margin-top: 4px;
+  opacity: .7;
+}
+
+/* ─── FOOTER NOTE ───────────────────────────────── */
+
+.footnote {
+  max-width: 1320px;
+  margin: 120px auto 0;
+  padding-top: 40px;
+  border-top: 1px solid rgba(26,26,26,.14);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.footnote h3 {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: 22px;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════ -->
+
+<header class="page-head">
+  <div>
+    <div class="eyebrow">Manicure Bot · Design Directions</div>
+    <h1 class="title">Три направления<br>для <em>женского</em> премиум-UX</h1>
+  </div>
+  <p class="subtitle">
+    Каждая колонка — живой чат Telegram в одном из направлений. Три экрана по пути клиента: первое приветствие, карточка услуги, подтверждение записи.
+  </p>
+</header>
+
+<!-- ════════════════════════════════════════════════ -->
+
+<div class="gallery">
+
+  <!-- ─── 01 · BOUDOIR PEARL ─────────────────── -->
+  <section class="dir-01">
+    <div class="column-head">
+      <div class="col-num"><em>i</em> · Direction 01</div>
+      <div class="col-name"><em>Boudoir</em> Pearl</div>
+      <div class="col-desc">Будуар в бежевом. Жемчуг, шампань, латунь. Медленные линии Cormorant, благородный свет. Как визитка отеля «Park Hyatt».</div>
+    </div>
+
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span>●●●●</span></div>
+      <div class="tg-head">
+        <span class="tg-back">‹</span>
+        <div class="tg-avatar">В</div>
+        <div class="tg-meta">
+          <span class="tg-name">Вуаль · маникюр</span>
+          <span class="tg-status">бот · онлайн</span>
+        </div>
+      </div>
+      <div class="chat">
+
+<div class="msg solo"><b>Добрый день, Анна.</b>
+<span class="rule">⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯</span>
+Последний визит — <code>28 марта</code>,
+маникюр классический у Елены.
+</div>
+
+<div class="msg solo">Что сегодня?</div>
+
+<div class="kb">
+  <div class="kb-row"><button class="kb-btn primary">↻  Повторить у Елены</button></div>
+  <div class="kb-row">
+    <button class="kb-btn">Услуги</button>
+    <button class="kb-btn">Мастера</button>
+  </div>
+  <div class="kb-row">
+    <button class="kb-btn">Портфолио</button>
+    <button class="kb-btn">Мои записи</button>
+  </div>
+</div>
+
+<div class="msg solo" style="margin-top:8px">
+<b>Маникюр · классический</b>
+<span class="rule">⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯</span>
+<span class="meta-row"><span>Длительность</span><code>45 мин</code></span>
+<span class="meta-row"><span>Стоимость</span><code>250 000 сум</code></span>
+<span class="rule" style="margin-top:10px">✦ ✦ ✦ ✦ ✦    4.9 · 142</span>
+</div>
+
+<div class="kb">
+  <div class="kb-row"><button class="kb-btn primary">→  Записаться</button></div>
+</div>
+
+      </div>
+    </div></div>
+
+    <dl class="specs">
+      <dt>палитра</dt><dd class="palette">
+        <span class="sw" style="background:#f7f1e8"></span>
+        <span class="sw" style="background:#eadfd1"></span>
+        <span class="sw" style="background:#C9A961"></span>
+        <span class="sw" style="background:#2a231d"></span>
+        <span class="sw" style="background:#fffdf9"></span>
+      </dd>
+      <dt>шрифты</dt><dd>Fraunces (italic, 300) <em>·</em> Cormorant <em>·</em> Manrope 400</dd>
+      <dt>язык</dt><dd>На «вы», сдержанно, без междометий. Редкие акценты <code>✦ ›</code></dd>
+      <dt>tempo</dt><dd>Медленно. Сообщения с паузами. Воздух вокруг каждой фразы.</dd>
+    </dl>
+
+    <div class="verdict">«Молчаливая роскошь». Подходит студии, которая хочет читаться как парфюмерный бутик, а не сетевой салон.</div>
+
+    <div class="choose-row"><button class="choose">Выбираю 01<small>Boudoir Pearl</small></button></div>
+  </section>
+
+  <!-- ─── 02 · VELVET NOIR ────────────────────── -->
+  <section class="dir-02">
+    <div class="column-head">
+      <div class="col-num"><em>ii</em> · Direction 02</div>
+      <div class="col-name"><em>Velvet</em> Noir</div>
+      <div class="col-desc">Тёмный бархат, глубокое бордо, сусальное золото. Art Deco, ночной глянец. Для студии, которая хочет казаться дороже всех в городе.</div>
+    </div>
+
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span>●●●●</span></div>
+      <div class="tg-head">
+        <span class="tg-back">‹</span>
+        <div class="tg-avatar">N</div>
+        <div class="tg-meta">
+          <span class="tg-name">Noir · atelier</span>
+          <span class="tg-status">бот · онлайн</span>
+        </div>
+      </div>
+      <div class="chat">
+
+<div class="msg solo" style="font-family:'Italiana',serif; font-size:18px; letter-spacing:.06em; text-align:center; padding:18px 14px;">✦<br><br>С возвращением.</div>
+
+<div class="msg solo">Анна, последний визит —
+<code>28 · III · 26</code>
+Маникюр у Елены.
+
+<span class="rule">◈    ◈    ◈</span>
+
+Что сегодня?
+</div>
+
+<div class="kb">
+  <div class="kb-row"><button class="kb-btn primary">↻  ПОВТОРИТЬ</button></div>
+  <div class="kb-row">
+    <button class="kb-btn">Услуги</button>
+    <button class="kb-btn">Мастера</button>
+  </div>
+  <div class="kb-row">
+    <button class="kb-btn">Портфолио</button>
+    <button class="kb-btn">Мои записи</button>
+  </div>
+</div>
+
+<div class="msg solo" style="margin-top:8px">
+<b>Manucure Classique</b>
+<span class="rule">⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯</span>
+<span class="meta-row"><span>durée</span><code>45 min</code></span>
+<span class="meta-row"><span>tarif</span><code>250 000 <em>uzs</em></code></span>
+
+<span class="rule" style="margin-top:8px">❖    4.9  ·  142 avis</span>
+</div>
+
+<div class="kb">
+  <div class="kb-row"><button class="kb-btn primary">РЕЗЕРВ</button></div>
+</div>
+
+      </div>
+    </div></div>
+
+    <dl class="specs">
+      <dt>палитра</dt><dd class="palette">
+        <span class="sw" style="background:#0a0608"></span>
+        <span class="sw" style="background:#3B0A1A"></span>
+        <span class="sw" style="background:#D4AF37"></span>
+        <span class="sw" style="background:#e6d9c2"></span>
+        <span class="sw" style="background:#8a1538"></span>
+      </dd>
+      <dt>шрифты</dt><dd>Italiana (заголовки) <em>·</em> Crimson Pro <em>·</em> Manrope 300</dd>
+      <dt>язык</dt><dd>Французские вкрапления (<em>durée, tarif, avis</em>), римские цифры, капитель в кнопках.</dd>
+      <dt>tempo</dt><dd>Драматичный. Типографика — герой. Текст как эпиграф.</dd>
+    </dl>
+
+    <div class="verdict">«Ночной салон-ресторан». Самое рискованное и самое премиум из трёх. Не для всех городов, но там, где зайдёт — уничтожит конкурентов.</div>
+
+    <div class="choose-row"><button class="choose">Выбираю 02<small>Velvet Noir</small></button></div>
+  </section>
+
+  <!-- ─── 03 · JARDIN BLANC ────────────────────── -->
+  <section class="dir-03">
+    <div class="column-head">
+      <div class="col-num"><em>iii</em> · Direction 03</div>
+      <div class="col-name"><em>Jardin</em> Blanc</div>
+      <div class="col-desc">Белый сад. Шалфей, пыльная роза, льняной холст. Мягкая ботаника без слащавости, курсив Cormorant. Как весенний номер Vogue.</div>
+    </div>
+
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span>●●●●</span></div>
+      <div class="tg-head">
+        <span class="tg-back">‹</span>
+        <div class="tg-avatar"><em>j</em></div>
+        <div class="tg-meta">
+          <span class="tg-name">Jardin · манукюр</span>
+          <span class="tg-status">бот · онлайн</span>
+        </div>
+      </div>
+      <div class="chat">
+
+<div class="msg solo"><b>с возвращением,<br>Анна ❀</b>
+<span class="rule">· · · · · · · · · · · · ·</span>
+<i>последний визит — 28 марта</i>
+маникюр классический · Елена
+<i>прошло 20 дней</i>
+</div>
+
+<div class="msg solo">что сегодня?</div>
+
+<div class="kb">
+  <div class="kb-row"><button class="kb-btn primary">↻  повторить у Елены</button></div>
+  <div class="kb-row">
+    <button class="kb-btn">услуги</button>
+    <button class="kb-btn">мастера</button>
+  </div>
+  <div class="kb-row">
+    <button class="kb-btn">портфолио ✿</button>
+    <button class="kb-btn">мои записи</button>
+  </div>
+</div>
+
+<div class="msg solo" style="margin-top:8px">
+<b>маникюр <em>классический</em></b>
+<span class="rule">· · · · · · · · · · · · ·</span>
+<i>форма, кутикула, база</i>
+
+<span class="meta-row"><span>длительность</span><code>45 мин</code></span>
+<span class="meta-row"><span>стоимость</span><code>250 000 сум</code></span>
+
+<span class="rule" style="margin-top:6px">❀ ❀ ❀ ❀ ❀   <i>4.9 · 142</i></span>
+</div>
+
+<div class="kb">
+  <div class="kb-row"><button class="kb-btn primary">→  записаться</button></div>
+</div>
+
+      </div>
+    </div></div>
+
+    <dl class="specs">
+      <dt>палитра</dt><dd class="palette">
+        <span class="sw" style="background:#fafaf5"></span>
+        <span class="sw" style="background:#cdd4c5"></span>
+        <span class="sw" style="background:#d4a5a5"></span>
+        <span class="sw" style="background:#33352b"></span>
+        <span class="sw" style="background:#8a7268"></span>
+      </dd>
+      <dt>шрифты</dt><dd>Cormorant (italic, 500) <em>·</em> Fraunces <em>·</em> Manrope 300</dd>
+      <dt>язык</dt><dd>Строчные буквы, мягко, на «ты». Редкий цветок <code>❀ ✿</code> как акцент.</dd>
+      <dt>tempo</dt><dd>Лёгкий, поэтичный. Курсивы, короткие строки, ботанические знаки.</dd>
+    </dl>
+
+    <div class="verdict">«Студия в светлой мансарде». Универсально женственно, тепло, без пошлости. Самый безопасный выбор из трёх — но не скучный.</div>
+
+    <div class="choose-row"><button class="choose">Выбираю 03<small>Jardin Blanc</small></button></div>
+  </section>
+
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+
+<footer class="footnote">
+  <div>
+    <h3>Что на экране — это не дизайн «на словах»</h3>
+    <p>Каждое сообщение справа — это <em>реальный текст</em>, который бот будет присылать. Кнопки — это inline-клавиатуры aiogram. Никаких веб-компонентов в итоговом продукте: всё, что видишь, живёт <em>внутри Telegram</em>.</p>
+  </div>
+  <div>
+    <h3>Три экрана, которые ты видишь</h3>
+    <p><code>01</code> приветствие возвращающегося клиента<br>
+       <code>02</code> карточка услуги с ценой и рейтингом<br>
+       <code>03</code> кнопка записи</p>
+    <p style="margin-top:12px"><em>Полный флоу после выбора направления: ~12 экранов (мастер, календарь, время, контакт, сверка, подтверждение, мои записи, перенос, отмена).</em></p>
+  </div>
+</footer>
+
+</body>
+</html>
