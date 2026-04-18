@@ -48,3 +48,17 @@ PAYMENT_LABEL: Final[str] = os.getenv("PAYMENT_LABEL", "Оплатить")
 # Redis для персистентного FSM-storage. Пусто → MemoryStorage (FSM теряется при рестарте).
 # Формат: redis://[:password@]host:port/db, например redis://redis:6379/0.
 REDIS_URL: Final[str] = os.getenv("REDIS_URL", "")
+
+# Идентификатор салона-арендатора (для caption в бэкапах и тегов логов).
+# Заполняется install.sh при деплое. Дефолт — для локальной разработки.
+TENANT_SLUG: Final[str] = os.getenv("TENANT_SLUG", "unknown")
+
+# Telegram chat_id для облачной копии БД. Пусто → только локальные бэкапы.
+# Рекомендуется приватный канал, где владелец = автор бота.
+try:
+    _backup_chat = os.getenv("BACKUP_CHAT_ID", "").strip()
+    BACKUP_CHAT_ID: Final[int | None] = int(_backup_chat) if _backup_chat else None
+except ValueError as exc:
+    raise EnvironmentError(
+        "BACKUP_CHAT_ID must be an integer (Telegram chat_id), e.g. -1001234567890."
+    ) from exc
