@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import ErrorEvent
 
 from config import BOT_TOKEN, ADMIN_IDS, REDIS_URL
 from db import init_db, close_db
@@ -18,9 +19,10 @@ from handlers import client, admin
 from handlers import admin_appointments, admin_clients, admin_services
 from handlers import admin_stats, admin_settings, admin_blocks, admin_manage
 from handlers import reviews, admin_export, admin_masters
-from handlers import client_reminders, client_history
+from handlers import client_reminders, client_history, admin_status
 from scheduler import setup_scheduler
 from utils.admin import refresh_admins_cache
+from utils.error_reporter import mark_started, report_error
 from utils.panel import set_reply_kb
 from keyboards.inline import admin_reply_keyboard
 
@@ -61,11 +63,36 @@ async def main() -> None:
     dp.include_router(admin_clients.router)
     dp.include_router(admin_services.router)
     dp.include_router(admin_stats.router)
+    dp.include_router(admin_status.router)
     dp.include_router(admin_settings.router)
     dp.include_router(admin_blocks.router)
     dp.include_router(admin_manage.router)
     dp.include_router(admin_masters.router)
     dp.include_router(admin_export.router)
+
+    # Глобальный ловец unhandled exceptions из хендлеров.
+    # Никогда ничего не должен поднимать — иначе aiogram паникует в polling loop.
+    # Bot приходит через kwargs от диспетчера: ErrorEvent.bot в 3.7 = None.
+    @dp.errors()
+    async def on_handler_error(event: ErrorEvent, bot: Bot) -> bool:
+        user_id: int | None = None
+        context = "unknown"
+        try:
+            update = event.update
+            if update.message is not None:
+                if update.message.from_user is not None:
+                    user_id = update.message.from_user.id
+                text = update.message.text or update.message.caption or "(no text)"
+                context = f"message: {text[:50]}"
+            elif update.callback_query is not None:
+                user_id = update.callback_query.from_user.id
+                context = f"callback: {update.callback_query.data}"
+        except Exception:
+            # Парсинг обновления — best-effort. Не поломает алерт.
+            pass
+        logger.error("Unhandled exception in handler: %s", event.exception, exc_info=event.exception)
+        await report_error(bot, event.exception, context=context, user_id=user_id)
+        return True
     dp.include_router(reviews.router)  # до client.router — чтобы rev_* callbacks не попали в fallback
     # client_reminders и client_history — ДО client.router, т.к. client содержит
     # catch-all fallback_message. Порядок внутри этой тройки неважен (у них нет пересечений),
@@ -84,6 +111,7 @@ async def main() -> None:
     scheduler = setup_scheduler(bot)
     scheduler.start()
 
+    mark_started()
     logger.info("Бот запущен")
 
     try:

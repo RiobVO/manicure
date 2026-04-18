@@ -62,3 +62,13 @@ except ValueError as exc:
     raise EnvironmentError(
         "BACKUP_CHAT_ID must be an integer (Telegram chat_id), e.g. -1001234567890."
     ) from exc
+
+# Telegram chat_id приватного канала для алертов об ошибках. Пусто → алертов нет,
+# ошибки только в stderr контейнера. Рекомендуется канал, куда автор получает пуши.
+try:
+    _error_chat = os.getenv("ERROR_CHAT_ID", "").strip()
+    ERROR_CHAT_ID: Final[int | None] = int(_error_chat) if _error_chat else None
+except ValueError as exc:
+    raise EnvironmentError(
+        "ERROR_CHAT_ID must be an integer (Telegram chat_id)."
+    ) from exc
