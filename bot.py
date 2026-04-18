@@ -8,21 +8,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from datetime import datetime, timedelta, timezone
+
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ErrorEvent
 
-from config import BOT_TOKEN, ADMIN_IDS, REDIS_URL
+from config import (
+    ADMIN_IDS,
+    BOT_TOKEN,
+    LICENSE_CONTACT,
+    LICENSE_KEY,
+    REDIS_URL,
+    TENANT_SLUG,
+)
 from db import init_db, close_db
 from handlers import client, admin
 from handlers import admin_appointments, admin_clients, admin_services
 from handlers import admin_stats, admin_settings, admin_blocks, admin_manage
 from handlers import reviews, admin_export, admin_masters
 from handlers import client_reminders, client_history, admin_status
+from middlewares.license_gate import LicenseGateMiddleware
 from scheduler import setup_scheduler
 from utils.admin import refresh_admins_cache
 from utils.error_reporter import mark_started, report_error
+from utils.license import LicenseMode, evaluate_license
 from utils.panel import set_reply_kb
 from keyboards.inline import admin_reply_keyboard
 
@@ -52,9 +63,45 @@ async def _build_storage() -> BaseStorage:
         return MemoryStorage()
 
 
+async def _warn_grace(bot: Bot, license_state) -> None:
+    """На старте в GRACE-режиме напоминаем админам что пора продлевать."""
+    if license_state.license is None:
+        return
+    grace_end = license_state.license.expires_at + timedelta(days=7)
+    days_left = (grace_end - datetime.now(timezone.utc)).days
+    text = (
+        f"⚠ <b>Лицензия бота истекла</b>\n\n"
+        f"Grace-режим. До блокировки: <b>{max(days_left, 0)} дн.</b>\n"
+        f"Для продления обратитесь к {LICENSE_CONTACT}."
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(admin_id, text, parse_mode="HTML")
+        except Exception as exc:
+            logger.warning("не доставил grace-предупреждение admin=%s: %s", admin_id, exc)
+
+
 async def main() -> None:
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=await _build_storage())
+
+    # Лицензия проверяется ДО любого хендлера. Сейчас — только логируем режим,
+    # enforcement (middleware-гейт) ВЫКЛЮЧЕН осознанно: первые клиенты не-технические,
+    # пиратить некому, а ложное срабатывание заблокирует салон в рабочий день.
+    # Enforcement включается одной строкой ниже при ~20 клиентах / первом случае
+    # попытки пиратства. Весь остальной код лицензий (verify, heartbeat, /status)
+    # работает прямо сейчас — мы видим, но не режем.
+    license_state = evaluate_license(LICENSE_KEY, TENANT_SLUG)
+    logger.info(
+        "License mode=%s %s",
+        license_state.mode.value,
+        f"({license_state.reason})" if license_state.reason else "",
+    )
+
+    # TODO: при ~20 клиентах раскомментировать 3 строки ниже — enforcement оживёт.
+    # gate = LicenseGateMiddleware(license_state, LICENSE_CONTACT)
+    # dp.message.middleware(gate)
+    # dp.callback_query.middleware(gate)
 
     # Админские роутеры регистрируются ПЕРЕД клиентским,
     # чтобы catch-all fallback_message не перехватил их сообщения
@@ -108,10 +155,12 @@ async def main() -> None:
     for admin_id in ADMIN_IDS:
         set_reply_kb(admin_id, admin_reply_keyboard())
 
-    scheduler = setup_scheduler(bot)
+    scheduler = setup_scheduler(bot, license_state)
     scheduler.start()
 
     mark_started()
+    if license_state.mode == LicenseMode.GRACE:
+        await _warn_grace(bot, license_state)
     logger.info("Бот запущен")
 
     try:

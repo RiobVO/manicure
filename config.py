@@ -72,3 +72,13 @@ except ValueError as exc:
     raise EnvironmentError(
         "ERROR_CHAT_ID must be an integer (Telegram chat_id)."
     ) from exc
+
+# Лицензионный ключ (вывод tools/issue_license.py). Пусто + реальный публичный ключ
+# в utils/license.py → restricted mode.
+LICENSE_KEY: Final[str] = os.getenv("LICENSE_KEY", "").strip()
+
+# URL для heartbeat-POST (автор-контролируемый endpoint). Пусто → heartbeat не шлём.
+HEARTBEAT_URL: Final[str] = os.getenv("HEARTBEAT_URL", "").strip()
+
+# Контакт для сообщения «лицензия истекла, обратитесь к X». Например: @sabina_nails_author.
+LICENSE_CONTACT: Final[str] = os.getenv("LICENSE_CONTACT", "поставщика бота")

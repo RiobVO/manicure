@@ -27,6 +27,8 @@ from constants import (
 )
 from utils.timezone import now_local, get_tz
 from utils.error_reporter import report_error
+from utils.heartbeat import send_heartbeat
+from utils.license import LicenseState
 from db import (
     get_upcoming_appointments,
     mark_reminder_sent,
@@ -213,7 +215,7 @@ async def _safe_run_backup(bot: Bot) -> None:
         await report_error(bot, exc, context="scheduler.run_backup")
 
 
-def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
+def setup_scheduler(bot: Bot, license_state: LicenseState) -> AsyncIOScheduler:
     tz = get_tz()
     scheduler = AsyncIOScheduler(timezone=tz)
     scheduler.add_job(
@@ -229,5 +231,15 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         trigger="interval",
         hours=6,
         args=[bot],
+    )
+    # Heartbeat: раз в 24ч, первый раз — сразу при старте (не ждём сутки).
+    # license_id может быть None (в DEV/RESTRICTED без лицензии) — отправляем пустой.
+    license_id = license_state.license.license_id if license_state.license else None
+    scheduler.add_job(
+        send_heartbeat,
+        trigger="interval",
+        hours=24,
+        args=[license_id],
+        next_run_time=datetime.now(tz),
     )
     return scheduler
