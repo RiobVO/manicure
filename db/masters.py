@@ -124,6 +124,28 @@ async def get_day_off_weekdays_for_master(master_id: int) -> frozenset[int]:
     return frozenset(r["weekday"] for r in rows)
 
 
+async def update_master_weekday(
+    master_id: int,
+    weekday: int,
+    work_start: int | None,
+    work_end: int | None,
+) -> None:
+    """Upsert строки master_schedule для мастера и дня недели.
+
+    work_start=None, work_end=None → день помечен выходным.
+    Используется админским редактором расписания. Мастер права на это не имеет."""
+    db = await get_db()
+    await db.execute(
+        """INSERT INTO master_schedule (master_id, weekday, work_start, work_end)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(master_id, weekday) DO UPDATE SET
+               work_start = excluded.work_start,
+               work_end   = excluded.work_end""",
+        (master_id, weekday, work_start, work_end),
+    )
+    await db.commit()
+
+
 async def get_time_blocks_for_master(master_id: int, date_str: str) -> list[tuple[str, str]]:
     """Диапазоны заблокированного времени для мастера (включая глобальные блокировки)."""
     rows = await _dict_rows(
@@ -152,3 +174,51 @@ async def delete_master(master_id: int) -> bool:
     await db.execute("DELETE FROM masters WHERE id = ?", (master_id,))
     await db.commit()
     return True
+
+
+async def get_master_by_user_id(user_id: int) -> dict[str, Any] | None:
+    """Возвращает активного мастера, привязанного к TG user_id, или None.
+    Используется для role-routing и для загрузки данных кабинета."""
+    return await _dict_row(
+        "SELECT * FROM masters WHERE user_id = ? AND is_active = 1",
+        (user_id,),
+    )
+
+
+async def get_active_masters_with_user_id() -> list[dict[str, Any]]:
+    """Активные мастера с привязанным user_id — для построения masters-кеша.
+    Мастера без user_id в кабинет не попадут и в кеше не нужны."""
+    return await _dict_rows(
+        "SELECT id, user_id, name FROM masters WHERE is_active = 1 AND user_id IS NOT NULL"
+    )
+
+
+async def get_master_appointments_today(
+    master_id: int, date_str: str,
+) -> list[dict[str, Any]]:
+    """Записи мастера на указанную дату: scheduled + completed + no_show.
+    Отменённые (cancelled) исключены — мастеру они не нужны."""
+    return await _dict_rows(
+        """SELECT id, time, name, phone, service_name, service_duration, status
+           FROM appointments
+           WHERE master_id = ? AND date = ?
+             AND status IN ('scheduled', 'completed', 'no_show')
+           ORDER BY time""",
+        (master_id, date_str),
+    )
+
+
+async def get_master_appointments_upcoming(
+    master_id: int, from_date: str, limit: int = 30,
+) -> list[dict[str, Any]]:
+    """Scheduled записи мастера от даты (включительно), ORDER BY date, time.
+    Лимит 30 — чтобы экран не превращался в простыню; при переполнении
+    показываем хвост «... и ещё N» на UI-слое."""
+    return await _dict_rows(
+        """SELECT id, date, time, name, phone, service_name, service_duration
+           FROM appointments
+           WHERE master_id = ? AND status = 'scheduled' AND date >= ?
+           ORDER BY date, time
+           LIMIT ?""",
+        (master_id, from_date, limit),
+    )

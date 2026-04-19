@@ -4,12 +4,20 @@ import logging
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from db.masters import get_master
-from utils.admin import all_admin_ids
+from utils.admin import all_admin_ids, is_admin
 
 logger = logging.getLogger(__name__)
+
+
+def _master_dismiss_kb() -> InlineKeyboardMarkup:
+    """Inline-кнопка «Принято» — чистит мастерское уведомление из чата.
+    Callback `notif_dismiss` уже обрабатывается в admin.py (удаляет сообщение)."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Принято", callback_data="notif_dismiss"),
+    ]])
 
 # Шаблоны сообщений мастеру
 _MASTER_TEMPLATES: dict[str, str] = {
@@ -78,9 +86,23 @@ async def notify_master(bot: Bot, master_id: int | None, event: str, data: dict)
         logger.warning("Мастер id=%s не найден или не привязан к Telegram", master_id)
         return False
 
+    # Дедуп: если мастер одновременно админ — админский broadcast уже ушёл
+    # ему же как админу (с кнопками «✅ Принято» / «📒 Все записи»).
+    # Повторять тот же факт мастерским шаблоном без кнопок — мусор в чате.
+    if is_admin(master["user_id"]):
+        logger.debug(
+            "Мастер id=%s = админ (user_id=%s), пропускаем master-уведомление (событие %s)",
+            master_id, master["user_id"], event,
+        )
+        return False
+
     text = template.format(**data)
     try:
-        await bot.send_message(master["user_id"], text)
+        await bot.send_message(
+            master["user_id"],
+            text,
+            reply_markup=_master_dismiss_kb(),
+        )
         return True
     except TelegramForbiddenError:
         logger.warning("Мастер id=%s заблокировал бота", master_id)

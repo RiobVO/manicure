@@ -27,11 +27,12 @@ from db import init_db, close_db
 from handlers import client, admin
 from handlers import admin_appointments, admin_clients, admin_services
 from handlers import admin_stats, admin_settings, admin_blocks, admin_manage
-from handlers import reviews, admin_export, admin_masters
+from handlers import reviews, admin_export, admin_masters, admin_master_schedule
 from handlers import client_reminders, client_history, admin_status
+from handlers import master
 from middlewares.license_gate import LicenseGateMiddleware
 from scheduler import setup_scheduler
-from utils.admin import refresh_admins_cache
+from utils.admin import refresh_admins_cache, refresh_masters_cache
 from utils.error_reporter import mark_started, report_error
 from utils.license import LicenseMode, evaluate_license
 from utils.panel import set_reply_kb
@@ -115,6 +116,7 @@ async def main() -> None:
     dp.include_router(admin_blocks.router)
     dp.include_router(admin_manage.router)
     dp.include_router(admin_masters.router)
+    dp.include_router(admin_master_schedule.router)
     dp.include_router(admin_export.router)
 
     # Глобальный ловец unhandled exceptions из хендлеров.
@@ -140,6 +142,9 @@ async def main() -> None:
         logger.error("Unhandled exception in handler: %s", event.exception, exc_info=event.exception)
         await report_error(bot, event.exception, context=context, user_id=user_id)
         return True
+    # master.router — ПОСЛЕ всех admin-роутеров, но ДО reviews/client_reminders/client_history/client:
+    # IsMasterFilter поймает только активных мастеров с user_id, остальные провалятся дальше.
+    dp.include_router(master.router)
     dp.include_router(reviews.router)  # до client.router — чтобы rev_* callbacks не попали в fallback
     # client_reminders и client_history — ДО client.router, т.к. client содержит
     # catch-all fallback_message. Порядок внутри этой тройки неважен (у них нет пересечений),
@@ -150,6 +155,7 @@ async def main() -> None:
 
     await init_db()
     await refresh_admins_cache()
+    await refresh_masters_cache()
 
     # Запоминаем reply keyboard для админ-чатов
     for admin_id in ADMIN_IDS:

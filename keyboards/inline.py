@@ -9,7 +9,7 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 
-from constants import BOOKING_DAYS_AVAILABLE
+from constants import BOOKING_DAYS_AVAILABLE, WEEKDAYS_SHORT_RU
 from utils.timezone import now_local
 from utils.ui import (
     DIVIDER_SOFT, DIVIDER_WHISPER,
@@ -267,6 +267,7 @@ def master_card_keyboard(master_id: int, is_active: bool) -> InlineKeyboardMarku
             InlineKeyboardButton(text="🆔 User ID", callback_data=f"master_edit_uid_{master_id}"),
         ],
         [InlineKeyboardButton(text="📝 Описание",  callback_data=f"master_edit_bio_{master_id}")],
+        [InlineKeyboardButton(text="📆 Расписание", callback_data=f"master_sched_{master_id}")],
         [InlineKeyboardButton(text=toggle_text,     callback_data=f"master_toggle_{master_id}")],
         [InlineKeyboardButton(text="🗑 Удалить",    callback_data=f"master_delete_{master_id}")],
         [InlineKeyboardButton(text="🔙 К мастерам", callback_data="admin_masters")],
@@ -346,6 +347,20 @@ def admin_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="💅 Услуги"),     KeyboardButton(text="👨‍🎨 Мастера")],
             [KeyboardButton(text="👥 Клиенты"),    KeyboardButton(text="🚫 Блокировки")],
             [KeyboardButton(text="⚙️ Настройки")],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def master_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Постоянная нижняя клавиатура мастера (кабинет мастера).
+    Текст '📋 Сегодня' совпадает с админским — разрулено на уровне
+    router-filter: admin-router IsAdminFilter, master-router IsMasterFilter."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📋 Сегодня")],
+            [KeyboardButton(text="📅 Мои записи")],
+            [KeyboardButton(text="📆 Моё расписание")],
         ],
         resize_keyboard=True,
     )
@@ -614,6 +629,62 @@ def weekly_schedule_keyboard(schedule: dict) -> InlineKeyboardMarkup:
             label = f"{day_name}  {row['work_start']:02d}:00 – {row['work_end']:02d}:00"
         buttons.append([InlineKeyboardButton(text=label, callback_data=f"sched_day_{wd}")])
     buttons.append([InlineKeyboardButton(text="🔙 Настройки", callback_data="admin_settings")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_weekly_schedule_keyboard(
+    master_id: int,
+    schedule: dict[int, dict],
+) -> InlineKeyboardMarkup:
+    """Недельная сетка per-master: 7 кнопок по дням + '🔙 К мастеру'.
+    schedule: {weekday: {'work_start': int|None, 'work_end': int|None}}.
+    Отсутствующий weekday или work_start=None → выходной."""
+    buttons = []
+    for wd in range(7):
+        row = schedule.get(wd) or {}
+        if row.get("work_start") is None:
+            label = f"{WEEKDAYS_SHORT_RU[wd]} — выходной"
+        else:
+            label = f"{WEEKDAYS_SHORT_RU[wd]} {row['work_start']:02d}:00–{row['work_end']:02d}:00"
+        buttons.append([InlineKeyboardButton(
+            text=label,
+            callback_data=f"msched_day_{master_id}_{wd}",
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="🔙 К мастеру",
+        callback_data=f"master_card_{master_id}",
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_weekday_detail_keyboard(
+    master_id: int,
+    weekday: int,
+    is_day_off: bool,
+) -> InlineKeyboardMarkup:
+    """Детали weekday для мастера: toggle / edit start / edit end / back."""
+    toggle_text = "🟢 Сделать рабочим" if is_day_off else "🔴 Сделать выходным"
+    buttons = [
+        [InlineKeyboardButton(
+            text=toggle_text,
+            callback_data=f"msched_toggle_{master_id}_{weekday}",
+        )],
+    ]
+    if not is_day_off:
+        buttons.append([
+            InlineKeyboardButton(
+                text="🕐 Час начала",
+                callback_data=f"msched_edit_start_{master_id}_{weekday}",
+            ),
+            InlineKeyboardButton(
+                text="🕕 Час конца",
+                callback_data=f"msched_edit_end_{master_id}_{weekday}",
+            ),
+        ])
+    buttons.append([InlineKeyboardButton(
+        text="🔙 К расписанию",
+        callback_data=f"master_sched_{master_id}",
+    )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

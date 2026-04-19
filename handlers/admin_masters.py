@@ -12,7 +12,7 @@ from db import (
 )
 from keyboards.inline import admin_masters_keyboard, master_card_keyboard, admin_cancel_keyboard
 from states import AdminStates
-from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
+from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter, refresh_masters_cache
 from utils.callbacks import parse_callback
 from utils.panel import edit_panel, edit_panel_with_callback
 
@@ -38,17 +38,11 @@ async def cb_admin_masters(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("master_card_"))
-async def cb_master_card(callback: CallbackQuery):
-    if not is_admin_callback(callback):
-        await deny_access(callback)
-        return
-    parts = parse_callback(callback.data, "master_card", 1)
-    if not parts:
-        logger.warning("Некорректный callback: %s", callback.data)
-        await callback.answer()
-        return
-    master_id = int(parts[0])
+async def _render_master_card(callback: CallbackQuery, master_id: int) -> None:
+    """Отрисовать карточку мастера в существующей панели.
+    Извлечено из cb_master_card, чтобы cb_master_toggle мог обновить UI
+    не передавая master_toggle_* callback в парсер master_card_* (иначе
+    parse_callback вернёт None и обработчик тихо выйдет без обновления)."""
     master = await get_master(master_id)
     if not master:
         await callback.answer("Мастер не найден.", show_alert=True)
@@ -67,7 +61,22 @@ async def cb_master_card(callback: CallbackQuery):
     await edit_panel_with_callback(
         callback, text,
         master_card_keyboard(master_id, bool(master["is_active"])),
+        parse_mode="HTML",
     )
+
+
+@router.callback_query(F.data.startswith("master_card_"))
+async def cb_master_card(callback: CallbackQuery):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "master_card", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    master_id = int(parts[0])
+    await _render_master_card(callback, master_id)
     await callback.answer()
 
 
@@ -83,7 +92,12 @@ async def cb_master_toggle(callback: CallbackQuery):
         return
     master_id = int(parts[0])
     await toggle_master_active(master_id)
-    await cb_master_card(callback)
+    await refresh_masters_cache()
+    # Перерисовываем карточку напрямую через helper, не через cb_master_card —
+    # у нас callback.data = master_toggle_*, парсер master_card_* дал бы None
+    # и cb_master_card тихо вышел бы, оставив экран с устаревшим статусом.
+    await _render_master_card(callback, master_id)
+    await callback.answer()
 
 
 # ─── УДАЛЕНИЕ МАСТЕРА ────────────────────────────────────────────────────────
@@ -106,8 +120,13 @@ async def cb_master_delete(callback: CallbackQuery):
             show_alert=True,
         )
         return
+    # Ранний ack для снятия spinner'а до SQL чтения и edit_panel.
+    try:
+        await callback.answer("Мастер удалён.")
+    except TelegramBadRequest:
+        pass
+    await refresh_masters_cache()
     await _show_masters(callback)
-    await callback.answer("Мастер удалён.")
 
 
 # ─── ДОБАВЛЕНИЕ МАСТЕРА ───────────────────────────────────────────────────────
@@ -195,6 +214,7 @@ async def msg_master_add_bio(message: Message, state: FSMContext):
         name=data["master_name"],
         bio=bio,
     )
+    await refresh_masters_cache()
     await state.clear()
 
     master = await get_master(master_id)
@@ -293,6 +313,7 @@ async def msg_master_edit_user_id(message: Message, state: FSMContext):
     data = await state.get_data()
     master_id = data["edit_master_id"]
     await update_master(master_id, user_id=user_id)
+    await refresh_masters_cache()
     await state.clear()
     master = await get_master(master_id)
     await edit_panel(

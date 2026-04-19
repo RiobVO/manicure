@@ -58,6 +58,10 @@ from db.masters import (
     get_active_masters,
     get_all_masters,
     get_master,
+    get_master_by_user_id,
+    get_active_masters_with_user_id,
+    get_master_appointments_today,
+    get_master_appointments_upcoming,
     create_master,
     update_master,
     toggle_master_active,
@@ -66,6 +70,7 @@ from db.masters import (
     get_master_schedule,
     get_day_schedule_for_master,
     get_day_off_weekdays_for_master,
+    update_master_weekday,
     get_time_blocks_for_master,
 )
 
