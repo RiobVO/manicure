@@ -215,8 +215,7 @@ async def cb_appt_status(callback: CallbackQuery):
                 await callback.bot.send_message(
                     appt["user_id"],
                     f"💅 <b>Спасибо за визит!</b>\n\n"
-                    f"Как вам {appt['service_name']}?\n"
-                    f"Оцените, пожалуйста:",
+                    f"<i>ну как {appt['service_name'].lower()}?</i>",
                     reply_markup=review_rating_keyboard(appt_id),
                     parse_mode="HTML",
                 )
