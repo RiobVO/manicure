@@ -10,7 +10,6 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
-    ReplyKeyboardRemove,
 )
 
 from constants import MONTHS_RU, WEEKDAYS_SHORT_RU
@@ -589,10 +588,15 @@ async def change_profile(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+_RESERVED_NAMES = frozenset({"записаться", "мои записи"})
+
+
 @router.message(BookingStates.get_name)
 async def get_name(message: Message, state: FSMContext):
     name = message.text.strip() if message.text else ""
-    if not name or len(name) < 2 or len(name) > 64:
+    if not name or len(name) < 2 or len(name) > 64 or name.lower() in _RESERVED_NAMES or name.startswith("/"):
+        # Reserved: лейблы reply-клавиатуры — если клиент тыкнул их вместо
+        # того чтобы ввести имя, не сохраняем «записаться» как имя в профиль.
         await message.answer(
             f"<i>имя нужно от 2 до 64 букв.</i>\n"
             f"<i>попробуй ещё раз:</i>",
@@ -604,12 +608,13 @@ async def get_name(message: Message, state: FSMContext):
         await message.delete()
     except TelegramBadRequest:
         pass
-    await message.answer(
+    phone_prompt = await message.answer(
         f"<i>поделись номером телефона.</i>\n\n"
         f"<i>так быстрее, чем набирать.</i>",
         reply_markup=contact_keyboard(),
         parse_mode="HTML",
     )
+    await state.update_data(_phone_prompt_msg_id=phone_prompt.message_id)
     await state.set_state(BookingStates.get_phone)
 
 
@@ -617,6 +622,14 @@ async def get_name(message: Message, state: FSMContext):
 async def get_phone(message: Message, state: FSMContext):
     phone = message.contact.phone_number
     await state.update_data(phone=phone)
+
+    # Удаляем системное сообщение с контактом — в чате не должно болтаться
+    # личное инфо и клавиатура «отправить номер».
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+
     data = await state.get_data()
     addon_line = (f"\n<i>+ {', '.join(data['addon_names']).lower()}</i>") if data.get("addon_names") else ""
     master_line = (f"\n<i>мастер · {data['master_name'].title()}</i>") if data.get("master_name") else ""
@@ -633,11 +646,15 @@ async def get_phone(message: Message, state: FSMContext):
         f"</blockquote>"
     )
 
-    await message.answer(
+    # summary — трекаем для удаления после подтверждения; reply-keyboard
+    # возвращаем к обычной (иначе после contact-kb чат остаётся без кнопок).
+    summary_msg = await message.answer(
         summary,
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=client_reply_keyboard(),
         parse_mode="HTML",
     )
+    await state.update_data(_summary_msg_id=summary_msg.message_id)
+
     await message.answer(
         "<i>подтверди, если всё верно.</i>",
         reply_markup=confirm_keyboard(),
@@ -753,6 +770,18 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 
     asyncio.create_task(_bg_admin_broadcast())
     asyncio.create_task(_bg_master_notify())
+
+    # Уборка transient-сообщений флоу: "как тебя зовут?" (последнее состояние
+    # цепочки edit_text), "поделись номером", summary "всё так?". Оставляем
+    # в чате только итог — hero + blockquote + напоминалка + (опц.) оплата.
+    flow_msg_id = _client_services_msg.pop(callback.message.chat.id, None)
+    for msg_id in (flow_msg_id, data.get("_phone_prompt_msg_id"), data.get("_summary_msg_id")):
+        if not msg_id or msg_id == callback.message.message_id:
+            continue
+        try:
+            await callback.bot.delete_message(callback.message.chat.id, msg_id)
+        except TelegramBadRequest:
+            pass
 
     addon_line_done = (f"\n<i>+ {', '.join(data.get('addon_names', [])).lower()}</i>") if data.get("addon_names") else ""
     master_line_done = (f"\n<i>мастер · {data['master_name'].title()}</i>") if data.get("master_name") else ""
