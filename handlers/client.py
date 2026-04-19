@@ -43,7 +43,7 @@ from keyboards.inline import (
     addons_keyboard, client_reply_keyboard, masters_keyboard,
 )
 from config import ADMIN_IDS
-from utils.admin import is_master
+from utils.admin import is_admin, is_master
 from utils.panel import set_reply_kb
 from services.booking import (
     calculate_total_price,
@@ -54,6 +54,10 @@ from services.booking import (
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+# Strong references на fire-and-forget таски: asyncio хранит только weak refs,
+# без этого GC может собрать Task до завершения send_message (silent cancel).
+_bg_tasks: set[asyncio.Task] = set()
 
 
 # ─── Трекер последнего сообщения со списком услуг ────────────────────────────
@@ -198,7 +202,9 @@ async def _show_master_step(
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
 
-    if message.from_user.id in ADMIN_IDS:
+    # is_admin() покрывает env ADMIN_IDS ∪ DB-админов из /admin-management,
+    # иначе DB-админ на /start падает в клиентский флоу, хотя везде остальном — админ.
+    if is_admin(message.from_user.id):
         try:
             await message.delete()
         except TelegramBadRequest:
@@ -777,8 +783,10 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         except Exception:
             logger.error("Ошибка уведомления мастера", exc_info=True)
 
-    asyncio.create_task(_bg_admin_broadcast())
-    asyncio.create_task(_bg_master_notify())
+    for coro in (_bg_admin_broadcast(), _bg_master_notify()):
+        t = asyncio.create_task(coro)
+        _bg_tasks.add(t)
+        t.add_done_callback(_bg_tasks.discard)
 
     # Уборка transient-сообщений флоу: "как тебя зовут?" (последнее состояние
     # цепочки edit_text), "поделись номером", summary "всё так?". Оставляем
