@@ -813,8 +813,6 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
 
-    await asyncio.sleep(0.8)
-
     # 2. Детальная карточка в blockquote — «жду тебя»
     await callback.message.answer(
         f"<blockquote>"
@@ -829,8 +827,6 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         f"</blockquote>",
         parse_mode="HTML",
     )
-
-    await asyncio.sleep(0.5)
 
     # 3. Мягкое напоминание + «до встречи ✧».
     await callback.message.answer(
