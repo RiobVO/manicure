@@ -38,14 +38,50 @@ STATUS_EMOJI = {
 
 # ─── CLIENT KEYBOARDS ────────────────────────────────────────────────────────
 
-def services_keyboard(services: list[dict]) -> InlineKeyboardMarkup:
-    # Только название — цена показывается в карточке услуги
+def _price_short(price: int) -> str:
+    """Цена с пробелом-разделителем тысяч, без «сум». '150 000' вместо '150000'."""
+    return f"{price:,}".replace(",", " ")
+
+
+def category_keyboard() -> InlineKeyboardMarkup:
+    """Первый экран записи: выбор ручек/ножек."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❋ ручки", callback_data="cat_hands"),
+        InlineKeyboardButton(text="○ ножки", callback_data="cat_feet"),
+    ]])
+
+
+def admin_category_picker() -> InlineKeyboardMarkup:
+    """
+    Админский выбор категории при создании услуги. Отдельный callback-неймспейс
+    (svc_cat_*), чтобы не пересекался с клиентским cat_hands/cat_feet.
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❋ ручки", callback_data="svc_cat_hands"),
+        InlineKeyboardButton(text="○ ножки", callback_data="svc_cat_feet"),
+    ]])
+
+
+def services_keyboard(services: list[dict], with_back: bool = False) -> InlineKeyboardMarkup:
+    """
+    Список услуг с ценами в кнопках: «гель-лак · 150 000».
+    with_back=True добавляет «‹ назад» — возврат к выбору категории.
+    """
     buttons = []
     for s in services:
+        name = s["name"].lower()
+        # Срезаем префикс «маникюр/педикюр» — категория уже выбрана пользователем.
+        for prefix in ("маникюр с ", "маникюр ", "педикюр с ", "педикюр "):
+            if name.startswith(prefix):
+                name = name[len(prefix):]
+                break
+        label = f"{name} · {_price_short(s['price'])}"
         buttons.append([InlineKeyboardButton(
-            text=s["name"],
+            text=label,
             callback_data=f"service_{s['id']}"
         )])
+    if with_back:
+        buttons.append([InlineKeyboardButton(text="‹ назад", callback_data="cat_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

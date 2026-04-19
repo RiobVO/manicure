@@ -151,15 +151,16 @@ async def init_db() -> None:
             is_active INTEGER NOT NULL DEFAULT 1,
             sort_order INTEGER NOT NULL DEFAULT 0,
             description TEXT DEFAULT '',
-            photo_file_id TEXT DEFAULT ''
+            photo_file_id TEXT DEFAULT '',
+            category TEXT NOT NULL DEFAULT 'hands'
         )
     """)
     # Seed из services.py только если таблица пуста
     cursor = await db.execute("SELECT COUNT(*) FROM services")
     if (await cursor.fetchone())[0] == 0:
         await db.executemany(
-            "INSERT INTO services (id, name, price, duration, is_active, sort_order) VALUES (?,?,?,?,1,?)",
-            [(s["id"], s["name"], s["price"], s["duration"], i) for i, s in enumerate(SERVICES)]
+            "INSERT INTO services (id, name, price, duration, is_active, sort_order, category) VALUES (?,?,?,?,1,?,?)",
+            [(s["id"], s["name"], s["price"], s["duration"], i, s.get("category", "hands")) for i, s in enumerate(SERVICES)]
         )
 
     # --- settings ---
@@ -318,6 +319,23 @@ async def init_db() -> None:
                 if "duplicate column" not in str(exc).lower():
                     logger.exception("Миграция v0→v1 упала: %s", stmt)
         await db.execute("PRAGMA user_version = 1")
+
+    # v1 → v2: колонка services.category ('hands' | 'feet') — для двухшагового
+    # меню клиента (сначала ручки/ножки, потом конкретная услуга с ценой).
+    # Бэкфилл по имени: «Педикюр*» → feet, остальное → hands.
+    if current_version < 2:
+        try:
+            await db.execute(
+                "ALTER TABLE services ADD COLUMN category TEXT NOT NULL DEFAULT 'hands'"
+            )
+        except aiosqlite.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                logger.exception("Миграция v1→v2 упала на ALTER services")
+        await db.execute(
+            "UPDATE services SET category = 'feet' "
+            "WHERE LOWER(name) LIKE 'педикюр%' OR LOWER(name) LIKE 'pedicur%'"
+        )
+        await db.execute("PRAGMA user_version = 2")
 
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
