@@ -5,12 +5,26 @@ from typing import Any
 from db.connection import get_db, _dict_rows, _dict_row
 
 
-async def get_services(active_only: bool = True) -> list[dict[str, Any]]:
+async def get_services(
+    active_only: bool = True,
+    category: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    category: 'hands' | 'feet' | None (без фильтра).
+    """
+    where: list[str] = []
+    params: list[Any] = []
     if active_only:
-        return await _dict_rows(
-            "SELECT * FROM services WHERE is_active = 1 ORDER BY sort_order, id"
-        )
-    return await _dict_rows("SELECT * FROM services ORDER BY sort_order, id")
+        where.append("is_active = 1")
+    if category is not None:
+        where.append("category = ?")
+        params.append(category)
+
+    sql = "SELECT * FROM services"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY sort_order, id"
+    return await _dict_rows(sql, params)
 
 
 async def get_service_by_id(service_id: int) -> dict[str, Any] | None:
@@ -55,17 +69,25 @@ async def delete_service(service_id: int) -> None:
     await db.commit()
 
 
-async def add_service(name: str, price: int, duration: int) -> int:
+async def add_service(name: str, price: int, duration: int, category: str = "hands") -> int:
     db = await get_db()
     # sort_order: кладём в конец списка, взяв max(existing)+1 атомарно
     # через подзапрос — чтобы новые услуги всегда были последними.
     cursor = await db.execute(
-        """INSERT INTO services (name, price, duration, is_active, sort_order)
-           VALUES (?, ?, ?, 1, COALESCE((SELECT MAX(sort_order) FROM services), 0) + 1)""",
-        (name, price, duration),
+        """INSERT INTO services (name, price, duration, is_active, sort_order, category)
+           VALUES (?, ?, ?, 1, COALESCE((SELECT MAX(sort_order) FROM services), 0) + 1, ?)""",
+        (name, price, duration, category),
     )
     await db.commit()
     return cursor.lastrowid
+
+
+async def update_service_category(service_id: int, category: str) -> None:
+    db = await get_db()
+    await db.execute(
+        "UPDATE services SET category = ? WHERE id = ?", (category, service_id)
+    )
+    await db.commit()
 
 
 async def get_addons_for_service(service_id: int, active_only: bool = True) -> list[dict[str, Any]]:
