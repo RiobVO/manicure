@@ -4,6 +4,8 @@
 Показывает: tenant_slug, uptime, размер БД, время последнего локального бэкапа,
 статус Redis (ping), последняя увиденная ошибка. Всё — по /status-команде,
 только для админов.
+
+Также команда /backup_now — ручной бэкап (локально + в BACKUP_CHAT_ID если задан).
 """
 import glob
 import html
@@ -13,9 +15,10 @@ from datetime import datetime
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
 
-from config import DB_PATH, REDIS_URL, TENANT_SLUG
+from config import BACKUP_CHAT_ID, DB_PATH, REDIS_URL, TENANT_SLUG
+from db.connection import backup_db
 from utils.admin import is_admin
 from utils.error_reporter import get_last_error, get_start_time
 from utils.timezone import get_tz, now_local
@@ -91,3 +94,60 @@ async def cmd_status(message: Message) -> None:
         lines.append("\n✅ Ошибок с запуска: 0")
 
     await message.answer("\n".join(lines), parse_mode="HTML")
+
+
+@router.message(Command("backup_now"))
+async def cmd_backup_now(message: Message) -> None:
+    """
+    Ручной бэкап: локальная копия + (опционально) отправка в BACKUP_CHAT_ID.
+    Полезно перед рискованным действием (правка часов, удаление услуги).
+    """
+    if not message.from_user or not is_admin(message.from_user.id):
+        return
+
+    status_msg = await message.answer("📦 Делаю бэкап…")
+
+    try:
+        path = await backup_db()
+    except Exception:
+        logger.exception("Ручной бэкап упал")
+        try:
+            await status_msg.edit_text("❌ Ошибка при создании бэкапа. Смотри логи.")
+        except Exception:
+            pass
+        return
+
+    if not path:
+        try:
+            await status_msg.edit_text("❌ Не удалось создать бэкап. Смотри логи.")
+        except Exception:
+            pass
+        return
+
+    size_mb = os.path.getsize(path) / (1024 * 1024)
+    filename = os.path.basename(path)
+
+    # Отправка в TG-канал — необязательная часть. Провал не трогает локальную копию.
+    tg_status = ""
+    if BACKUP_CHAT_ID is not None:
+        try:
+            timestamp = now_local().strftime("%Y-%m-%d %H:%M")
+            caption = f"[{TENANT_SLUG}] manual backup {timestamp} • {size_mb:.1f} MB"
+            await message.bot.send_document(
+                chat_id=BACKUP_CHAT_ID,
+                document=FSInputFile(path),
+                caption=caption,
+            )
+            tg_status = "\n☁ Отправлен в канал."
+        except Exception:
+            logger.warning("Не удалось отправить ручной бэкап в TG", exc_info=True)
+            tg_status = "\n⚠ В канал не отправлен (смотри логи)."
+
+    try:
+        await status_msg.edit_text(
+            f"✅ Бэкап: <code>{html.escape(filename)}</code> · {size_mb:.1f} MB"
+            f"{tg_status}",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass

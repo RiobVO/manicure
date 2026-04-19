@@ -23,51 +23,6 @@ async def get_booked_times(date: str, master_id: int | None = None) -> list[tupl
     return await cursor.fetchall()
 
 
-async def is_slot_free(
-    date: str, time: str, duration: int,
-    master_id: int | None = None,
-    exclude_id: int | None = None,
-) -> bool:
-    """
-    Атомарная проверка: свободен ли слот на дату/время/мастер с учётом длительности.
-    exclude_id — исключить запись из проверки (полезно при переносе).
-    """
-    db = await get_db()
-
-    # Базовый фильтр + опциональное исключение записи
-    exclude_clause = "AND id != ?" if exclude_id is not None else ""
-
-    # Классический симметричный overlap-чек:
-    # existing.start < new.end  AND  existing.end > new.start
-    if master_id is not None:
-        sql = f"""SELECT COUNT(*) FROM appointments
-               WHERE date = ? AND master_id = ? AND status = 'scheduled'
-                 AND datetime(date || ' ' || time)
-                     < datetime(date || ' ' || ?, '+' || ? || ' minutes')
-                 AND datetime(date || ' ' || time, '+' || service_duration || ' minutes')
-                     > datetime(date || ' ' || ?)
-                 {exclude_clause}
-            """
-        params = [date, master_id, time, duration, time]
-    else:
-        sql = f"""SELECT COUNT(*) FROM appointments
-               WHERE date = ? AND status = 'scheduled'
-                 AND datetime(date || ' ' || time)
-                     < datetime(date || ' ' || ?, '+' || ? || ' minutes')
-                 AND datetime(date || ' ' || time, '+' || service_duration || ' minutes')
-                     > datetime(date || ' ' || ?)
-                 {exclude_clause}
-            """
-        params = [date, time, duration, time]
-
-    if exclude_id is not None:
-        params.append(exclude_id)
-
-    cursor = await db.execute(sql, params)
-    count = (await cursor.fetchone())[0]
-    return count == 0
-
-
 async def create_appointment(
     user_id: int, name: str, phone: str,
     service_id: int, service_name: str, service_duration: int,

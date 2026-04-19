@@ -33,9 +33,43 @@ from db import (
     mark_reminder_sent,
     was_reminder_sent,
 )
-from db.connection import backup_db
+from db.connection import backup_db, get_db
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Retention ────────────────────────────────────────────────────────────────
+# Срок хранения «болтающихся» строк:
+#   admin_logs      — audit-history, 180 дней достаточно для разбора споров
+#   sent_reminders  — дедуп-маркеры, нужны только на горизонт будущих записей;
+#                     90 дней с запасом (самая дальняя запись обычно ≤ 14 дней)
+ADMIN_LOGS_RETENTION_DAYS = 180
+SENT_REMINDERS_RETENTION_DAYS = 90
+
+
+async def _prune_old_rows() -> None:
+    """
+    Удаляет устаревшие строки из admin_logs и sent_reminders.
+    Без этого через год у активной админши ~50k строк в admin_logs → бэкапы
+    пухнут, send_document в TG упирается в лимит 50 МБ.
+    """
+    db = await get_db()
+    cur = await db.execute(
+        "DELETE FROM admin_logs WHERE created_at < date('now', ?)",
+        (f"-{ADMIN_LOGS_RETENTION_DAYS} days",),
+    )
+    admin_removed = cur.rowcount
+    cur = await db.execute(
+        "DELETE FROM sent_reminders WHERE sent_at < date('now', ?)",
+        (f"-{SENT_REMINDERS_RETENTION_DAYS} days",),
+    )
+    reminders_removed = cur.rowcount
+    await db.commit()
+    if admin_removed or reminders_removed:
+        logger.info(
+            "retention: admin_logs=-%d, sent_reminders=-%d",
+            admin_removed, reminders_removed,
+        )
 
 
 async def send_reminders(bot: Bot) -> None:
@@ -150,6 +184,13 @@ async def run_backup(bot: Bot) -> None:
     диска/дроплета. Ошибка отправки в TG не должна ронять задачу: локальная
     копия уже сделана, это и есть главное.
     """
+    # Чистим устаревшие строки ДО бэкапа, чтобы копия не тащила мусор.
+    # Ошибка retention не должна блокировать сам бэкап.
+    try:
+        await _prune_old_rows()
+    except Exception:
+        logger.warning("retention cleanup упала — продолжаем бэкап", exc_info=True)
+
     try:
         path = await backup_db()
     except Exception:
