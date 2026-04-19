@@ -34,6 +34,7 @@ from utils.panel import (
     set_reply_kb,
 )
 from utils.timezone import now_local
+from utils.ui import h
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -120,7 +121,7 @@ async def show_master_cabinet_entry(message: Message, state: FSMContext) -> None
     set_reply_kb(message.chat.id, master_reply_keyboard())
     await message.answer(
         f"👨\u200d🎨 <b>Кабинет мастера</b>\n"
-        f"<i>{master['name']}</i>\n\n"
+        f"<i>{h(master['name'])}</i>\n\n"
         f"Выбери что посмотреть ↓",
         reply_markup=master_reply_keyboard(),
         parse_mode="HTML",
@@ -153,9 +154,9 @@ async def msg_today(message: Message, state: FSMContext) -> None:
     for a in appointments:
         icon = _STATUS_ICON.get(a["status"], "·")
         lines.append(
-            f"\n{icon} <b>{a['time']}</b> — {a['name']}\n"
-            f"   💅 {a['service_name']} ({_duration_str(a['service_duration'])})\n"
-            f"   📞 {a['phone']}"
+            f"\n{icon} <b>{a['time']}</b> — {h(a['name'])}\n"
+            f"   💅 {h(a['service_name'])} ({_duration_str(a['service_duration'])})\n"
+            f"   📞 {h(a['phone'])}"
         )
 
     await _nav(message, "\n".join(lines), parse_mode="HTML")
@@ -187,7 +188,7 @@ async def msg_upcoming(message: Message, state: FSMContext) -> None:
             current_date = a["date"]
             lines.append(f"\n<b>—— {_date_human(current_date)} ——</b>")
         lines.append(
-            f"🕐 <b>{a['time']}</b> — {a['name']} · {a['service_name']} · 📞 {a['phone']}"
+            f"🕐 <b>{a['time']}</b> — {h(a['name'])} · {h(a['service_name'])} · 📞 {h(a['phone'])}"
         )
 
     if len(appointments) == 30:

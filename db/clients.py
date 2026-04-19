@@ -55,6 +55,11 @@ async def search_clients(query: str, limit: int = 20) -> list[dict[str, Any]]:
 
 async def get_dormant_clients(days: int = 30, limit: int = 20) -> list[dict[str, Any]]:
     """Клиенты, чей последний завершённый визит был более N дней назад (или не было совсем)."""
+    # days подставляется в SQLite date('now', modifier) через f-string — параметризовать
+    # модификатор нельзя. Жёстко фиксируем тип, чтобы будущий рефакторинг не протащил
+    # user-input в этот путь и не открыл SQL-injection в date().
+    if not isinstance(days, int) or isinstance(days, bool) or days < 0:
+        raise ValueError(f"days must be non-negative int, got {days!r}")
     modifier = f"-{days} days"
     return await _dict_rows(
         """SELECT cp.user_id, cp.name, cp.phone,

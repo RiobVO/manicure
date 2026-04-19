@@ -23,6 +23,7 @@ from utils.ui import (
     date_soft,
     greeting_new, greeting_returning,
     booking_done_hero, booking_reminder_note,
+    h,
 )
 from states import BookingStates
 from db import (
@@ -301,10 +302,10 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
 
     # Карточка услуги в blockquote — описание идёт в текст, фото не отправляем
     desc = service.get("description")
-    desc_line = f"\n\n<i>{desc}</i>" if desc else ""
+    desc_line = f"\n\n<i>{h(desc)}</i>" if desc else ""
     service_card = (
         f"<blockquote>"
-        f"<b><i>{service['name'].lower()}</i></b>"
+        f"<b><i>{h(service['name'].lower())}</i></b>"
         f"{desc_line}\n\n"
         f"{DIVIDER_SOFT}\n\n"
         f"<i>длительность</i>   <code>{fmt_dur(service['duration'])}</code>\n"
@@ -353,7 +354,7 @@ async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
         total = calculate_total_price(data["service_price"], selected, addons)
         service_card = (
             f"<blockquote>"
-            f"<b><i>{data['service_name'].lower()}</i></b>\n\n"
+            f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
             f"{DIVIDER_SOFT}\n\n"
             f"<i>длительность</i>   <code>{fmt_dur(data['service_duration'])}</code>\n"
             f"<i>стоимость</i>      <code>{fmt_price(total)}</code>"
@@ -385,10 +386,10 @@ async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
         addon_names=addon_names,
     )
 
-    addon_line = (f"<i>+ {', '.join(addon_names).lower()}</i>\n\n") if addon_names else ""
+    addon_line = (f"<i>+ {h(', '.join(addon_names).lower())}</i>\n\n") if addon_names else ""
     header = (
         f"<blockquote>"
-        f"<b><i>{data['service_name'].lower()}</i></b>\n\n"
+        f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
         f"{addon_line}"
         f"{DIVIDER_SOFT}\n\n"
         f"<i>длительность</i>   <code>{fmt_dur(data['service_duration'])}</code>\n"
@@ -415,20 +416,20 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
 
     # Собираем полный текст: blockquote услуги + blockquote мастера + подсказка
-    addon_line = (f"<i>+ {', '.join(data['addon_names']).lower()}</i>\n\n") if data.get("addon_names") else ""
+    addon_line = (f"<i>+ {h(', '.join(data['addon_names']).lower())}</i>\n\n") if data.get("addon_names") else ""
     service_card = (
         f"<blockquote>"
-        f"<b><i>{data['service_name'].lower()}</i></b>\n\n"
+        f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
         f"{addon_line}"
         f"{DIVIDER_SOFT}\n\n"
         f"<i>длительность</i>   <code>{fmt_dur(data['service_duration'])}</code>\n"
         f"<i>стоимость</i>      <code>{fmt_price(data['service_price'])}</code>"
         f"</blockquote>"
     )
-    bio_line = f"\n\n<i>{master['bio']}</i>" if master.get("bio") else ""
+    bio_line = f"\n\n<i>{h(master['bio'])}</i>" if master.get("bio") else ""
     master_card = (
         f"<blockquote>"
-        f"<b><i>{master['name'].title()}</i></b>"
+        f"<b><i>{h(master['name'].title())}</i></b>"
         f"{bio_line}"
         f"</blockquote>"
     )
@@ -564,18 +565,18 @@ async def use_saved_profile(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(name=profile["name"], phone=profile["phone"])
     data = await state.get_data()
-    addon_line = (f"\n<i>+ {', '.join(data['addon_names']).lower()}</i>") if data.get("addon_names") else ""
-    master_line = (f"\n<i>мастер · {data['master_name'].title()}</i>") if data.get("master_name") else ""
+    addon_line = (f"\n<i>+ {h(', '.join(data['addon_names']).lower())}</i>") if data.get("addon_names") else ""
+    master_line = (f"\n<i>мастер · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
     summary = (
         f"<blockquote>"
         f"<b><i>всё так?</i></b>\n\n"
         f"{DIVIDER_SOFT}\n\n"
-        f"<b>{data['service_name'].lower()}</b>"
+        f"<b>{h(data['service_name'].lower())}</b>"
         f"{addon_line}"
         f"{master_line}\n\n"
         f"<i>когда</i>       <code>{date_soft(data['date'])} · {data['time']}</code>\n"
         f"<i>стоимость</i>   <code>{fmt_price(data['service_price'])}</code>\n\n"
-        f"<i>{data['name']} · {data['phone']}</i>"
+        f"<i>{h(data['name'])} · {h(data['phone'])}</i>"
         f"</blockquote>"
     )
     try:
@@ -646,18 +647,18 @@ async def get_phone(message: Message, state: FSMContext):
         pass
 
     data = await state.get_data()
-    addon_line = (f"\n<i>+ {', '.join(data['addon_names']).lower()}</i>") if data.get("addon_names") else ""
-    master_line = (f"\n<i>мастер · {data['master_name'].title()}</i>") if data.get("master_name") else ""
+    addon_line = (f"\n<i>+ {h(', '.join(data['addon_names']).lower())}</i>") if data.get("addon_names") else ""
+    master_line = (f"\n<i>мастер · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
     summary = (
         f"<blockquote>"
         f"<b><i>всё так?</i></b>\n\n"
         f"{DIVIDER_SOFT}\n\n"
-        f"<b>{data['service_name'].lower()}</b>"
+        f"<b>{h(data['service_name'].lower())}</b>"
         f"{addon_line}"
         f"{master_line}\n\n"
         f"<i>когда</i>       <code>{date_soft(data['date'])} · {data['time']}</code>\n"
         f"<i>стоимость</i>   <code>{fmt_price(data['service_price'])}</code>\n\n"
-        f"<i>{data['name']} · {data['phone']}</i>"
+        f"<i>{h(data['name'])} · {h(data['phone'])}</i>"
         f"</blockquote>"
     )
 
@@ -760,11 +761,13 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 
     async def _bg_admin_broadcast() -> None:
         try:
+            # h() на user-controlled полях (name, phone) и admin-controlled
+            # (service_name): одно "<" ломает TG parse HTML и рассылка молча теряется.
             await broadcast_to_admins(
                 callback.bot,
                 f"🔔 <b>Новая запись:</b> {date_str} в <b>{data['time']}</b>\n"
-                f"💅 {data['service_name']} — {data['name']}\n"
-                f"📞 {data['phone']}",
+                f"💅 {h(data['service_name'])} — {h(data['name'])}\n"
+                f"📞 {h(data['phone'])}",
                 reply_markup=notif_kb,
                 log_context="new booking",
             )
@@ -800,8 +803,8 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         except TelegramBadRequest:
             pass
 
-    addon_line_done = (f"\n<i>+ {', '.join(data.get('addon_names', [])).lower()}</i>") if data.get("addon_names") else ""
-    master_line_done = (f"\n<i>мастер · {data['master_name'].title()}</i>") if data.get("master_name") else ""
+    addon_line_done = (f"\n<i>+ {h(', '.join(data.get('addon_names', [])).lower())}</i>") if data.get("addon_names") else ""
+    master_line_done = (f"\n<i>мастер · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
 
     # 1. Hero — акцент на успехе записи. Идёт СРАЗУ после create_appointment,
     # без ожидания уведомлений админа/мастера.
@@ -816,9 +819,9 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     # 2. Детальная карточка в blockquote — «жду тебя»
     await callback.message.answer(
         f"<blockquote>"
-        f"<b><i>{data['name']}, жду тебя.</i></b>\n\n"
+        f"<b><i>{h(data['name'])}, жду тебя.</i></b>\n\n"
         f"{DIVIDER_SOFT}\n\n"
-        f"<b>{data['service_name'].lower()}</b>"
+        f"<b>{h(data['service_name'].lower())}</b>"
         f"{addon_line_done}"
         f"{master_line_done}\n\n"
         f"<i>когда</i>         <code>{date_soft(data['date'])} · {data['time']}</code>\n"
@@ -978,7 +981,7 @@ async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
         f"<blockquote>"
         f"<b><i>повторяем</i></b>\n\n"
         f"{DIVIDER_SOFT}\n\n"
-        f"<b>{service['name'].lower()}</b>\n"
+        f"<b>{h(service['name'].lower())}</b>\n"
         f"<i>длительность</i>   <code>{fmt_dur(service['duration'])}</code>\n"
         f"<i>стоимость</i>      <code>{fmt_price(service['price'])}</code>"
         f"</blockquote>"
