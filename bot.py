@@ -55,7 +55,9 @@ async def _build_storage() -> BaseStorage:
         client = Redis.from_url(REDIS_URL)
         await client.ping()
         logger.info("FSM storage: RedisStorage (%s)", REDIS_URL)
-        return RedisStorage(redis=client)
+        # TTL=24ч на state и data: брошенные booking-флоу не копятся в Redis вечно.
+        # Каждое действие пользователя обновляет expiry, активные не теряются.
+        return RedisStorage(redis=client, state_ttl=86400, data_ttl=86400)
     except Exception as exc:
         # Redis лёг или URL кривой — логируем и работаем без персиста.
         logger.warning(
