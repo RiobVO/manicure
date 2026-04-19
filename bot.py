@@ -32,9 +32,9 @@ from handlers import client_reminders, client_history, admin_status
 from handlers import master
 from middlewares.license_gate import LicenseGateMiddleware
 from scheduler import setup_scheduler
-from utils.admin import refresh_admins_cache, refresh_masters_cache
+from utils.admin import all_admin_ids, refresh_admins_cache, refresh_masters_cache
 from utils.error_reporter import mark_started, report_error
-from utils.license import LicenseMode, evaluate_license
+from utils.license import GRACE_DAYS, LicenseMode, evaluate_license
 from utils.panel import set_reply_kb
 from keyboards.inline import admin_reply_keyboard
 
@@ -68,14 +68,16 @@ async def _warn_grace(bot: Bot, license_state) -> None:
     """На старте в GRACE-режиме напоминаем админам что пора продлевать."""
     if license_state.license is None:
         return
-    grace_end = license_state.license.expires_at + timedelta(days=7)
+    # GRACE_DAYS — единственный источник правды (utils/license.py). Не дублируем константу.
+    grace_end = license_state.license.expires_at + timedelta(days=GRACE_DAYS)
     days_left = (grace_end - datetime.now(timezone.utc)).days
     text = (
         f"⚠ <b>Лицензия бота истекла</b>\n\n"
         f"Grace-режим. До блокировки: <b>{max(days_left, 0)} дн.</b>\n"
         f"Для продления обратитесь к {LICENSE_CONTACT}."
     )
-    for admin_id in ADMIN_IDS:
+    # DB-админы тоже должны получить warning; кеш прогрет через refresh_admins_cache() до вызова.
+    for admin_id in all_admin_ids():
         try:
             await bot.send_message(admin_id, text, parse_mode="HTML")
         except Exception as exc:

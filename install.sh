@@ -71,17 +71,23 @@ read -rp "URL heartbeat-эндпоинта (Enter — не слать): " HEARTB
 LICENSE_CONTACT=""
 read -rp "Контакт поставщика для сообщения об истечении лицензии (@handle или email, Enter — дефолт): " LICENSE_CONTACT
 
-# Генерация .env из шаблона. sed с разделителем | чтобы не спотыкаться о / в токенах.
-# LICENSE_KEY экранируем отдельно: он содержит точку-разделитель payload/sig и base64.
+# Генерация .env из шаблона. В replacement sed'а спец-символы & | \ требуют экранирования
+# независимо от выбранного разделителя: & раскрывается в matched pattern, | закрывает
+# s-команду, \ начинает escape-последовательность. Без этого HEARTBEAT_URL вида
+# "https://host/hook?a=1&b=2" ломается, а LICENSE_CONTACT с '|' валит sed.
+sed_escape() {
+    printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'
+}
+
 sed \
-    -e "s|__BOT_TOKEN__|${BOT_TOKEN}|" \
-    -e "s|__ADMIN_IDS__|${ADMIN_ID}|" \
-    -e "s|__TENANT_SLUG__|${TENANT_SLUG}|" \
-    -e "s|__BACKUP_CHAT_ID__|${BACKUP_CHAT_ID}|" \
-    -e "s|__ERROR_CHAT_ID__|${ERROR_CHAT_ID}|" \
-    -e "s|__LICENSE_KEY__|${LICENSE_KEY}|" \
-    -e "s|__HEARTBEAT_URL__|${HEARTBEAT_URL}|" \
-    -e "s|__LICENSE_CONTACT__|${LICENSE_CONTACT}|" \
+    -e "s|__BOT_TOKEN__|$(sed_escape "${BOT_TOKEN}")|" \
+    -e "s|__ADMIN_IDS__|$(sed_escape "${ADMIN_ID}")|" \
+    -e "s|__TENANT_SLUG__|$(sed_escape "${TENANT_SLUG}")|" \
+    -e "s|__BACKUP_CHAT_ID__|$(sed_escape "${BACKUP_CHAT_ID}")|" \
+    -e "s|__ERROR_CHAT_ID__|$(sed_escape "${ERROR_CHAT_ID}")|" \
+    -e "s|__LICENSE_KEY__|$(sed_escape "${LICENSE_KEY}")|" \
+    -e "s|__HEARTBEAT_URL__|$(sed_escape "${HEARTBEAT_URL}")|" \
+    -e "s|__LICENSE_CONTACT__|$(sed_escape "${LICENSE_CONTACT}")|" \
     .env.template > .env
 chmod 600 .env
 

@@ -39,7 +39,8 @@ class LicenseGateMiddleware(BaseMiddleware):
         if isinstance(event, Message):
             text = (event.text or "").strip()
             if text.startswith("/start"):
-                await event.answer(self._restricted_text())
+                # parse_mode обязателен: в шаблоне есть <i>…</i>; Bot создаётся без DefaultBotProperties.
+                await event.answer(self._restricted_text(), parse_mode="HTML")
             # Остальные сообщения игнорируем молча — не отвечаем, не роняем.
             return None
 
