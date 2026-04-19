@@ -21,9 +21,23 @@
 Всё форматирование — Telegram HTML (<b>, <i>, <code>).
 """
 
+import html as _html
 from datetime import datetime
 
 from constants import MONTHS_RU, WEEKDAYS_SHORT_RU
+
+
+# ─── HTML ESCAPE ─────────────────────────────────────────────────────────────
+# Применять к user-controlled строкам (имя клиента, телефон, описание услуги,
+# bio мастера и т.п.) перед подстановкой в сообщения с parse_mode="HTML".
+# Без этого одно имя вида "Катя <3" ломает send_message TelegramBadRequest'ом.
+
+def h(s: str | None) -> str:
+    """HTML-escape для подстановки в parse_mode=HTML. None → пустая строка."""
+    if s is None:
+        return ""
+    return _html.escape(str(s), quote=False)
+
 
 # ─── РАЗДЕЛИТЕЛИ ─────────────────────────────────────────────────────────────
 
@@ -202,18 +216,19 @@ def greeting_returning(name: str, days_ago: int, service: str, master: str | Non
     else:
         when = days_ago_phrase(days_ago).replace("прошло ", "")
 
-    master_line = f" · {master.title()}" if master else ""
+    # name/service/master — user/admin-controlled, экранируем для parse_mode=HTML.
+    master_line = f" · {h(master.title())}" if master else ""
     return (
         f"{FLOWER}\n\n"
-        f"<b><i>{name}.</i></b>\n\n"
-        f"<i>прошлый раз — {service.lower()}{master_line}.</i>\n"
+        f"<b><i>{h(name)}.</i></b>\n\n"
+        f"<i>прошлый раз — {h(service.lower())}{master_line}.</i>\n"
         f"<i>{when}.</i>"
     )
 
 
 def booking_done_hero(name: str) -> str:
     """Первое сообщение после успешной записи — акцент."""
-    return f"{STAR}\n\n<b><i>{name}, всё.</i></b>\n<i>ты записана.</i>"
+    return f"{STAR}\n\n<b><i>{h(name)}, всё.</i></b>\n<i>ты записана.</i>"
 
 
 def booking_reminder_note() -> str:

@@ -27,6 +27,7 @@ from utils.admin import STATUS_LABEL, is_admin_callback, deny_access, IsAdminFil
 from utils.callbacks import parse_callback
 from utils.notifications import notify_master, notify_client
 from utils.panel import edit_panel_with_callback, edit_panel, get_panel_msg_id, clear_panel_msg_id
+from utils.ui import h
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -215,7 +216,7 @@ async def cb_appt_status(callback: CallbackQuery):
                 await callback.bot.send_message(
                     appt["user_id"],
                     f"💅 <b>Спасибо за визит!</b>\n\n"
-                    f"<i>ну как {appt['service_name'].lower()}?</i>",
+                    f"<i>ну как {h(appt['service_name'].lower())}?</i>",
                     reply_markup=review_rating_keyboard(appt_id),
                     parse_mode="HTML",
                 )
@@ -231,9 +232,9 @@ async def cb_appt_status(callback: CallbackQuery):
                 await callback.bot.send_message(
                     _master["user_id"],
                     f"📋 <b>Статус записи изменён</b>\n\n"
-                    f"👤 {appt['name']}\n"
+                    f"👤 {h(appt['name'])}\n"
                     f"📅 {appt['date']} в {appt['time']}\n"
-                    f"💅 {appt['service_name']}\n\n"
+                    f"💅 {h(appt['service_name'])}\n\n"
                     f"Новый статус: {_status_text.get(status, status)}",
                     parse_mode="HTML",
                 )
@@ -343,9 +344,9 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
                 await callback.bot.send_message(
                     _master["user_id"],
                     f"📋 <b>Статус записи изменён</b>\n\n"
-                    f"👤 {appt['name']}\n"
+                    f"👤 {h(appt['name'])}\n"
                     f"📅 {appt['date']} в {appt['time']}\n"
-                    f"💅 {appt['service_name']}\n\n"
+                    f"💅 {h(appt['service_name'])}\n\n"
                     f"Новый статус: ❌ Отменено",
                     parse_mode="HTML",
                 )
@@ -531,8 +532,8 @@ async def cb_reschedule_time(callback: CallbackQuery, state: FSMContext):
                 await callback.bot.send_message(
                     _master["user_id"],
                     f"🔄 <b>Запись перенесена</b>\n\n"
-                    f"👤 {appt['name']}\n"
-                    f"💅 {appt['service_name']}\n"
+                    f"👤 {h(appt['name'])}\n"
+                    f"💅 {h(appt['service_name'])}\n"
                     f"📅 Новая дата: {new_date} в {new_time}",
                     parse_mode="HTML",
                 )

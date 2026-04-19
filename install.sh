@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Установщик инстанса бота для одного салона.
-# Usage: ./install.sh <tenant_slug> <bot_token> <admin_id>
+# Usage: ./install.sh <tenant_slug> <admin_id>
+# BOT_TOKEN читается интерактивно (stdin, не отображается) или из env.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,27 +9,42 @@ cd "$SCRIPT_DIR"
 
 usage() {
     cat <<USAGE
-Usage: ./install.sh <tenant_slug> <bot_token> <admin_id>
+Usage: ./install.sh <tenant_slug> <admin_id>
 
   tenant_slug   Идентификатор салона, [a-z0-9-], например 'nails-chilanzar'.
-  bot_token     Токен от @BotFather.
   admin_id      Telegram user_id владельца салона (целое число).
 
-Пример: ./install.sh nails-chilanzar 1234567890:ABC... 7082498953
+BOT_TOKEN:
+  • Интерактивно: скрипт спросит, ввод не отобразится (рекомендуется).
+  • Через env:   BOT_TOKEN=1234:ABC... ./install.sh <slug> <admin_id>
+
+Почему не через CLI: на shared-VPS токен из 'ps aux' виден любому процессу.
+
+Пример: ./install.sh nails-chilanzar 7082498953
 USAGE
     exit 2
 }
 
-[[ $# -eq 3 ]] || usage
+[[ $# -eq 2 ]] || usage
 
 TENANT_SLUG="$1"
-BOT_TOKEN="$2"
-ADMIN_ID="$3"
+ADMIN_ID="$2"
 
 [[ "$TENANT_SLUG" =~ ^[a-z0-9-]+$ ]] \
     || { echo "Ошибка: tenant_slug должен матчить [a-z0-9-]+"; exit 2; }
 [[ "$ADMIN_ID" =~ ^[0-9]+$ ]] \
     || { echo "Ошибка: admin_id должен быть целым числом"; exit 2; }
+
+# BOT_TOKEN: env > интерактивный ввод. Не ставим в CLI — он светится в ps.
+if [[ -z "${BOT_TOKEN:-}" ]]; then
+    read -srp "BOT_TOKEN (от @BotFather, ввод скрыт): " BOT_TOKEN
+    echo
+fi
+[[ -n "${BOT_TOKEN}" ]] \
+    || { echo "Ошибка: BOT_TOKEN пустой"; exit 2; }
+# Минимальный sanity-check формата токена: <digits>:<base64url-ish>.
+[[ "$BOT_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]] \
+    || { echo "Ошибка: BOT_TOKEN не похож на токен @BotFather (цифры:буквы)"; exit 2; }
 
 if ! command -v docker >/dev/null 2>&1; then
     echo "Не найден docker. Установи на Ubuntu одной командой:"
@@ -92,6 +108,11 @@ sed \
 chmod 600 .env
 
 mkdir -p data backups
+# Dockerfile создаёт пользователя app с UID=1000. Bind-mount перекрывает
+# chown из образа хост-директориями; без явного chown fresh VPS (root-run)
+# получает data/ backups/ как root:root 755 → внутри контейнера UID=1000
+# словит 'Permission denied' на SQLite open. chown обязателен.
+chown -R 1000:1000 data backups
 
 echo ""
 echo "Сборка образа и запуск контейнеров..."

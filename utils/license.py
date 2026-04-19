@@ -99,6 +99,21 @@ def _b64url_decode(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + pad)
 
 
+def _parse_utc_dt(s: str) -> datetime:
+    """
+    Парсит ISO8601 из payload-а лицензии и гарантирует tz-aware UTC.
+
+    issue_license.py пишет aware-даты, но naive могут приехать из
+    legacy-ключей или ручного override --expires-at без tz. Без нормализации
+    `now <= lic.expires_at` в evaluate_license ловит TypeError и бот уходит
+    в RESTRICTED с непонятным reason.
+    """
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 def verify_license(key_str: str) -> License:
     """
     Проверить подпись и распарсить payload. Бросает LicenseError при любой
@@ -130,8 +145,8 @@ def verify_license(key_str: str) -> License:
             tenant_slug=data["tenant_slug"],
             customer_name=data["customer_name"],
             license_id=data["license_id"],
-            issued_at=datetime.fromisoformat(data["issued_at"]),
-            expires_at=datetime.fromisoformat(data["expires_at"]),
+            issued_at=_parse_utc_dt(data["issued_at"]),
+            expires_at=_parse_utc_dt(data["expires_at"]),
         )
     except (KeyError, ValueError, json.JSONDecodeError) as exc:
         raise LicenseError(f"malformed payload: {exc}") from exc
