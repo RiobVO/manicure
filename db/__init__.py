@@ -14,7 +14,6 @@ from db.helpers import _price_fmt
 # --- appointments ---
 from db.appointments import (
     get_booked_times,
-    is_slot_free,
     create_appointment,
     get_appointments_by_date_full,
     get_appointment_by_id,

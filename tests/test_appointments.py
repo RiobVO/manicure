@@ -5,7 +5,6 @@ import pytest
 
 from db import (
     create_appointment,
-    is_slot_free,
     reschedule_appointment,
     cancel_appointment_by_client,
     get_stats,
@@ -94,47 +93,8 @@ async def test_create_appointment_no_master_conflicts_with_master(fresh_db, seed
         await _create(time="14:00", master_id=None, user_id=2)
 
 
-# ─── is_slot_free ────────────────────────────────────────────────────────────
-
-
-async def test_is_slot_free_true_when_empty(fresh_db, seed_master):
-    m = await seed_master("А")
-    assert await is_slot_free("2030-05-10", "14:00", 60, master_id=m) is True
-
-
-async def test_is_slot_free_false_when_booked(fresh_db, seed_master):
-    m = await seed_master("А")
-    await _create(time="14:00", master_id=m)
-    assert await is_slot_free("2030-05-10", "14:30", 60, master_id=m) is False
-
-
-async def test_is_slot_free_respects_master_id(fresh_db, seed_master):
-    """
-    У A — запись на 14:00/60мин. Проверяем слот, начинающийся ВНУТРИ интервала
-    (14:30), чтобы не наткнуться на баг равного start_time.
-    """
-    m_a = await seed_master("А")
-    m_b = await seed_master("Б")
-    await _create(time="14:00", master_id=m_a)
-    # У мастера B в это время ничего нет
-    assert await is_slot_free("2030-05-10", "14:30", 60, master_id=m_b) is True
-    # У A — занято (14:30 внутри 14:00-15:00)
-    assert await is_slot_free("2030-05-10", "14:30", 60, master_id=m_a) is False
-
-
-async def test_is_slot_free_with_exclude_id(fresh_db, seed_master):
-    """
-    При переносе запись не должна конфликтовать сама с собой.
-    Используем пересекающийся, но не равный start-time слот.
-    """
-    m = await seed_master("А")
-    appt_id = await _create(time="14:00", master_id=m, duration=60)
-    # Без exclude — слот 14:30 занят (пересечение с 14:00-15:00)
-    assert await is_slot_free("2030-05-10", "14:30", 60, master_id=m) is False
-    # С exclude_id — слот свободен
-    assert await is_slot_free(
-        "2030-05-10", "14:30", 60, master_id=m, exclude_id=appt_id
-    ) is True
+# Overlap-логика покрыта тестами test_create_appointment_* и test_reschedule_*;
+# отдельный is_slot_free удалён как неиспользуемый production-код.
 
 
 # ─── RESCHEDULE ──────────────────────────────────────────────────────────────
