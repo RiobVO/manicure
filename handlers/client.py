@@ -43,6 +43,7 @@ from keyboards.inline import (
     addons_keyboard, client_reply_keyboard, masters_keyboard,
 )
 from config import ADMIN_IDS
+from utils.admin import is_master
 from utils.panel import set_reply_kb
 from services.booking import (
     calculate_total_price,
@@ -205,7 +206,15 @@ async def cmd_start(message: Message, state: FSMContext):
         # Сохраняем reply keyboard для этого чата
         set_reply_kb(message.chat.id, admin_reply_keyboard())
         # Отправляем ТОЛЬКО reply keyboard — без дополнительного сообщения
-        await message.answer("👑 <b>Панель мастера</b>", reply_markup=admin_reply_keyboard(), parse_mode="HTML")
+        await message.answer("👑 <b>Панель администратора</b>", reply_markup=admin_reply_keyboard(), parse_mode="HTML")
+        return
+
+    # Мастер (user_id привязан к активной записи в masters) — свой кабинет.
+    # Late import handlers.master, чтобы избежать потенциального circular import
+    # на уровне модуля (client.py грузится при импорте хендлеров в bot.py).
+    if is_master(message.from_user.id):
+        from handlers.master import show_master_cabinet_entry
+        await show_master_cabinet_entry(message, state)
         return
 
     # Показать reply-клавиатуру тихо (невидимый разделитель — иначе сообщение нельзя отправить)
@@ -971,6 +980,26 @@ async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
         f"</blockquote>"
     )
     await _show_master_step(callback, state, header)
+
+
+# Мастерские кнопки, сохранившиеся в чате у пользователя, которого админ
+# деактивировал как мастера. IsMasterFilter в master.router их больше не
+# пропускает — ловим здесь и мягко переключаем на клиентский режим,
+# чтобы не падать в fallback_message → каталог услуг с мастерской клавиатурой.
+_EX_MASTER_BUTTON_TEXTS = frozenset({"📋 Сегодня", "📅 Мои записи", "📆 Моё расписание"})
+
+
+@router.message(F.text.in_(_EX_MASTER_BUTTON_TEXTS))
+async def ex_master_button(message: Message, state: FSMContext):
+    await state.clear()
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+    # Невидимый символ \u2063 — единственный способ послать update клавиатуры
+    # без видимого текста (Telegram не шлёт пустые сообщения).
+    await message.answer("\u2063", reply_markup=client_reply_keyboard())
+    await _send_category_picker(message, state)
 
 
 @router.message()

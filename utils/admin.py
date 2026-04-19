@@ -62,3 +62,35 @@ class IsAdminFilter(BaseFilter):
         if user is None:
             return False
         return is_admin(user.id)
+
+
+# ─── Masters: cache + filter ─────────────────────────────────────────────────
+# Параллельная инфраструктура ADMIN-кешу: множество user_id активных мастеров
+# с привязанным TG-id. Мастера без user_id в кеш не попадают — им кабинет
+# недоступен, пока админ не привяжет TG.
+
+_db_masters_cache: set[int] = set()
+
+
+async def refresh_masters_cache() -> None:
+    """Обновить кеш user_id активных мастеров. Вызывается на старте бота
+    и после любой мутации masters (create/update user_id/toggle/delete)."""
+    global _db_masters_cache
+    from db import get_active_masters_with_user_id
+    rows = await get_active_masters_with_user_id()
+    _db_masters_cache = {r["user_id"] for r in rows}
+
+
+def is_master(user_id: int) -> bool:
+    """True если user_id привязан к активному мастеру."""
+    return user_id in _db_masters_cache
+
+
+class IsMasterFilter(BaseFilter):
+    """Фильтр роутер-уровня: пропускает только мастеров (не-админов-мастеров тоже)."""
+
+    async def __call__(self, event: TelegramObject) -> bool:
+        user = getattr(event, "from_user", None)
+        if user is None:
+            return False
+        return is_master(user.id)
