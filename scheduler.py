@@ -28,6 +28,7 @@ from utils.timezone import now_local, get_tz
 from utils.error_reporter import report_error
 from utils.heartbeat import send_heartbeat
 from utils.license import LicenseState
+from utils.ui import h
 from db import (
     get_upcoming_appointments,
     mark_reminder_sent,
@@ -134,7 +135,7 @@ async def _send_24h_reminder(
             user_id,
             f"<i>доброе утро ☼</i>\n\n"
             f"завтра в <b>{time}</b> жду тебя ✧\n"
-            f"{service_name.lower()}\n\n"
+            f"{h(service_name.lower())}\n\n"
             f"<i>всё в силе?</i>",
             reply_markup=kb,
             parse_mode="HTML",
@@ -162,7 +163,7 @@ async def _send_2h_reminder(
         await bot.send_message(
             user_id,
             f"<i>через час-два приходи ✦</i>\n\n"
-            f"{service_name.lower()} · <b>{time}</b>",
+            f"{h(service_name.lower())} · <b>{time}</b>",
             parse_mode="HTML",
         )
     except TelegramAPIError:
