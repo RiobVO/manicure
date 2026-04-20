@@ -16,7 +16,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from config import BACKUP_CHAT_ID, TENANT_SLUG
+from config import BACKUP_CHAT_ID, DB_PATH, TENANT_SLUG
 from constants import (
     REMINDER_2H_MAX,
     REMINDER_2H_MIN,
@@ -224,6 +224,25 @@ async def run_backup(bot: Bot) -> None:
         )
 
 
+# Heartbeat-файл рядом с БД. Healthcheck в docker-compose чекает его mtime.
+# Почему не mtime manicure.db: в WAL-режиме SELECT не трогает main-файл, а INSERT
+# в sent_reminders случается только когда реально есть что слать. В пустой день
+# или ночью mtime БД протухает → false-positive unhealthy. Отдельный heartbeat-файл
+# — независимое доказательство, что event loop крутится.
+HEARTBEAT_PATH = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)) or ".", ".heartbeat")
+
+
+async def _touch_heartbeat() -> None:
+    """Обновляет mtime heartbeat-файла. Синхронный write — <1ms, async не нужен."""
+    try:
+        with open(HEARTBEAT_PATH, "w") as f:
+            f.write(now_local().isoformat())
+    except OSError:
+        # Диск полный / права отозваны — фейл heartbeat'а не должен ронять scheduler.
+        # Healthcheck сам заметит протухший mtime и пометит контейнер unhealthy.
+        logger.warning("Не удалось обновить heartbeat %s", HEARTBEAT_PATH, exc_info=True)
+
+
 async def _safe_send_reminders(bot: Bot) -> None:
     """Обёртка: любая непойманная ошибка → алерт и лог, но джоба не падает молча."""
     try:
@@ -249,6 +268,14 @@ def setup_scheduler(bot: Bot, license_state: LicenseState) -> AsyncIOScheduler:
         trigger="interval",
         minutes=REMINDER_POLL_INTERVAL_MIN,
         args=[bot],
+    )
+    # Heartbeat для docker healthcheck: каждые 5 мин, сразу при старте.
+    # Окно healthcheck в compose — 30 мин, так что 6х запас на случай временных фризов.
+    scheduler.add_job(
+        _touch_heartbeat,
+        trigger="interval",
+        minutes=5,
+        next_run_time=datetime.now(tz),
     )
     # RPO=6ч: для салона это разница между «потеряли сегодняшние записи»
     # и «потеряли вторую половину дня». Больше — клиентам больно.

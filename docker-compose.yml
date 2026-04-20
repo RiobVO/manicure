@@ -34,20 +34,22 @@ services:
       redis:
         condition: service_healthy
     restart: always
-    # Healthcheck: считаем бот живым, если manicure.db обновлялся в последние
-    # 30 мин. Scheduler пишет в БД как минимум раз в 15 мин (send_reminders) —
-    # свежесть mtime == пруф, что event loop крутится. Если polling завис или
-    # dp заблочен, mtime протухнет → `docker ps` покажет unhealthy.
+    # Healthcheck: считаем бот живым, если heartbeat-файл обновлялся в последние
+    # 30 мин. Scheduler трогает /app/data/.heartbeat каждые 5 мин — если event
+    # loop висит или polling завис, mtime протухнет → `docker ps` покажет unhealthy.
+    # Почему не mtime manicure.db: в WAL-режиме SELECT не трогает main-файл,
+    # а INSERT бывает только когда реально шлём напоминалку. В пустой день
+    # mtime БД стоял бы часами → ложные unhealthy.
     # ВНИМАНИЕ: Docker compose сам по себе НЕ рестартит unhealthy-контейнеры
     # (только при падении процесса). Для авто-восстановления добавь sidecar
     # willfarrell/autoheal или внешний мониторинг. Сейчас — ранняя диагностика
-    # через /status и `docker ps`. start_period=60s даёт init_db время.
+    # через /status и `docker ps`. start_period=120s даёт init_db + первый tick scheduler'а.
     healthcheck:
-      test: ["CMD-SHELL", "test -f /app/data/manicure.db && find /app/data/manicure.db -mmin -30 | grep -q ."]
+      test: ["CMD-SHELL", "find /app/data/.heartbeat -mmin -30 2>/dev/null | grep -q ."]
       interval: 5m
       timeout: 10s
       retries: 2
-      start_period: 60s
+      start_period: 120s
     logging:
       driver: json-file
       options:
