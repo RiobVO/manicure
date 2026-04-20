@@ -22,6 +22,9 @@ services:
     build: .
     container_name: manicure-bot-${TENANT_SLUG:-default}
     env_file: .env
+    # Лейбл для autoheal: sidecar рестартит только помеченные контейнеры.
+    labels:
+      - autoheal=true
     # Жёсткие override для контейнерной среды: сервис-имена и volume-пути
     # не должны зависеть от того, что осталось в .env у разработчика.
     environment:
@@ -56,6 +59,27 @@ services:
         max-size: "10m"
         max-file: "5"
         tag: "manicure-${TENANT_SLUG:-default}-bot"
+
+  # Рестартит контейнеры с label autoheal=true при healthcheck=unhealthy.
+  # Docker compose сам по себе не реагирует на unhealthy — только на crash.
+  # Event loop бота может зависнуть без падения процесса → без autoheal салон
+  # окажется unhealthy в 20:00, а никто не перезапустит до утра.
+  # ~20MB RAM, read-only docker socket.
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: manicure-autoheal-${TENANT_SLUG:-default}
+    restart: always
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "60"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+        tag: "manicure-${TENANT_SLUG:-default}-autoheal"
 
 volumes:
   redis-data:

@@ -636,7 +636,19 @@ async def get_name(message: Message, state: FSMContext):
 
 @router.message(BookingStates.get_phone, F.contact)
 async def get_phone(message: Message, state: FSMContext):
-    phone = message.contact.phone_number
+    contact = message.contact
+    # Telegram проставляет contact.user_id только для ОТПРАВИТЕЛЯ своего контакта.
+    # Если пользователь шарит чужой контакт (из адресной книги) — user_id=None
+    # или != from_user.id. Защита от: (а) случайного выбора контакта мамы/мужа,
+    # (б) намеренной записи чужого человека.
+    if contact.user_id is None or contact.user_id != message.from_user.id:
+        await message.answer(
+            "<i>поделись своим номером — кнопкой ниже.</i>",
+            reply_markup=contact_keyboard(),
+            parse_mode="HTML",
+        )
+        return
+    phone = contact.phone_number
     await state.update_data(phone=phone)
 
     # Удаляем системное сообщение с контактом — в чате не должно болтаться
