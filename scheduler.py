@@ -9,14 +9,14 @@
 """
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from config import BACKUP_CHAT_ID, DB_PATH, TENANT_SLUG
+from config import BACKUP_CHAT_ID, DB_PATH, ERROR_CHAT_ID, LICENSE_CONTACT, TENANT_SLUG
 from constants import (
     REMINDER_2H_MAX,
     REMINDER_2H_MIN,
@@ -225,6 +225,101 @@ async def run_backup(bot: Bot) -> None:
         )
 
 
+
+
+# ─── Проактивный алерт об истечении лицензии ─────────────────────────────────
+# Автор получает пуш в ERROR_CHAT_ID за N дней до истечения. Без внешнего
+# endpoint'а — используется тот же канал что для ошибок, он у автора уже есть.
+# Дедуп через файл-маркер: иначе алерт улетал бы каждые 24ч.
+
+LICENSE_ALERT_DAYS_BEFORE = 60
+LICENSE_ALERT_REPEAT_DAYS = 7  # не чаще раза в неделю, чтобы не спамить
+
+LICENSE_ALERT_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(DB_PATH)) or ".", ".license_alert",
+)
+
+
+def _license_alert_last_sent() -> datetime | None:
+    """Читает timestamp последней отправки из .license_alert.
+    None если файла нет или он битый — значит «никогда не слали»."""
+    if not os.path.exists(LICENSE_ALERT_PATH):
+        return None
+    try:
+        with open(LICENSE_ALERT_PATH) as f:
+            iso = f.read().strip()
+        return datetime.fromisoformat(iso)
+    except (OSError, ValueError):
+        return None
+
+
+def _license_alert_mark_sent() -> None:
+    """Обновляет timestamp в .license_alert. Сбой записи не критичен —
+    в худшем случае через сутки придёт дубль-алерт."""
+    try:
+        with open(LICENSE_ALERT_PATH, "w") as f:
+            f.write(datetime.now(timezone.utc).isoformat())
+    except OSError:
+        logger.warning("Не удалось обновить %s", LICENSE_ALERT_PATH, exc_info=True)
+
+
+def _should_alert_license(
+    license_state: LicenseState, now: datetime,
+) -> tuple[bool, int]:
+    """Возвращает (надо-слать, days_left). Выделено чистой функцией — тестируется
+    без файловой системы и без бота. Правила:
+    - нет лицензии (DEV / нет ключа) — не шлём, тестить нечего;
+    - days_left > LICENSE_ALERT_DAYS_BEFORE — рано, не слать;
+    - days_left <= 0 — уже истекла / в grace, отдельная ветка (warn_grace
+      на старте уже есть, дубль тут не нужен);
+    - в остальном — слать."""
+    if license_state.license is None:
+        return False, 0
+    expires = license_state.license.expires_at
+    days_left = (expires - now).days
+    return 0 < days_left <= LICENSE_ALERT_DAYS_BEFORE, days_left
+
+
+async def alert_license_expiry(bot: Bot, license_state: LicenseState) -> None:
+    """Раз в сутки проверяет сколько осталось до истечения лицензии.
+    Если <=60 дней и осталось >0 — шлёт пуш в ERROR_CHAT_ID (канал автора).
+    Дедуп 7 дней — чтобы не спамить."""
+    if ERROR_CHAT_ID is None:
+        return
+    now = datetime.now(timezone.utc)
+    should_alert, days_left = _should_alert_license(license_state, now)
+    if not should_alert:
+        return
+
+    last = _license_alert_last_sent()
+    if last is not None and (now - last).days < LICENSE_ALERT_REPEAT_DAYS:
+        return
+
+    lic = license_state.license  # gated by should_alert
+    text = (
+        f"⏰ <b>[{TENANT_SLUG}]</b> лицензия истекает через <b>{days_left}</b> дн.\n\n"
+        f"customer: {h(lic.customer_name)}\n"
+        f"license_id: <code>{h(lic.license_id)}</code>\n"
+        f"expires_at: <code>{lic.expires_at.date()}</code>\n\n"
+        f"Продли до этой даты:\n"
+        f"<code>python tools/issue_license.py {h(lic.tenant_slug)} "
+        f"\"{h(lic.customer_name)}\" 60</code>"
+    )
+    try:
+        await bot.send_message(chat_id=ERROR_CHAT_ID, text=text, parse_mode="HTML")
+        _license_alert_mark_sent()
+    except Exception:
+        logger.warning("Не удалось отправить license-алерт", exc_info=True)
+
+
+async def _safe_alert_license_expiry(bot: Bot, license_state: LicenseState) -> None:
+    try:
+        await alert_license_expiry(bot, license_state)
+    except Exception as exc:
+        logger.error("alert_license_expiry упала", exc_info=True)
+        await report_error(bot, exc, context="scheduler.alert_license_expiry")
+
+
 # Heartbeat-файл рядом с БД. Healthcheck в docker-compose чекает его mtime.
 # Почему не mtime manicure.db: в WAL-режиме SELECT не трогает main-файл, а INSERT
 # в sent_reminders случается только когда реально есть что слать. В пустой день
@@ -288,12 +383,26 @@ def setup_scheduler(bot: Bot, license_state: LicenseState) -> AsyncIOScheduler:
     )
     # Heartbeat: раз в 24ч, первый раз — сразу при старте (не ждём сутки).
     # license_id может быть None (в DEV/RESTRICTED без лицензии) — отправляем пустой.
+    # license_expires_at передаём отдельным аргументом, чтобы будущий авторский
+    # endpoint мог считать days_until_expiry без парсинга ключа.
     license_id = license_state.license.license_id if license_state.license else None
+    license_expires_at = (
+        license_state.license.expires_at if license_state.license else None
+    )
     scheduler.add_job(
         send_heartbeat,
         trigger="interval",
         hours=24,
-        args=[license_id],
+        args=[license_id, license_expires_at],
+        next_run_time=datetime.now(tz),
+    )
+    # Проактивный алерт автору об истечении лицензии. Раз в сутки.
+    # Дедуп через файл-маркер в задаче — 7 дней между пушами.
+    scheduler.add_job(
+        _safe_alert_license_expiry,
+        trigger="interval",
+        hours=24,
+        args=[bot, license_state],
         next_run_time=datetime.now(tz),
     )
     return scheduler

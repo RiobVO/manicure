@@ -9,6 +9,7 @@ Heartbeat к центральному endpoint автора — «я жив, я 
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 import aiohttp
@@ -22,8 +23,16 @@ logger = logging.getLogger(__name__)
 APP_VERSION = "1.0.0"
 
 
-async def send_heartbeat(license_id: str | None) -> None:
-    """Отправить один heartbeat. Проглатывает любые сетевые/HTTP сбои."""
+async def send_heartbeat(
+    license_id: str | None,
+    license_expires_at: datetime | None = None,
+) -> None:
+    """Отправить один heartbeat. Проглатывает любые сетевые/HTTP сбои.
+
+    license_expires_at — ISO-сериализуется в payload вместе с days_until_expiry.
+    Это даёт автору на стороне приёмника считать «кому пора продлить» без
+    парсинга ключа. None → поля опущены (DEV/RESTRICTED без лицензии).
+    """
     if not HEARTBEAT_URL:
         return
 
@@ -33,6 +42,11 @@ async def send_heartbeat(license_id: str | None) -> None:
         "version": APP_VERSION,
         "last_seen": now_local().isoformat(),
     }
+    if license_expires_at is not None:
+        payload["expires_at"] = license_expires_at.isoformat()
+        payload["days_until_expiry"] = (
+            license_expires_at - datetime.now(timezone.utc)
+        ).days
 
     timeout = aiohttp.ClientTimeout(total=10)
     try:
