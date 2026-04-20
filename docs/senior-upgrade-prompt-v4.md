@@ -1,13 +1,14 @@
 # Manicure SaaS — v.4 Upgrade Brief (Commercial Depth Track)
 
-> Наследование: `docs/senior-upgrade-prompt-v3.md`. Общие правила,
-> стиль общения, red flags, принципы «что НЕ делаем» — читай там.
-> Здесь — только scope v.4.
+> Inherits from `docs/senior-upgrade-prompt-v3.md`. General rules,
+> communication style, red flags, "what we DON'T build" principles —
+> read there. This document is scope-only for v.4.
 >
-> Триггер создания: автор начал продавать в Ташкенте, получил фидбек
-> от первых менеджеров салонов: «а оплата онлайн?», «а на узбекском?»,
-> «а как клиент попадёт в бота с Instagram?». Эти 4 фичи закрывают
-> коммерческие дыры, мешающие масштабу после первых 5-10 пилотов.
+> Why this brief exists: author started selling in Tashkent, got
+> feedback from first salon managers: "online payment?", "Uzbek
+> version?", "how does a client land on the bot from Instagram?".
+> These four features close commercial gaps blocking scale beyond
+> the first 5-10 pilots.
 
 ---
 
@@ -31,211 +32,221 @@ Respond in Russian, matching my energy.
 
 ---
 
-## Порядок работ (приоритизирован)
+## Work order (prioritized)
 
-**Phase 1 (MUST, делаем первой)** — Онлайн-оплата через Click/Payme.
-**Phase 2 (SHOULD)** — Deep-link'и для Instagram/QR с трекингом источника.
-**Phase 3 (COULD, по запросу)** — Узбекская локализация.
-**Phase 4 (DEFERRED)** — Включение enforcement лицензий.
+**Phase 1 (MUST, do first)** — Online payments via Click/Payme.
+**Phase 2 (SHOULD)** — Deep-links for Instagram/QR with source tracking.
+**Phase 3 (COULD, on request)** — Uzbek localization.
+**Phase 4 (DEFERRED)** — Enable license enforcement middleware.
 
-**Почему этот порядок.** Phase 1 — единственная, которую спрашивают
-ВСЕ менеджеры. Без неё бот «запись», с ней — «запись и оплата».
-Phase 2 — быстрый вин на 1-2 дня, wow-эффект в демо («сканируй QR
-у ресепшн — запишись»). Phase 3 важна, но русскоязычные менеджеры
-салонов — целевой сегмент первых 15-20 клиентов, uz не блокер.
-Phase 4 уже готов по коду, триггер — 20+ клиентов или первый пират.
-
----
-
-## Phase 1 — Онлайн-оплата Click / Payme (MUST)
-
-**Проблема.** `PAYMENT_URL` сейчас — только параметризованная ссылка:
-клиент кликает, переходит на сайт платёжки, платит — но **бот не знает
-что оплата прошла**. Менеджер вручную проверяет в Click/Payme-кабинете,
-руками ставит статус в записи. Полу-автоматизация, в которой больше
-трения чем помощи.
-
-**Что делаем.**
-
-- Интеграция двух платёжек Узбекистана: **Click** и **Payme**. Они
-  покрывают 95% мобильных кошельков УЗ. Оба имеют REST-API и webhook'и.
-- После подтверждения записи (`confirm_yes` в `handlers/client.py`)
-  бот генерирует invoice через API выбранной платёжки, показывает
-  клиенту **одну кнопку «💳 Оплатить»** с deeplink в приложение.
-- Webhook на стороне бота (новый эндпоинт `/payment/click` и
-  `/payment/payme`) принимает уведомление от платёжки, проверяет
-  подпись, обновляет `appointments.paid_at` + `appointments.payment_provider`.
-- В админке новая колонка в карточке записи: «💰 Оплачено» / «⏳ Ждёт
-  оплаты» / «—» (если не требуется).
-- Новая envvar: `PAYMENT_PROVIDER=click|payme|none` + `CLICK_MERCHANT_ID`
-  / `PAYME_MERCHANT_ID` + secrets.
-- Мастеру в карточке записи статус оплаты виден сразу — он не
-  спрашивает клиента «оплатили?».
-- Клиент видит в «мои записи» статус: оплачено / в ожидании.
-
-**Техническая заметка.** Бот — polling, а не webhook-based. Для приёма
-webhook'ов от платёжки понадобится **минимальный HTTP-сервер**
-(aiohttp) внутри того же процесса бота. `aiohttp.web` уже зависимость
-(через aiogram). Поднимается на порту, скажем, 8443, за Caddy/nginx
-для TLS. Выносить в отдельный сервис **не надо** — тот же процесс,
-меньше движущихся частей, соло-разработчику проще.
-
-**Миграция БД.** `appointments`: новые колонки `paid_at TEXT`,
-`payment_provider TEXT`, `payment_invoice_id TEXT`. Ручная миграция
-через `PRAGMA user_version` (как сейчас), не Alembic.
-
-**Что НЕ делаем.**
-
-- Не интегрируем международные платёжки (Stripe, PayPal) — в УЗ
-  не нужны, усложняют installer.
-- Не поддерживаем оплату в несколько частей / гифт-карты / промокоды.
-  Это Phase 5+ если вообще.
-- Не строим «админскую панель оплат» — в БД всё есть, для MVP хватит
-  статуса в карточке записи.
-- Не заставляем оплатить ПЕРЕД записью. Оплата — опциональная,
-  после подтверждения. Иначе срежется половина конверсии у
-  клиентов без привязанной карты.
-
-**Верификация.**
-
-> 1. Клиент доходит до confirm_yes в боте-демо (с подключённым Click-sandbox).
-> 2. Получает кнопку «Оплатить» → тапает → открывается Click-app.
-> 3. Оплачивает 100 сум (sandbox). Через 2-5 сек бот пушит клиенту
->    «✓ оплата получена».
-> 4. В админке у записи статус «💰 Оплачено». В БД `paid_at` заполнен.
-> 5. Если оплата не пришла за 30 минут — статус остаётся «⏳ Ждёт оплаты»,
->    запись не теряется.
-> 6. Отмена записи ПОСЛЕ оплаты — инициирует возврат через refund-API
->    платёжки (или как минимум алерт админу «нужен ручной возврат»).
-
-**Коммит:** `feat(payments): click+payme online invoices with webhook`.
+**Why this order.** Phase 1 is the only one every single manager asks
+about. Without it, the bot is "booking"; with it, it's "booking AND
+payment" — a fundamentally different product in the buyer's mind.
+Phase 2 is a 1-2 day quick win with high wow-factor in demos
+("scan the QR at the front desk — book instantly"). Phase 3 matters,
+but Russian-speaking salon managers are the target segment for the
+first 15-20 clients — Uzbek is not a blocker. Phase 4 is already
+code-complete; its trigger is 20+ clients or the first piracy attempt.
 
 ---
 
-## Phase 2 — Deep-link приглашения (SHOULD)
+## Phase 1 — Online payments via Click / Payme (MUST)
 
-**Проблема.** В Ташкенте 80% трафика салона — Instagram. Салон хочет
-в сторис написать «запись → t.me/sabina_nails_bot?start=story_april20»
-и видеть потом что 47 клиентов пришли из этой сторис. Сейчас — не
-видят, все записи просто «с неба».
+**Problem.** `PAYMENT_URL` today is just a parameterized link: the
+client clicks through, pays on the provider's site — but **the bot
+has no idea the payment happened**. The manager manually checks the
+Click/Payme merchant dashboard and sets the appointment status by
+hand. Semi-automation that adds more friction than it removes.
 
-**Что делаем.**
+**What we build.**
 
-- Клиент переходит по ссылке вида `t.me/<bot>?start=<payload>` →
-  Telegram передаёт `payload` в команду `/start`. Aiogram это поддерживает
-  из коробки через `CommandObject.args`.
-- Сохраняем в `client_profiles.source` (новая колонка) источник на
-  первом /start клиента. Дальше не перезаписываем — это его «атрибуция».
-- Опционально создаём таблицу `referral_sources`:
-  `code TEXT PRIMARY KEY, label TEXT, created_at` — админ в боте может
-  завести «Instagram story 20 апреля» с кодом `story_april20` и
-  получить короткую ссылку.
-- Новый раздел в админке «📈 Откуда клиенты» → агрегат по `source`:
-  сколько клиентов, сколько записей, сумма оплат, возвраты.
-- Генератор QR: админ в боте жмёт «QR для офлайн» → бот создаёт
-  картинку с ссылкой `t.me/<bot>?start=<code>` → отправляет PNG.
-  Без внешних библиотек сложно — `qrcode` на чистом Python одна
-  зависимость, ~10k скачиваний, OK.
+- Integration for two Uzbek payment rails: **Click** and **Payme**.
+  Together they cover ~95% of mobile wallets in UZ. Both expose REST
+  APIs and webhooks.
+- After booking confirmation (`confirm_yes` in `handlers/client.py`),
+  the bot generates an invoice via the chosen provider's API and
+  shows the client a single button **«💳 Оплатить»** that deep-links
+  into the payment app.
+- Webhook endpoints on the bot side (`/payment/click`, `/payment/payme`)
+  receive provider callbacks, verify signatures, update
+  `appointments.paid_at` + `appointments.payment_provider`.
+- Admin panel: new column in appointment card — «💰 Оплачено» /
+  «⏳ Ждёт оплаты» / «—» (if payment not required).
+- New env vars: `PAYMENT_PROVIDER=click|payme|none`,
+  `CLICK_MERCHANT_ID` / `PAYME_MERCHANT_ID` plus secrets.
+- Master sees payment status in their appointment card — no more
+  "did you pay yet?" questions.
+- Client sees status in "My bookings": paid / pending.
 
-**Что НЕ делаем.**
+**Technical note.** The bot runs on long-polling, not webhooks. To
+receive provider callbacks we need a **minimal HTTP server** (aiohttp)
+inside the bot process. `aiohttp.web` is already a transitive dep via
+aiogram. Listens on port 8443 behind Caddy/nginx for TLS. **Don't
+spin up a separate service** — same process, fewer moving parts,
+easier for a solo dev to own.
 
-- Не строим полноценный CRM-модуль «аналитика источников». Минимум —
-  count клиентов, count записей, sum оплат. Без графиков, без фильтров
-  по датам.
-- Не разрешаем заводить больше 50 источников на салон. Если больше —
-  скорее всего админ не понимает как использовать, и это UX-bloat.
-- Не трекаем события кроме первого /start (нет session analytics).
+**DB migration.** `appointments`: new columns `paid_at TEXT`,
+`payment_provider TEXT`, `payment_invoice_id TEXT`. Manual migration
+via `PRAGMA user_version` (same pattern as today) — not Alembic.
 
-**Верификация.**
+**What we DON'T build.**
 
-> 1. Админ создаёт источник «Instagram bio» с кодом `ig_bio`.
-> 2. Получает ссылку `t.me/<bot>?start=ig_bio` и PNG-QR.
-> 3. Открывает ссылку со второго аккаунта → бот видит payload, пишет
->    `source='ig_bio'` в client_profiles.
-> 4. Клиент записывается на услугу.
-> 5. В админке «📈 Откуда клиенты» строка `Instagram bio` — 1 клиент,
->    1 запись, 250 000 сум ожидаемо.
+- No international gateways (Stripe, PayPal) — irrelevant in UZ,
+  bloat the installer.
+- No split payments / gift cards / promo codes. That's Phase 5+ if ever.
+- No separate "payments admin panel" — the DB has everything; for MVP
+  the status pill in the appointment card is enough.
+- We do NOT force pre-payment. Payment is optional, offered after
+  confirmation. Mandatory pre-pay would halve conversion for clients
+  without a linked card.
 
-**Коммит:** `feat(analytics): deep-link source tracking + QR generator`.
+**Verification.**
+
+> 1. Client reaches `confirm_yes` in the demo bot (with a Click-sandbox
+>    merchant wired up).
+> 2. Gets the «Оплатить» button → taps it → Click app opens.
+> 3. Pays 100 UZS in sandbox. Within 2-5 seconds the bot pushes
+>    «✓ оплата получена» to the client.
+> 4. In admin, the appointment shows «💰 Оплачено». `paid_at` is
+>    populated in the DB.
+> 5. If payment doesn't arrive within 30 minutes, status stays
+>    «⏳ Ждёт оплаты» — the appointment itself is not lost.
+> 6. Cancelling AFTER payment triggers a refund via the provider's
+>    refund API (or at minimum an admin alert: "manual refund needed").
+
+**Commit:** `feat(payments): click+payme online invoices with webhook`.
 
 ---
 
-## Phase 3 — Узбекская локализация (COULD, по запросу)
+## Phase 2 — Deep-link invitations (SHOULD)
 
-**Триггер:** минимум 2 клиента явно попросили узбекский. Не делаем
-впрок.
+**Problem.** In Tashkent, 80% of salon traffic comes from Instagram.
+The salon wants to drop a link in their story — "book here →
+t.me/sabina_nails_bot?start=story_april20" — and later see that
+47 clients came from that story. Right now they can't see source;
+every booking appears "out of nowhere".
 
-**Что делаем.**
+**What we build.**
 
-- Новая envvar `DEFAULT_LANG=ru|uz` в `.env`, default `ru` (совместимость).
-- Все тексты бота (строки в `utils/ui.py`, шаблоны в `utils/notifications.py`,
-  подписи клавиатур, ошибки валидации) — выносим в словари по языку.
-  Файл `locales/ru.py` и `locales/uz.py`, функция `t(key, **fmt_kwargs)`.
-- Админ в настройках салона выбирает язык: «👅 Русский / O'zbek».
-- Клиент в своей сессии видит тот же язык. Per-user override — нет,
-  один язык на весь бот (ожидания салонов локальные).
-- Переводы — узбекский кириллица (традиционно в Ташкенте), не латиница.
+- Client opens `t.me/<bot>?start=<payload>` → Telegram passes `payload`
+  into the `/start` command. Aiogram supports this out of the box
+  via `CommandObject.args`.
+- Save to `client_profiles.source` (new column) on the client's FIRST
+  `/start`. Never overwrite — this is their acquisition attribution.
+- Optional table `referral_sources`:
+  `code TEXT PRIMARY KEY, label TEXT, created_at`. Admin creates
+  "Instagram story 20 april" with code `story_april20` and gets a
+  short link.
+- New admin section «📈 Откуда клиенты»: aggregate by `source` —
+  client count, booking count, total revenue, refund count.
+- QR generator: admin taps "QR for offline use" → bot renders a
+  `t.me/<bot>?start=<code>` PNG → sends it back. Requires the
+  `qrcode` pure-Python lib (one dep, ~10k stars, OK).
 
-**Что НЕ делаем.**
+**What we DON'T build.**
 
-- Не добавляем третьих языков (английский, таджикский).
-- Не делаем per-user язык — сложность без ценности для первых клиентов.
-- Не переводим ошибки логов / админские technical-строки. Только то,
-  что видит клиент + админ-интерфейс салона.
-- Не машинный перевод: всё руками, с живым узбекоговорящим ревьюером.
-  Плохой перевод хуже отсутствия локали — выглядит дёшево.
+- No full "source analytics" CRM module. Minimum only: client count,
+  booking count, revenue sum. No charts, no date filters.
+- No more than 50 sources per salon. Beyond that, admin likely
+  doesn't understand how to use them — it's UX bloat.
+- No event tracking beyond the first `/start`. No session analytics.
 
-**Верификация.**
+**Verification.**
 
-> 1. В `.env` ставим `DEFAULT_LANG=uz`, рестарт.
-> 2. Клиент пишет /start → приветствие на узбекском.
-> 3. Проходит booking-флоу — все подписи кнопок, confirm-сообщение,
->    напоминалка — на узбекском.
-> 4. Админ входит — админ-панель тоже на узбекском (кнопки нижней
->    клавиатуры, inline-кнопки).
-> 5. Переключили на `DEFAULT_LANG=ru`, рестарт → всё на русском.
+> 1. Admin creates source «Instagram bio» with code `ig_bio`.
+> 2. Receives link `t.me/<bot>?start=ig_bio` and a PNG QR code.
+> 3. Opens the link from a second account → bot sees the payload
+>    and writes `source='ig_bio'` into `client_profiles`.
+> 4. That client makes a booking.
+> 5. In admin «📈 Откуда клиенты», the «Instagram bio» row shows
+>    1 client, 1 booking, 250 000 UZS expected.
 
-**Коммит:** `feat(i18n): uzbek localization (cyrillic)`.
+**Commit:** `feat(analytics): deep-link source tracking + QR generator`.
+
+---
+
+## Phase 3 — Uzbek localization (COULD, on request)
+
+**Trigger:** at least 2 clients have explicitly asked for Uzbek.
+We do NOT build this proactively.
+
+**What we build.**
+
+- New env var `DEFAULT_LANG=ru|uz` in `.env`, default `ru` (back-compat).
+- All bot strings (from `utils/ui.py`, templates in
+  `utils/notifications.py`, keyboard labels, validation errors) move
+  into per-language dicts. Files `locales/ru.py` and `locales/uz.py`,
+  lookup function `t(key, **fmt_kwargs)`.
+- Admin picks the language in settings: "👅 Русский / O'zbek".
+- Client sees the same language — no per-user override. One language
+  per bot instance (salon's local market is local).
+- Translations in Uzbek Cyrillic (traditional in Tashkent), not Latin.
+
+**What we DON'T build.**
+
+- No additional languages (English, Tajik).
+- No per-user language. Adds complexity with no value for early clients.
+- Don't translate log messages / internal technical strings. Only what
+  the client sees and the salon admin interface.
+- No machine translation. Everything reviewed by a native Uzbek speaker.
+  Bad translation is worse than no translation — it looks cheap.
+
+**Verification.**
+
+> 1. Set `DEFAULT_LANG=uz` in `.env`, restart.
+> 2. Client writes `/start` → greeting in Uzbek.
+> 3. Walks through the booking flow — all button labels, the confirm
+>    dialog, the reminder — all in Uzbek.
+> 4. Admin enters the panel — admin interface in Uzbek too (bottom
+>    reply keyboard, inline buttons).
+> 5. Switch to `DEFAULT_LANG=ru`, restart → everything back in Russian.
+
+**Commit:** `feat(i18n): uzbek localization (cyrillic)`.
 
 ---
 
 ## Phase 4 — License enforcement (DEFERRED)
 
-**Триггер:** 20+ платящих клиентов ИЛИ поймали первую попытку форка.
+**Trigger:** 20+ paying clients OR first detected forking attempt.
 
-**Что делаем** (когда дойдём):
+**What we do** (when we get there):
 
-- Раскомментировать 3 строки в `bot.py:107-109`.
-- Протестировать на демо с истекшей лицензией — `/start` даёт текст
-  «лицензия истекла, обратитесь к X», остальное молчит.
-- Обновить `docs/LICENSING.md` — убрать абзац «enforcement пока выключен».
+- Uncomment the 3 lines in `bot.py:107-109`.
+- Test on demo with an expired license — `/start` shows
+  "лицензия истекла, обратитесь к X", everything else is silently
+  ignored.
+- Update `docs/LICENSING.md` — remove the "enforcement is off for now"
+  paragraph.
 
-Всё остальное уже готово: verify, grace, heartbeat, проактивный алерт
-за 60 дней — работает прямо сейчас.
+Everything else is already working: verify, grace, heartbeat, proactive
+expiry alert at 60 days — all live right now.
 
-**Что НЕ делаем:**
+**What we DON'T do:**
 
-- Не включаем сейчас. Ложное срабатывание у Сабины в 22:00 убьёт
-  отношения, потеряем первого клиента.
+- Not turning it on today. A false positive at Sabina's salon at
+  22:00 would kill the relationship and cost us our first customer.
 
-**Коммит:** `feat(license): enable enforcement middleware`.
+**Commit:** `feat(license): enable enforcement middleware`.
 
 ---
 
-## Общие правила для v.4
+## General rules for v.4
 
-- Каждая фаза заканчивается **одним деплойным коммитом**.
-- После Phase 1 — пауза, смоук-тест у Сабины, получить от неё
-  фидбек «удобно / не удобно оплатить», потом Phase 2.
-- Не делать Phase 3 до 2-х явных просьб, не раньше 5-го клиента.
-- Phase 4 не трогать до 20-го клиента.
-- Всё остальное (deferred list из v3) — как было: Alembic, Postgres,
-  Money VO, автобиллинг, hypothesis, shared DB — **не трогаем**.
+- Each phase ends in **exactly one deployable commit**.
+- After Phase 1 — pause, smoke-test at Sabina's, collect her feedback
+  ("did payment feel smooth?"), then Phase 2.
+- Don't touch Phase 3 before 2 explicit client requests, no earlier
+  than the 5th client.
+- Don't touch Phase 4 before the 20th client.
+- Everything else (deferred list from v3) — unchanged: Alembic,
+  Postgres, Money VO, automated billing, hypothesis tests, shared DB
+  — **hands off**.
 
 ---
 
 ## Hard checkpoint
 
-После Phase 1+2 (оплата + deep-links) продукт коммерчески полноценен
-для Ташкента. **Стоп, спросить автора**, нужна ли Phase 3 или идём
-в продажи и набираем следующих 10 клиентов.
+After Phase 1+2 (payments + deep-links) the product is commercially
+complete enough for Tashkent. **Stop and ask the author** whether
+Phase 3 is next, or whether we go into sales mode and grab the next
+10 clients first.
