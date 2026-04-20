@@ -26,10 +26,26 @@ _MASTER_TEMPLATES: dict[str, str] = {
     "rescheduled": "🔄 Запись перенесена\nНовая дата: {date} в {time}\nКлиент: {client_name}",
 }
 
-# Шаблоны сообщений клиенту
+# Шаблоны сообщений клиенту.
+# Для cancelled_by_master / rescheduled_by_master добавляем master_name в data,
+# чтобы клиент знал КТО инициировал изменение (в салоне 2+ мастера — важно,
+# клиент должен понимать к кому переносить разговор).
 _CLIENT_TEMPLATES: dict[str, str] = {
     "status_changed": "📌 Статус записи на {date} обновлён\nНовый статус: {status}",
     "rescheduled": "🔄 Ваша запись перенесена\nНовая дата: {date} в {time}",
+    "cancelled_by_master": (
+        "❌ Мастер {master_name} отменил(а) вашу запись.\n\n"
+        "📅 Было: {date} в {time}\n"
+        "💅 {service_name}\n\n"
+        "Свяжитесь с салоном для переноса на другое время."
+    ),
+    "rescheduled_by_master": (
+        "🔄 Мастер {master_name} перенёс(ла) вашу запись.\n\n"
+        "📅 Было: {old_date} в {old_time}\n"
+        "📅 Стало: {date} в {time}\n"
+        "💅 {service_name}\n\n"
+        "Если неудобно — ответьте на это сообщение или свяжитесь с салоном."
+    ),
 }
 
 
