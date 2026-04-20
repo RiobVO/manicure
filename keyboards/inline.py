@@ -657,6 +657,60 @@ def master_weekly_schedule_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def master_schedule_menu_keyboard(has_day_offs: bool) -> InlineKeyboardMarkup:
+    """Кнопки действий под текстом «📆 Моё расписание» в кабинете мастера.
+    «☀ Убрать отгул» показываем только если есть что убирать."""
+    buttons = [[InlineKeyboardButton(text="🌙 Поставить отгул", callback_data="mdo_add")]]
+    if has_day_offs:
+        buttons.append([InlineKeyboardButton(
+            text="☀ Убрать отгул", callback_data="mdo_remove_list",
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_day_off_dates_keyboard() -> InlineKeyboardMarkup:
+    """14 будущих дат — мастер выбирает день для отгула.
+    Callback: `mdo_pick_<YYYY-MM-DD>`. Горизонт = BOOKING_DAYS_AVAILABLE,
+    чтобы совпадал с клиентским календарём записей."""
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    today = now_local()
+    for i in range(BOOKING_DAYS_AVAILABLE):
+        day = today + timedelta(days=i)
+        date_str = day.strftime("%Y-%m-%d")
+        row.append(InlineKeyboardButton(
+            text=date_tiny(date_str),
+            callback_data=f"mdo_pick_{date_str}",
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(text="🔙 К расписанию", callback_data="mdo_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_day_off_remove_keyboard(day_offs: list[dict]) -> InlineKeyboardMarkup:
+    """Список будущих отгулов мастера с кнопкой удаления каждого.
+    Callback: `mdo_del_<block_id>`."""
+    buttons = []
+    for d in day_offs:
+        buttons.append([InlineKeyboardButton(
+            text=f"✕ {date_tiny(d['date'])}",
+            callback_data=f"mdo_del_{d['id']}",
+        )])
+    buttons.append([InlineKeyboardButton(text="🔙 К расписанию", callback_data="mdo_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_back_to_schedule_keyboard() -> InlineKeyboardMarkup:
+    """Кнопка возврата к расписанию — для экранов warning'а (конфликт, etc)."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🔙 К расписанию", callback_data="mdo_back"),
+    ]])
+
+
 def master_weekday_detail_keyboard(
     master_id: int,
     weekday: int,
