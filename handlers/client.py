@@ -844,8 +844,13 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     )
 
     # 3. Мягкое напоминание + «до встречи ✧».
+    # reply_markup здесь возвращает нижнюю панель «записаться | мои записи»:
+    # summary_msg, на котором она висела, был удалён выше как transient,
+    # а hero/blockquote шли через edit_text и answer без reply_markup,
+    # поэтому клиент остался без reply-клавиатуры до этого момента.
     await callback.message.answer(
         booking_reminder_note(),
+        reply_markup=client_reply_keyboard(),
         parse_mode="HTML",
     )
 
