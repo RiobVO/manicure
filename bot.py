@@ -28,7 +28,7 @@ from handlers import client, admin
 from handlers import admin_appointments, admin_clients, admin_services
 from handlers import admin_stats, admin_settings, admin_blocks, admin_manage
 from handlers import reviews, admin_export, admin_masters, admin_master_schedule
-from handlers import client_reminders, client_history, admin_status
+from handlers import client_reminders, client_history, admin_status, admin_traffic
 from handlers import master
 from middlewares.license_gate import LicenseGateMiddleware
 from scheduler import setup_scheduler
@@ -122,6 +122,7 @@ async def main() -> None:
     dp.include_router(admin_masters.router)
     dp.include_router(admin_master_schedule.router)
     dp.include_router(admin_export.router)
+    dp.include_router(admin_traffic.router)
 
     # Глобальный ловец unhandled exceptions из хендлеров.
     # Никогда ничего не должен поднимать — иначе aiogram паникует в polling loop.
