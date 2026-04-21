@@ -35,7 +35,7 @@ from db import (
 )
 from keyboards.inline import cancel_reason_keyboard, CANCEL_REASONS, get_history_pagination_kb
 from utils.callbacks import parse_callback
-from utils.notifications import broadcast_to_admins, notify_master
+from utils.notifications import admin_dismiss_kb, broadcast_to_admins, notify_master
 from utils.ui import (
     DIVIDER_SOFT,
     ARROW_SOFT, ARROW_DO, ARROW_BACK, REPEAT, CLOSE,
@@ -333,7 +333,8 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
 
     appt = await get_appointment_by_id(appt_id)
 
-    # Уведомить админа с причиной
+    # Уведомить админа с причиной. С кнопкой закрытия, иначе сообщение
+    # висит в чате и отвлекает от админ-панели.
     reason_line = f"\n💬 Причина: {h(reason_label)}" if reason_label else ""
     await broadcast_to_admins(
         callback.bot,
@@ -342,6 +343,7 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
         f"📅 {_date_human(appt['date'])}  ·  {appt['time']}\n"
         f"💅 {h(appt['service_name'])}"
         f"{reason_line}",
+        reply_markup=admin_dismiss_kb(),
         log_context="client cancellation",
     )
 

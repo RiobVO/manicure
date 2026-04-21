@@ -65,17 +65,14 @@ async def _notify_paid(bot: Bot, appt_id: int) -> None:
                        state["user_id"], exc)
 
     try:
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+        from utils.notifications import admin_dismiss_kb
         price_fmt = f"{state['service_price']:,}".replace(",", " ")
-        dismiss_kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="✅ Ок", callback_data="notif_dismiss"),
-        ]])
         await broadcast_to_admins(
             bot,
             f"💰 <b>Оплата прошла</b>\n"
             f"{state['date']} · {state['time']} — {state['name']}\n"
             f"{state['service_name']} · {price_fmt} UZS",
-            reply_markup=dismiss_kb,
+            reply_markup=admin_dismiss_kb(),
             log_context="payment received",
         )
     except Exception as exc:
