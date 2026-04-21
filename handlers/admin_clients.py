@@ -193,6 +193,7 @@ async def cb_appt_detail(callback: CallbackQuery):
 
     status = STATUS_LABEL.get(appt["status"], appt["status"])
     master_line = f"\n👨\u200d🎨 {appt['master_name']}" if appt.get("master_name") else ""
+    from utils.payment_ui import payment_pill
     text = (
         f"📋 Запись #{appt['id']}\n\n"
         f"👤 {appt['name']}\n"
@@ -201,6 +202,7 @@ async def cb_appt_detail(callback: CallbackQuery):
         f"📅 {appt['date']} в {appt['time']}"
         f"{master_line}\n"
         f"📌 {status}"
+        f"{payment_pill(appt)}"
     )
     await edit_panel_with_callback(
         callback,

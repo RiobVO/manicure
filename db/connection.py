@@ -337,6 +337,30 @@ async def init_db() -> None:
         )
         await db.execute("PRAGMA user_version = 2")
 
+    # v2 → v3: платёжные колонки (Phase 1 v.4).
+    # Идемпотентность webhook — через UNIQUE(payment_invoice_id): провайдеры
+    # (Click/Payme) ретраят callback при 5xx, и повторный POST не должен
+    # второй раз пометить запись оплаченной.
+    if current_version < 3:
+        for stmt in (
+            "ALTER TABLE appointments ADD COLUMN paid_at TEXT",
+            "ALTER TABLE appointments ADD COLUMN payment_provider TEXT",
+            "ALTER TABLE appointments ADD COLUMN payment_invoice_id TEXT",
+        ):
+            try:
+                await db.execute(stmt)
+            except aiosqlite.OperationalError as exc:
+                if "duplicate column" not in str(exc).lower():
+                    logger.exception("Миграция v2→v3 упала: %s", stmt)
+        # Partial UNIQUE-индекс: NULL-значения (невыставленные инвойсы)
+        # не конфликтуют между собой, а для заполненных — идемпотентность.
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_appt_invoice_unique "
+            "ON appointments(payment_invoice_id) "
+            "WHERE payment_invoice_id IS NOT NULL"
+        )
+        await db.execute("PRAGMA user_version = 3")
+
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
     cursor_m = await db.execute("SELECT COUNT(*) FROM masters")
