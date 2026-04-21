@@ -329,7 +329,7 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
     # MVP без авто-refund — auto-refund через API провайдера отложен (v4 Phase 5+).
     if appt.get("paid_at"):
         try:
-            from utils.notifications import broadcast_to_admins
+            from utils.notifications import admin_dismiss_kb, broadcast_to_admins
             price = appt.get("service_price", 0)
             await broadcast_to_admins(
                 callback.bot,
@@ -340,6 +340,7 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
                 f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
                 f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>\n\n"
                 f"<i>сделай возврат вручную в дашборде провайдера.</i>",
+                reply_markup=admin_dismiss_kb("✅ Возврат сделан"),
                 log_context="refund needed",
             )
         except Exception:
