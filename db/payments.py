@@ -113,6 +113,51 @@ async def mark_paid(provider: str, invoice_id: str) -> int | None:
             raise
 
 
+async def mark_paid_manual(appt_id: int) -> bool:
+    """
+    Ручная пометка оплачено админом. Резервный путь на случай пропущенного
+    webhook (DNS, рестарт бота, упавший туннель и т.п.).
+
+    Идемпотентно: если paid_at уже стоит — возвращает False.
+    provider="manual" чтобы в аналитике отличать от click/payme.
+    """
+    lock = await get_write_lock()
+    async with lock:
+        db = await get_db()
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            cursor = await db.execute(
+                "SELECT id, paid_at FROM appointments WHERE id = ?", (appt_id,)
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                await db.execute("ROLLBACK")
+                return False
+            _, already_paid = row
+            if already_paid:
+                await db.execute("ROLLBACK")
+                return False
+            # provider/invoice перезаписываем только если они ещё пустые —
+            # не затираем реальный click/payme invoice, если он был (вдруг
+            # webhook всё-таки придёт позже).
+            await db.execute(
+                "UPDATE appointments "
+                "SET paid_at = datetime('now'), "
+                "    payment_provider = COALESCE(payment_provider, 'manual'), "
+                "    payment_invoice_id = COALESCE(payment_invoice_id, ?) "
+                "WHERE id = ?",
+                (f"manual_{appt_id}", appt_id),
+            )
+            await db.execute("COMMIT")
+            return True
+        except Exception:
+            try:
+                await db.execute("ROLLBACK")
+            except Exception:
+                pass
+            raise
+
+
 async def get_payment_state(appt_id: int) -> dict[str, Any] | None:
     """Прочитать платёжные поля + сумму. None если записи нет."""
     db = await get_db()

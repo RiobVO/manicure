@@ -462,13 +462,22 @@ def day_view_keyboard(scheduled: list[dict], date_str: str) -> InlineKeyboardMar
     return InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
 
 
-def appointment_actions_keyboard(appt_id: int, date_str: str, status: str = "scheduled") -> InlineKeyboardMarkup:
+def appointment_actions_keyboard(
+    appt_id: int,
+    date_str: str,
+    status: str = "scheduled",
+    *,
+    paid: bool = False,
+) -> InlineKeyboardMarkup:
     """
     Кнопки действий зависят от текущего статуса записи:
     - scheduled  → Выполнено | Не пришёл | Отменить | Перенести
     - no_show    → Перенести | Отменить  (статус уже выставлен, смены нет)
     - completed  → только Назад (финальный статус)
     - cancelled  → только Назад (финальный статус)
+
+    `paid=False` + scheduled — добавляем «💰 Пометить оплачено» как резервный
+    путь на случай пропущенного webhook (DNS, рестарт, ngrok упал и т.п.).
     """
     buttons = []
     if status == "scheduled":
@@ -480,6 +489,10 @@ def appointment_actions_keyboard(appt_id: int, date_str: str, status: str = "sch
             InlineKeyboardButton(text="❌ Отменить", callback_data=f"appt_cancel_{appt_id}"),
             InlineKeyboardButton(text="🔄 Перенести", callback_data=f"appt_reschedule_{appt_id}"),
         ])
+        if not paid:
+            buttons.append([
+                InlineKeyboardButton(text="💰 Пометить оплачено", callback_data=f"appt_mark_paid_{appt_id}"),
+            ])
     elif status == "no_show":
         # Клиент не пришёл — можно перенести или окончательно отменить
         buttons.append([

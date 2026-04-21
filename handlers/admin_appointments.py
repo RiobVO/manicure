@@ -262,7 +262,13 @@ async def cb_appt_status(callback: CallbackQuery):
             f"{payment_pill(appt)}"
         )
         # status, а не appt["status"] — appt содержит старый статус до update_appointment_status
-        await edit_panel_with_callback(callback, text, appointment_actions_keyboard(appt_id, appt["date"], status))
+        await edit_panel_with_callback(
+            callback, text,
+            appointment_actions_keyboard(
+                appt_id, appt["date"], status,
+                paid=bool(appt.get("paid_at")),
+            ),
+        )
 
 
 # ─── ОТМЕНА ЗАПИСИ ───────────────────────────────────────────────────────────
@@ -413,8 +419,72 @@ async def cb_appt_cancel_abort(callback: CallbackQuery):
             f"💅 {appt['service_name']}\n"
             f"📌 {status}"
         )
-        await edit_panel_with_callback(callback, text, appointment_actions_keyboard(appt_id, appt["date"], appt["status"]))
+        await edit_panel_with_callback(
+            callback, text,
+            appointment_actions_keyboard(
+                appt_id, appt["date"], appt["status"],
+                paid=bool(appt.get("paid_at")),
+            ),
+        )
     await callback.answer()
+
+
+# ─── РУЧНАЯ ПОМЕТКА «ОПЛАЧЕНО» ───────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("appt_mark_paid_"))
+async def cb_appt_mark_paid(callback: CallbackQuery):
+    """
+    Резервный путь, когда реальный webhook Click/Payme не дошёл (DNS,
+    упавший туннель, рестарт бота в момент платежа). Админ увидел что
+    клиент оплатил, но в боте всё ещё «⏳ Ждёт оплаты» — жмёт кнопку.
+    """
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "appt_mark_paid", 1)
+    if not parts:
+        await callback.answer()
+        return
+    appt_id = int(parts[0])
+    from db.payments import mark_paid_manual
+    ok = await mark_paid_manual(appt_id)
+    if not ok:
+        await callback.answer("Запись уже оплачена или не найдена.", show_alert=True)
+        return
+
+    try:
+        await log_admin_action(
+            admin_id=callback.from_user.id,
+            action="mark_paid_manual",
+            target_type="appointment",
+            target_id=appt_id,
+        )
+    except Exception:
+        logger.warning("не удалось записать лог ручной оплаты appt=%s", appt_id)
+
+    await callback.answer("✅ Помечено оплаченной", show_alert=False)
+
+    # Обновляем карточку — перерисовываем с новым pill'ом.
+    appt = await get_appointment_by_id(appt_id)
+    if not appt:
+        return
+    from utils.payment_ui import payment_pill
+    label = STATUS_LABEL.get(appt["status"], appt["status"])
+    text = (
+        f"📋 Запись #{appt_id}\n\n"
+        f"⏰ {appt['time']} — {appt['name']}\n"
+        f"📞 {appt['phone']}\n"
+        f"💅 {appt['service_name']}\n"
+        f"📌 {label}"
+        f"{payment_pill(appt)}"
+    )
+    await edit_panel_with_callback(
+        callback, text,
+        appointment_actions_keyboard(
+            appt_id, appt["date"], appt["status"],
+            paid=bool(appt.get("paid_at")),
+        ),
+    )
 
 
 # ─── ПЕРЕНОС ЗАПИСИ ──────────────────────────────────────────────────────────
