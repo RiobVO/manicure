@@ -111,6 +111,71 @@ async def msg_settings_slot_step(message: Message, state: FSMContext):
     await edit_panel(message.bot, message.chat.id, "⚙️ Настройки графика работы:", settings_keyboard(settings))
 
 
+# ─── КОНТАКТ ДЛЯ КЛИЕНТОВ ────────────────────────────────────────────────────
+# Показывается клиенту, например, в сообщении об отмене оплаченной записи.
+# Пусто → бот пишет нейтральное «свяжись с салоном», чтобы не дать ложных
+# обещаний (например, «пиши сюда», когда реального приёма нет).
+_CONTACT_MAX_LEN = 64
+
+
+@router.callback_query(F.data == "settings_edit_contact")
+async def cb_settings_edit_contact(callback: CallbackQuery, state: FSMContext):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    current = (await get_all_settings()).get("salon_contact", "") or "не задан"
+    await edit_panel_with_callback(
+        callback,
+        (
+            "📞 <b>Контакт для клиентов</b>\n\n"
+            f"Сейчас: <code>{current}</code>\n\n"
+            "Отправь новое значение одним сообщением — это может быть\n"
+            "• Telegram-handle: <code>@sabina_nails</code>\n"
+            "• Телефон: <code>+998 90 123 45 67</code>\n"
+            "• Короткая фраза: <code>напиши в директ @sabina</code>\n\n"
+            "Чтобы <b>очистить</b>, пришли одно слово <code>-</code> или <code>нет</code>.\n"
+            f"Макс. длина — {_CONTACT_MAX_LEN} символов."
+        ),
+        admin_cancel_keyboard(),
+    )
+    # parse_mode нужно явно через edit_panel_with_callback? Проверю — но utils.panel
+    # по дефолту отправляет HTML, см. edit_panel реализацию.
+    await state.set_state(AdminStates.settings_edit_contact)
+    await callback.answer()
+
+
+@router.message(AdminStates.settings_edit_contact)
+async def msg_settings_contact(message: Message, state: FSMContext):
+    if not is_admin_message(message):
+        await state.clear()
+        return
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    text = (message.text or "").strip()
+    # Команда очистки.
+    if text.lower() in {"-", "нет", "no", "off", "clear"}:
+        text = ""
+    elif len(text) > _CONTACT_MAX_LEN:
+        await edit_panel(
+            message.bot, message.chat.id,
+            f"⚠️ Слишком длинно (макс. {_CONTACT_MAX_LEN} символов). Пришли короче:",
+            admin_cancel_keyboard(),
+        )
+        return
+
+    await set_setting("salon_contact", text)
+    await state.clear()
+    settings = await get_all_settings()
+    await edit_panel(
+        message.bot, message.chat.id,
+        "⚙️ Настройки графика работы:",
+        settings_keyboard(settings),
+    )
+
+
 # ─── ЕЖЕНЕДЕЛЬНОЕ РАСПИСАНИЕ ─────────────────────────────────────────────────
 
 @router.callback_query(F.data == "sched_weekly")
