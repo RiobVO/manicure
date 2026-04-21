@@ -252,12 +252,14 @@ async def cb_appt_status(callback: CallbackQuery):
             logger.error("Ошибка уведомления клиента при смене статуса", exc_info=True)
 
     if appt:
+        from utils.payment_ui import payment_pill
         text = (
             f"📋 Запись #{appt_id}\n\n"
             f"⏰ {appt['time']} — {appt['name']}\n"
             f"📞 {appt['phone']}\n"
             f"💅 {appt['service_name']}\n"
             f"📌 {label}"
+            f"{payment_pill(appt)}"
         )
         # status, а не appt["status"] — appt содержит старый статус до update_appointment_status
         await edit_panel_with_callback(callback, text, appointment_actions_keyboard(appt_id, appt["date"], status))
@@ -322,6 +324,26 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
         target_id=appt_id,
         details=f"{appt['name']} — {appt['service_name']} ({appt['date']} {appt['time']})",
     )
+
+    # Refund-алерт: запись была оплачена → админам в чат «сделай возврат руками».
+    # MVP без авто-refund — auto-refund через API провайдера отложен (v4 Phase 5+).
+    if appt.get("paid_at"):
+        try:
+            from utils.notifications import broadcast_to_admins
+            price = appt.get("service_price", 0)
+            await broadcast_to_admins(
+                callback.bot,
+                f"🔴 <b>Нужен возврат</b>\n"
+                f"Запись #{appt_id} отменена после оплаты.\n"
+                f"Клиент: {h(appt['name'])}\n"
+                f"Сумма: {price:,} UZS\n".replace(",", " ") +
+                f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
+                f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>\n\n"
+                f"<i>сделай возврат вручную в дашборде провайдера.</i>",
+                log_context="refund needed",
+            )
+        except Exception:
+            logger.exception("Не смог отправить refund-алерт для appt=%s", appt_id)
 
     notified = False
     try:

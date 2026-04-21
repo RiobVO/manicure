@@ -33,6 +33,11 @@ services:
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups
+    # Webhook-порт для Click/Payme. Bind на 127.0.0.1: публичный трафик
+    # приходит через хостовой Caddy/nginx (TLS + проксирование /payment/*
+    # на 127.0.0.1:8443). Не 0.0.0.0 — не выставляем бот наружу напрямую.
+    ports:
+      - "127.0.0.1:${PAYMENT_WEBHOOK_PORT:-8443}:${PAYMENT_WEBHOOK_PORT:-8443}"
     depends_on:
       redis:
         condition: service_healthy

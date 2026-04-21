@@ -754,6 +754,13 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 
     await save_client_profile(callback.from_user.id, data["name"], data["phone"])
 
+    # FSM-state очищаем ПРЯМО СЕЙЧАС, до любых UI-ошибок и внешних вызовов.
+    # Раньше state.clear() стоял в самом конце — если любой из message.answer
+    # падал (например, TelegramBadRequest на битом payment URL), до clear()
+    # управление не доходило, и BookingStates.confirm оставался в Redis.
+    # Следующий текст клиента попадал в confirm_text_fallback → «используй кнопки выше».
+    await state.clear()
+
     # Сохранение доп. опций
     addon_ids = data.get("selected_addons", [])
     if addon_ids:
@@ -855,8 +862,38 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     )
 
     # 4. Ссылка на оплату — в самом конце, как CTA после полного подтверждения.
+    # Приоритет: PAYMENT_PROVIDER (click/payme) → legacy PAYMENT_URL → ничего.
     from keyboards.inline import payment_keyboard
-    pay_kb = payment_keyboard(appt_id, data["service_price"])
+    from utils.payments import get_provider
+
+    pay_url: str | None = None
+    provider = get_provider()
+    if provider is not None:
+        try:
+            invoice = await provider.create_invoice(
+                appt_id=appt_id,
+                amount_uzs=data["service_price"],
+                phone=data["phone"],
+            )
+            from db.payments import attach_invoice
+            await attach_invoice(appt_id, provider.name, invoice.invoice_id)
+            pay_url = invoice.pay_url
+        except Exception:
+            # Создание инвойса провалилось, но запись уже сохранена — клиент
+            # не страдает. Ошибка уйдёт в error-канал через @dp.errors.
+            logger.exception("create_invoice failed for appt=%s", appt_id)
+
+    if pay_url is None:
+        # Fallback на legacy PAYMENT_URL — для салонов без интеграции провайдера.
+        from config import PAYMENT_URL
+        if PAYMENT_URL:
+            pay_url = (
+                PAYMENT_URL
+                .replace("{amount}", str(data["service_price"]))
+                .replace("{appt_id}", str(appt_id))
+            )
+
+    pay_kb = payment_keyboard(pay_url)
     if pay_kb:
         await callback.message.answer(
             "<i>ссылка на оплату:</i>",
@@ -864,7 +901,6 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
             parse_mode="HTML",
         )
 
-    await state.clear()
     await callback.answer()
 
 
@@ -891,6 +927,22 @@ async def get_phone_wrong(message: Message):
         reply_markup=contact_keyboard(),
         parse_mode="HTML",
     )
+
+
+@router.message(BookingStates.confirm, F.text.in_({"записаться", "/start"}))
+async def confirm_escape_to_booking(message: Message, state: FSMContext):
+    """
+    Escape-hatch для клиентов, у которых FSM залип в BookingStates.confirm
+    (прошлый баг с падением confirm_yes на битом payment URL). Без этого
+    их любой текст ловил confirm_text_fallback вечно.
+    """
+    await state.clear()
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+    await _cleanup_services_msg(message.bot, message.chat.id)
+    await _send_category_picker(message, state)
 
 
 @router.message(BookingStates.confirm)
