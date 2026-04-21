@@ -346,6 +346,15 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
         except Exception:
             logger.exception("Не смог отправить refund-алерт для appt=%s", appt_id)
 
+    # Для оплаченной записи дописываем клиенту строку с контактом салона —
+    # настраивается админом в ⚙ Настройки → «Контакт для клиентов». Если не
+    # задан — нейтральный текст. Осознанно не обещаем сроки возврата, чтобы
+    # бот не врал за салон.
+    refund_block = ""
+    if appt.get("paid_at"):
+        from utils.salon_info import refund_contact_line
+        refund_block = "\n\n💰 Оплата подлежит возврату.\n" + await refund_contact_line()
+
     notified = False
     try:
         await callback.bot.send_message(
@@ -353,7 +362,8 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
             f"❌ Ваша запись отменена мастером.\n\n"
             f"📅 {appt['date']} в {appt['time']}\n"
             f"💅 {appt['service_name']}\n\n"
-            f"Пожалуйста, свяжитесь с мастером для записи на другое время.",
+            f"Пожалуйста, свяжитесь с мастером для записи на другое время."
+            f"{refund_block}",
         )
         notified = True
     except Exception:
