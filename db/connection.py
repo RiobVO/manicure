@@ -376,6 +376,40 @@ async def init_db() -> None:
                 logger.exception("Миграция v3→v4 упала на ALTER appointments")
         await db.execute("PRAGMA user_version = 4")
 
+    # v4 → v5: deep-link source tracking (Phase 2 v.4).
+    # traffic_sources — справочник «откуда пришёл клиент» (desk, mirror, door,
+    # ig_bio, story_april20, ...). client_profiles.source — фиксируется при
+    # ПЕРВОМ /start <code> клиента и больше не переписывается (авто-атрибуция
+    # последующих переходов сломала бы статистику).
+    if current_version < 5:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS traffic_sources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        try:
+            await db.execute(
+                "ALTER TABLE client_profiles ADD COLUMN source TEXT"
+            )
+        except aiosqlite.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                logger.exception("Миграция v4→v5 упала на ALTER client_profiles")
+        # Seed трёх дефолтных offline-источников, чтобы у админа на day one
+        # уже было что печатать (см. senior-upgrade-prompt-v4.md Phase 2).
+        for code, label in (
+            ("desk", "Ресепшн"),
+            ("mirror", "Зеркало"),
+            ("door", "Дверь"),
+        ):
+            await db.execute(
+                "INSERT OR IGNORE INTO traffic_sources (code, label) VALUES (?, ?)",
+                (code, label),
+            )
+        await db.execute("PRAGMA user_version = 5")
+
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
     cursor_m = await db.execute("SELECT COUNT(*) FROM masters")

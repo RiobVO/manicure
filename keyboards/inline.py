@@ -346,7 +346,7 @@ def admin_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📒 Все записи"), KeyboardButton(text="📊 Статистика")],
             [KeyboardButton(text="💅 Услуги"),     KeyboardButton(text="👨‍🎨 Мастера")],
             [KeyboardButton(text="👥 Клиенты"),    KeyboardButton(text="🚫 Блокировки")],
-            [KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="📈 Откуда клиенты"), KeyboardButton(text="⚙️ Настройки")],
         ],
         resize_keyboard=True,
     )

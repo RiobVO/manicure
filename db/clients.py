@@ -12,9 +12,17 @@ async def get_client_profile(user_id: int) -> dict[str, Any] | None:
 
 
 async def save_client_profile(user_id: int, name: str, phone: str) -> None:
+    """
+    Upsert профиля: создаёт или обновляет name + phone, НЕ трогая source.
+    INSERT OR REPLACE в этой роли опасен — он пересоздаёт строку и
+    затирает source, который мог быть записан при /start <code> ДО
+    ввода клиентом имени/телефона (см. db/traffic.py::set_client_source_if_empty).
+    """
     db = await get_db()
     await db.execute(
-        "INSERT OR REPLACE INTO client_profiles (user_id, name, phone) VALUES (?, ?, ?)",
+        "INSERT INTO client_profiles (user_id, name, phone) "
+        "VALUES (?, ?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET name = excluded.name, phone = excluded.phone",
         (user_id, name, phone),
     )
     await db.commit()

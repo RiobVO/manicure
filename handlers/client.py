@@ -199,9 +199,32 @@ async def _show_master_step(
     await callback.answer()
 
 
-@router.message(F.text == "/start")
+@router.message(F.text.regexp(r"^/start(?:\s|$)"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
+
+    # /start <payload> → deep-link attribution (Phase 2 v.4).
+    # Парсим вручную: CommandObject конфликтует с F.text.startswith, а
+    # большинство кликов по /start будет без payload.
+    parts = (message.text or "").split(maxsplit=1)
+    payload = parts[1].strip() if len(parts) == 2 else ""
+    if payload:
+        from db.traffic import (
+            get_source_by_code,
+            normalize_code,
+            set_client_source_if_empty,
+        )
+        code = normalize_code(payload)
+        if code and not is_admin(message.from_user.id):
+            src = await get_source_by_code(code)
+            if src:
+                try:
+                    await set_client_source_if_empty(
+                        message.from_user.id, src["code"]
+                    )
+                except Exception:
+                    logger.exception("не удалось атрибутировать source=%s user=%s",
+                                     src["code"], message.from_user.id)
 
     # is_admin() покрывает env ADMIN_IDS ∪ DB-админов из /admin-management,
     # иначе DB-админ на /start падает в клиентский флоу, хотя везде остальном — админ.
