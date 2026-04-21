@@ -55,7 +55,11 @@ class ClickProvider(PaymentProvider):
     async def create_invoice(self, appt_id: int, amount_uzs: int, phone: str) -> Invoice:
         """
         POST {CLICK_API_BASE}/invoice/create → {error_code, invoice_id, ...}.
-        Возвращает invoice_id + готовый pay_url для кнопки в чате.
+
+        В БД (payment_invoice_id) храним наш appt_id — именно его Click шлёт
+        в webhook как merchant_trans_id, и mark_paid ищет запись по этому ключу.
+        Click'овский click_invoice_id нужен только чтобы собрать pay_url —
+        в БД не хранится.
         """
         payload = {
             "service_id": int(CLICK_SERVICE_ID),
@@ -76,16 +80,16 @@ class ClickProvider(PaymentProvider):
                 data = await resp.json()
         if data.get("error_code", -1) != 0:
             raise RuntimeError(f"Click invoice create failed: {data}")
-        invoice_id = str(data["invoice_id"])
+        click_invoice_id = str(data["invoice_id"])
         base = CLICK_PAY_URL_BASE or "https://my.click.uz/services/pay"
         pay_url = (
             f"{base}"
             f"?service_id={CLICK_SERVICE_ID}"
             f"&merchant_id={CLICK_MERCHANT_ID}"
             f"&amount={amount_uzs}"
-            f"&transaction_param={invoice_id}"
+            f"&transaction_param={click_invoice_id}"
         )
-        return Invoice(invoice_id=invoice_id, pay_url=pay_url)
+        return Invoice(invoice_id=str(appt_id), pay_url=pay_url)
 
     async def verify_and_parse(self, headers: dict, raw_body: bytes) -> str:
         """

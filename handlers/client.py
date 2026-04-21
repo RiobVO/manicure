@@ -876,7 +876,9 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
                 phone=data["phone"],
             )
             from db.payments import attach_invoice
-            await attach_invoice(appt_id, provider.name, invoice.invoice_id)
+            await attach_invoice(
+                appt_id, provider.name, invoice.invoice_id, invoice.pay_url
+            )
             pay_url = invoice.pay_url
         except Exception:
             # Создание инвойса провалилось, но запись уже сохранена — клиент

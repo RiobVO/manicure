@@ -5,18 +5,10 @@ admin_appointments/admin_clients/client_history.
 """
 from __future__ import annotations
 
-import base64
 import logging
 from typing import Mapping
 
-from config import (
-    CLICK_MERCHANT_ID,
-    CLICK_PAY_URL_BASE,
-    CLICK_SERVICE_ID,
-    PAYME_MERCHANT_ID,
-    PAYMENT_PROVIDER,
-    PAYMENT_PUBLIC_URL,
-)
+from config import PAYMENT_PROVIDER
 
 logger = logging.getLogger(__name__)
 
@@ -48,49 +40,17 @@ def payment_pill(appt: Mapping) -> str:
 
 def reconstruct_pay_url(appt: Mapping) -> str | None:
     """
-    Восстановить pay_url для уже созданного инвойса. Нужно когда клиент
-    случайно ушёл с сообщения-оплаты и возвращается через «мои записи» —
-    кнопка в карточке записи должна снова дать ему ссылку.
+    Отдать сохранённый pay_url для повторного показа кнопки «Оплатить».
+    Нужно когда клиент случайно ушёл с confirm-сообщения и возвращается
+    через «мои записи» — кнопка в карточке должна снова дать ту же ссылку.
 
     Возвращает None если:
-      • провайдер не настроен или none,
-      • у записи нет payment_invoice_id (инвойс не выставлялся),
-      • запись уже оплачена (paid_at != NULL) — платить нечего.
+      • запись уже оплачена (paid_at != NULL) — платить нечего;
+      • pay_url не сохранён (инвойс не выставлялся или запись до v4).
 
-    Не зовёт провайдер-API: url детерминирован по сохранённым полям.
-    Двойной вызов create_invoice у Click создал бы второй инвойс — мы
-    этого не хотим.
+    URL детерминирован: он был записан в БД при attach_invoice(). Не зовём
+    create_invoice повторно — Click создал бы второй инвойс.
     """
     if appt.get("paid_at"):
         return None
-    invoice_id = appt.get("payment_invoice_id")
-    if not invoice_id:
-        return None
-    provider = appt.get("payment_provider") or PAYMENT_PROVIDER
-    amount = appt.get("service_price", 0)
-
-    if provider == "click":
-        base = CLICK_PAY_URL_BASE or "https://my.click.uz/services/pay"
-        return (
-            f"{base}"
-            f"?service_id={CLICK_SERVICE_ID}"
-            f"&merchant_id={CLICK_MERCHANT_ID}"
-            f"&amount={amount}"
-            f"&transaction_param={invoice_id}"
-        )
-
-    if provider == "payme":
-        # invoice_id в Payme = appt_id (см. PaymeProvider.create_invoice).
-        appt_id = appt.get("id") or invoice_id
-        amount_tiyin = int(amount) * 100
-        return_url = f"{PAYMENT_PUBLIC_URL}/payment/return?appt={appt_id}"
-        raw = (
-            f"m={PAYME_MERCHANT_ID};"
-            f"ac.appointment_id={appt_id};"
-            f"a={amount_tiyin};"
-            f"c={return_url}"
-        )
-        payload_b64 = base64.b64encode(raw.encode()).decode()
-        return f"https://checkout.paycom.uz/{payload_b64}"
-
-    return None
+    return appt.get("payment_pay_url") or None
