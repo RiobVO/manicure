@@ -410,6 +410,20 @@ async def init_db() -> None:
             )
         await db.execute("PRAGMA user_version = 5")
 
+    # v5 → v6: язык клиента (Phase 3 v.4 — Uzbek localization).
+    # client_profiles.lang хранит 'ru' | 'uz'. Дефолт 'ru' — совместимость
+    # с существующими клиентами (их не спрашиваем заново, они уже привыкли).
+    # Новые клиенты проходят переключатель языка на первом /start.
+    if current_version < 6:
+        try:
+            await db.execute(
+                "ALTER TABLE client_profiles ADD COLUMN lang TEXT NOT NULL DEFAULT 'ru'"
+            )
+        except aiosqlite.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                logger.exception("Миграция v5→v6 упала на ALTER client_profiles")
+        await db.execute("PRAGMA user_version = 6")
+
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
     cursor_m = await db.execute("SELECT COUNT(*) FROM masters")

@@ -11,6 +11,36 @@ async def get_client_profile(user_id: int) -> dict[str, Any] | None:
     )
 
 
+async def get_user_lang(user_id: int) -> str:
+    """
+    Язык клиента из профиля. 'ru' по умолчанию (и для анонимов без профиля).
+    Нормализация — в utils.i18n.Lang.normalize().
+    """
+    row = await _dict_row(
+        "SELECT lang FROM client_profiles WHERE user_id = ?", (user_id,)
+    )
+    if row is None:
+        return "ru"
+    return (row.get("lang") or "ru")
+
+
+async def set_user_lang(user_id: int, lang: str) -> None:
+    """
+    Сохранить язык клиента. Если профиля нет — создаём заглушку
+    (аналогично set_client_source_if_empty в db/traffic.py): user_id +
+    lang, name/phone пустые; save_client_profile позже заполнит name/phone
+    через upsert, не затирая lang.
+    """
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO client_profiles (user_id, name, phone, lang) "
+        "VALUES (?, '', '', ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET lang = excluded.lang",
+        (user_id, lang),
+    )
+    await db.commit()
+
+
 async def save_client_profile(user_id: int, name: str, phone: str) -> None:
     """
     Upsert профиля: создаёт или обновляет name + phone, НЕ трогая source.

@@ -328,14 +328,34 @@ def review_comment_keyboard(appointment_id: int) -> InlineKeyboardMarkup:
     ]])
 
 
-def client_reply_keyboard() -> ReplyKeyboardMarkup:
-    """Постоянная нижняя клавиатура клиента."""
+def client_reply_keyboard(lang: str = "ru") -> ReplyKeyboardMarkup:
+    """
+    Постоянная нижняя клавиатура клиента.
+
+    Надписи зависят от языка, но хендлеры ловят текст через F.text.in_({...}),
+    принимая оба варианта — клиент остаётся в живом флоу при смене языка
+    (его кнопки из прошлой сессии старого языка всё ещё работают).
+    """
+    if lang == "uz":
+        book_btn = "yozilish"
+        my_btn = "mening yozilishlarim"
+    else:
+        book_btn = "записаться"
+        my_btn = "мои записи"
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="записаться"), KeyboardButton(text="мои записи")],
+            [KeyboardButton(text=book_btn), KeyboardButton(text=my_btn)],
+            [KeyboardButton(text="🌐 Язык / Til")],
         ],
         resize_keyboard=True,
     )
+
+
+# Все строки reply-кнопок клиента, по которым фильтруют хендлеры
+# (F.text.in_(CLIENT_BTN_BOOK) и т.п.). Расширяется при добавлении языков.
+CLIENT_BTN_BOOK = frozenset({"записаться", "yozilish"})
+CLIENT_BTN_MY_APPTS = frozenset({"мои записи", "mening yozilishlarim"})
+CLIENT_BTN_LANG = "🌐 Язык / Til"
 
 
 def admin_reply_keyboard() -> ReplyKeyboardMarkup:
