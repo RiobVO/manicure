@@ -45,7 +45,7 @@ from keyboards.inline import (
 )
 from config import ADMIN_IDS
 from utils.admin import is_admin, is_master
-from utils.panel import set_reply_kb
+from utils.panel import delete_in_bg, set_reply_kb
 from services.booking import (
     calculate_total_price,
     addon_names_for,
@@ -1125,10 +1125,7 @@ async def btn_book(message: Message, state: FSMContext):
     await state.clear()
 
     # Убрать само сообщение «записаться» и предыдущий список услуг, если он висит.
-    try:
-        await message.delete()
-    except TelegramBadRequest:
-        pass
+    delete_in_bg(message)
     await _cleanup_services_msg(message.bot, message.chat.id)
 
     await _send_category_picker(message, state)
@@ -1194,10 +1191,7 @@ async def cb_lang_picker(callback: CallbackQuery, state: FSMContext):
 async def cmd_change_lang(message: Message, state: FSMContext):
     """Клиент сменяет язык через команду /language (или /til, /lang)."""
     await state.clear()
-    try:
-        await message.delete()
-    except TelegramBadRequest:
-        pass
+    delete_in_bg(message)
     from utils.i18n import t
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -1263,10 +1257,7 @@ _EX_MASTER_BUTTON_TEXTS = frozenset({"📋 Сегодня", "📅 Мои зап�
 @router.message(F.text.in_(_EX_MASTER_BUTTON_TEXTS))
 async def ex_master_button(message: Message, state: FSMContext):
     await state.clear()
-    try:
-        await message.delete()
-    except TelegramBadRequest:
-        pass
+    delete_in_bg(message)
     # Невидимый символ \u2063 — единственный способ послать update клавиатуры
     # без видимого текста (Telegram не шлёт пустые сообщения).
     await message.answer("\u2063", reply_markup=client_reply_keyboard())

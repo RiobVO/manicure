@@ -21,7 +21,7 @@ from keyboards.inline import (
     admin_masters_keyboard,
 )
 from utils.admin import is_admin, is_admin_callback, deny_access, IsAdminFilter
-from utils.panel import get_panel_msg_id, set_panel_msg_id, clear_panel_msg_id, get_panel_lock
+from utils.panel import get_panel_msg_id, set_panel_msg_id, clear_panel_msg_id, get_panel_lock, delete_in_bg
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -45,12 +45,10 @@ async def _nav(message: Message, text: str, markup=None, parse_mode=None) -> Non
     chat_id = message.chat.id
     lock = get_panel_lock(chat_id)
 
-    async with lock:
-        try:
-            await message.delete()
-        except Exception:
-            pass
+    # delete тап-сообщения не блокирует навигацию — экономит ~240мс TG round-trip.
+    delete_in_bg(message)
 
+    async with lock:
         nav_id = get_panel_msg_id(chat_id)
 
         if nav_id:

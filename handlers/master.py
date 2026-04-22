@@ -53,6 +53,7 @@ from utils.callbacks import parse_callback
 from utils.notifications import broadcast_to_admins, notify_client
 from utils.panel import (
     clear_panel_msg_id,
+    delete_in_bg,
     get_panel_lock,
     get_panel_msg_id,
     set_panel_msg_id,
@@ -102,12 +103,11 @@ async def _nav(
     """
     chat_id = message.chat.id
     lock = get_panel_lock(chat_id)
-    async with lock:
-        try:
-            await message.delete()
-        except Exception:
-            pass  # уже удалено или нет прав — не блокируем навигацию
 
+    # delete тап-сообщения в фон — не блокирует навигацию.
+    delete_in_bg(message)
+
+    async with lock:
         nav_id = get_panel_msg_id(chat_id)
         if nav_id:
             try:
