@@ -989,11 +989,17 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
         pay_kb = payment_keyboard(pay_url, label=t("pay_btn", lang))
         if pay_kb:
             try:
-                await callback.message.answer(
+                pay_msg = await callback.message.answer(
                     t("pay_link_text", lang),
                     reply_markup=pay_kb,
                     parse_mode="HTML",
                 )
+                # Сохраняем msg_id чтобы удалить после оплаты — Telegram
+                # не даёт «выключить» url-кнопку постфактум, а висящее
+                # сообщение провоцирует повторные тапы и двойные списания
+                # (особенно в Click).
+                from db.payments import save_pay_message_id
+                await save_pay_message_id(appt_id, pay_msg.message_id)
             except Exception:
                 logger.exception("не смог доставить ссылку на оплату appt=%s", appt_id)
         else:
