@@ -90,12 +90,9 @@ async def main() -> None:
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=await _build_storage())
 
-    # Лицензия проверяется ДО любого хендлера. Сейчас — только логируем режим,
-    # enforcement (middleware-гейт) ВЫКЛЮЧЕН осознанно: первые клиенты не-технические,
-    # пиратить некому, а ложное срабатывание заблокирует салон в рабочий день.
-    # Enforcement включается одной строкой ниже при ~20 клиентах / первом случае
-    # попытки пиратства. Весь остальной код лицензий (verify, heartbeat, /status)
-    # работает прямо сейчас — мы видим, но не режем.
+    # Лицензия проверяется ДО любого хендлера. Enforcement (middleware-гейт)
+    # включён: в RESTRICTED режиме бот отвечает только на /start с текстом про
+    # истечение лицензии и контактом LICENSE_CONTACT. DEV/OK/GRACE — всё работает.
     license_state = evaluate_license(LICENSE_KEY, TENANT_SLUG)
     logger.info(
         "License mode=%s %s",
@@ -103,10 +100,9 @@ async def main() -> None:
         f"({license_state.reason})" if license_state.reason else "",
     )
 
-    # TODO: при ~20 клиентах раскомментировать 3 строки ниже — enforcement оживёт.
-    # gate = LicenseGateMiddleware(license_state, LICENSE_CONTACT)
-    # dp.message.middleware(gate)
-    # dp.callback_query.middleware(gate)
+    gate = LicenseGateMiddleware(license_state, LICENSE_CONTACT)
+    dp.message.middleware(gate)
+    dp.callback_query.middleware(gate)
 
     # Админские роутеры регистрируются ПЕРЕД клиентским,
     # чтобы catch-all fallback_message не перехватил их сообщения
