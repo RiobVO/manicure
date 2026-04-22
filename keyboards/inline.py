@@ -343,11 +343,17 @@ def review_rating_keyboard(appointment_id: int) -> InlineKeyboardMarkup:
     ]])
 
 
-def review_comment_keyboard(appointment_id: int) -> InlineKeyboardMarkup:
+def review_comment_keyboard(appointment_id: int, lang: str = "ru") -> InlineKeyboardMarkup:
     """Клавиатура после выбора рейтинга: написать комментарий или пропустить."""
+    if lang == "uz":
+        write = "✍️ Yozish"
+        skip = "O'tkazib →"
+    else:
+        write = "✍️ Написать"
+        skip = "Пропустить →"
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✍️ Написать", callback_data=f"rev_comment_{appointment_id}"),
-        InlineKeyboardButton(text="Пропустить →", callback_data=f"rev_skip_{appointment_id}"),
+        InlineKeyboardButton(text=write, callback_data=f"rev_comment_{appointment_id}"),
+        InlineKeyboardButton(text=skip, callback_data=f"rev_skip_{appointment_id}"),
     ]])
 
 

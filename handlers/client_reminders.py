@@ -14,10 +14,12 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from db import (
     get_appointment_by_id,
     cancel_appointment_by_client,
+    get_user_lang,
 )
 from utils.callbacks import parse_callback
 from utils.notifications import notify_master, broadcast_to_admins
 from utils.ui import FLOWER, ARROW_DO, date_soft, h
+from utils.i18n import t
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -38,19 +40,23 @@ async def cb_client_confirm(callback: CallbackQuery):
         await callback.answer("Запись не найдена.", show_alert=True)
         return
 
+    lang = await get_user_lang(callback.from_user.id)
+    heading = "kutamiz." if lang == "uz" else "ждём тебя."
+    when_label = t("history_when", lang)
     try:
         await callback.message.edit_text(
             f"{FLOWER}\n\n"
-            f"<b><i>ждём тебя.</i></b>\n\n"
+            f"<b><i>{heading}</i></b>\n\n"
             f"<blockquote>"
             f"<b>{h(appt['service_name'].lower())}</b>\n"
-            f"<i>когда</i>  <code>{date_soft(appt['date'])} · {appt['time']}</code>"
+            f"<i>{when_label}</i>  <code>{date_soft(appt['date'], lang)} · {appt['time']}</code>"
             f"</blockquote>",
             parse_mode="HTML",
         )
     except TelegramBadRequest:
         pass
-    await callback.answer("Запись подтверждена!")
+    confirmed = "Yozilish tasdiqlandi!" if lang == "uz" else "Запись подтверждена!"
+    await callback.answer(confirmed)
 
 
 @router.callback_query(F.data.startswith("client_cancel_"))
@@ -94,15 +100,22 @@ async def cb_client_cancel_reminder(callback: CallbackQuery):
         except Exception:
             logger.error("Ошибка уведомления мастера об отмене (напоминание)", exc_info=True)
 
+    lang = await get_user_lang(callback.from_user.id)
+    if lang == "uz":
+        txt = "<i>yozilish bekor qilindi.</i>\n\n<i>fikringiz o'zgarsa — biz shu yerdamiz.</i>"
+        btn = f"{ARROW_DO} qayta yozilish"
+    else:
+        txt = "<i>запись ушла.</i>\n\n<i>если передумаешь — мы рядом.</i>"
+        btn = f"{ARROW_DO} записаться снова"
     try:
         await callback.message.edit_text(
-            f"<i>запись ушла.</i>\n\n"
-            f"<i>если передумаешь — мы рядом.</i>",
+            txt,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text=f"{ARROW_DO} записаться снова", callback_data="client_restart"),
+                InlineKeyboardButton(text=btn, callback_data="client_restart"),
             ]]),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
         pass
-    await callback.answer("Запись отменена")
+    cancelled = "Yozilish bekor qilindi" if lang == "uz" else "Запись отменена"
+    await callback.answer(cancelled)

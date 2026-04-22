@@ -356,21 +356,32 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
     # настраивается админом в ⚙ Настройки → «Контакт для клиентов». Если не
     # задан — нейтральный текст. Осознанно не обещаем сроки возврата, чтобы
     # бот не врал за салон.
+    from db import get_user_lang
+    from utils.i18n import t
+    client_lang = await get_user_lang(appt["user_id"])
     refund_block = ""
     if appt.get("paid_at"):
         from utils.salon_info import refund_contact_line
-        refund_block = "\n\n💰 Оплата подлежит возврату.\n" + await refund_contact_line()
+        refund_block = "\n\n" + t("refund_needed_intro", client_lang) + "\n" + await refund_contact_line(client_lang)
 
-    notified = False
-    try:
-        await callback.bot.send_message(
-            appt["user_id"],
+    if client_lang == "uz":
+        cancel_msg = (
+            f"❌ Yozilishingiz usta tomonidan bekor qilindi.\n\n"
+            f"📅 {appt['date']} · {appt['time']}\n"
+            f"💅 {appt['service_name']}\n\n"
+            f"Boshqa vaqtga yozilish uchun usta bilan bog'laning."
+        )
+    else:
+        cancel_msg = (
             f"❌ Ваша запись отменена мастером.\n\n"
             f"📅 {appt['date']} в {appt['time']}\n"
             f"💅 {appt['service_name']}\n\n"
             f"Пожалуйста, свяжитесь с мастером для записи на другое время."
-            f"{refund_block}",
         )
+
+    notified = False
+    try:
+        await callback.bot.send_message(appt["user_id"], cancel_msg + refund_block)
         notified = True
     except Exception:
         logger.warning("Could not notify user_id=%s about cancellation", appt["user_id"])

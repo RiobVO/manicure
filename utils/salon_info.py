@@ -27,13 +27,13 @@ async def get_salon_name() -> str | None:
     return v or None
 
 
-async def refund_contact_line() -> str:
+async def refund_contact_line(lang: str = "ru") -> str:
     """
     Строка-подсказка клиенту, куда обращаться по вопросу возврата.
-    Если контакт задан — показываем его. Если нет — нейтральный текст,
-    чтобы не давать ложных обещаний.
+    Если контакт задан — показываем его. Если нет — нейтральный текст.
     """
+    from utils.i18n import t
     contact = await get_salon_contact()
     if contact:
-        return f"📞 по вопросу возврата оплаты — {contact}"
-    return "📞 свяжись с салоном по вопросу возврата оплаты"
+        return t("refund_contact_known", lang, contact=contact)
+    return t("refund_contact_unknown", lang)
