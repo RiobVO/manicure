@@ -235,6 +235,29 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "← Yo'q",
     },
     "history_page_of": {"ru": "стр. {page}/{total}", "uz": "sahifa {page}/{total}"},
+    # B-стиль «Мои записи»: три секции — ближайшая карточка / ещё предстоящие / история.
+    "history_nearest_title": {
+        "ru": "БЛИЖАЙШАЯ",
+        "uz": "YAQIN YOZILISH",
+    },
+    "history_upcoming_title": {
+        "ru": "ЕЩЁ ПРЕДСТОЯЩИЕ",
+        "uz": "YANA KUTILAYOTGAN",
+    },
+    "history_past_title": {
+        "ru": "ИСТОРИЯ",
+        "uz": "TARIX",
+    },
+    "history_nearest_service": {"ru": "Услуга:    ", "uz": "Xizmat:    "},
+    "history_nearest_master": {"ru": "Мастер:    ", "uz": "Usta:      "},
+    "history_nearest_when": {"ru": "Когда:     ", "uz": "Vaqt:      "},
+    "history_nearest_price": {"ru": "К оплате:  ", "uz": "To'lov:    "},
+    "pay_status_wait": {"ru": "⏳ ждёт оплаты", "uz": "⏳ to'lov kutilmoqda"},
+    "pay_status_paid": {"ru": "💰 оплачено", "uz": "💰 to'langan"},
+    "rel_today": {"ru": "сегодня", "uz": "bugun"},
+    "rel_tomorrow": {"ru": "завтра", "uz": "ertaga"},
+    "btn_open_nearest": {"ru": "📋 Открыть", "uz": "📋 Ochish"},
+    "btn_repeat_last": {"ru": "🔄 Повторить", "uz": "🔄 Takrorlash"},
 
     # ─── 5. Отзывы ─────────────────────────────────────────────────────────
     "review_prompt": {

@@ -399,6 +399,34 @@ async def count_user_appointments(user_id: int) -> int:
     return (await cursor.fetchone())[0]
 
 
+async def get_user_appointments_full(user_id: int, limit: int = 30) -> list[dict[str, Any]]:
+    """
+    Получает последние N записей клиента со всем, что нужно для B-рендера
+    «Мои записи»: платёжные поля, длительность, имя мастера через LEFT JOIN.
+
+    Отдельная функция от get_user_appointments_page, потому что тот SELECT
+    не тянет paid_at/master_name/payment_* — добавлять туда эти поля сломало
+    бы форму её результата (исторически короткая). Здесь один запрос вместо
+    отдельного get_master на каждую запись.
+
+    ORDER BY date DESC, time DESC — свежие первыми. Вызывающий сам разделит
+    на upcoming (status='scheduled' AND date>=today) и past.
+    """
+    return await _dict_rows(
+        """SELECT a.id, a.service_id, a.service_name, a.service_price,
+                  a.service_duration, a.date, a.time, a.status,
+                  a.client_cancelled, a.paid_at, a.payment_provider,
+                  a.payment_invoice_id, a.payment_pay_url,
+                  a.master_id, m.name AS master_name
+           FROM appointments a
+           LEFT JOIN masters m ON m.id = a.master_id
+           WHERE a.user_id = ?
+           ORDER BY a.date DESC, a.time DESC
+           LIMIT ?""",
+        (user_id, limit),
+    )
+
+
 async def save_appointment_addons(appointment_id: int, addon_ids: list[int]) -> None:
     """Сохраняет выбранные аддоны с текущими ценами из service_addons."""
     if not addon_ids:
