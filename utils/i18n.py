@@ -196,43 +196,43 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     # ─── 4. История записей / мои записи ───────────────────────────────────
     "history_empty": {
-        "ru": "<i>пока ничего.</i>\n\n<i>первая запись — пара касаний.</i>",
-        "uz": "<i>hozircha hech narsa yo'q.</i>\n\n<i>birinchi yozilish — bir necha bosish.</i>",
+        "ru": "📋 <b>У вас пока нет записей</b>\n\nПервая запись — пара касаний.",
+        "uz": "📋 <b>Hozircha yozuvlar yo'q</b>\n\nBirinchi yozilish — bir necha bosish.",
     },
     "history_title": {
-        "ru": "<b><i>твои записи</i></b>",
-        "uz": "<b><i>sizning yozilishlaringiz</i></b>",
+        "ru": "📋 <b>МОИ ЗАПИСИ</b>",
+        "uz": "📋 <b>MENING YOZUVLARIM</b>",
     },
     "history_visit": {
-        "ru": "<b><i>твой визит</i></b>",
-        "uz": "<b><i>sizning tashrifingiz</i></b>",
+        "ru": "💅 <b>ВАШ ВИЗИТ</b>",
+        "uz": "💅 <b>SIZNING TASHRIFINGIZ</b>",
     },
-    "history_when": {"ru": "когда", "uz": "qachon"},
-    "history_price": {"ru": "стоимость", "uz": "narxi"},
-    "history_master": {"ru": "мастер", "uz": "usta"},
+    "history_when": {"ru": "Когда:    ", "uz": "Sana:     "},
+    "history_price": {"ru": "К оплате: ", "uz": "To'lov:   "},
+    "history_master": {"ru": "Мастер:   ", "uz": "Usta:     "},
     "history_cancel_btn": {
-        "ru": "✕ отменить запись",
-        "uz": "✕ yozilishni bekor qilish",
+        "ru": "❌ Отменить запись",
+        "uz": "❌ Yozilishni bekor qilish",
     },
     "history_back_btn": {
-        "ru": "← мои записи",
-        "uz": "← mening yozilishlarim",
+        "ru": "← Мои записи",
+        "uz": "← Mening yozuvlarim",
     },
     "history_cancelled": {
         "ru": "Запись отменена",
         "uz": "Yozilish bekor qilindi",
     },
     "history_cancel_confirm_q": {
-        "ru": "<i>точно отменить запись?</i>",
-        "uz": "<i>yozilishni aniq bekor qilasizmi?</i>",
+        "ru": "<b>Точно отменить запись?</b>",
+        "uz": "<b>Yozilishni aniq bekor qilasizmi?</b>",
     },
     "history_cancel_yes": {
-        "ru": "✕ да, отменить",
-        "uz": "✕ ha, bekor qilish",
+        "ru": "❌ Да, отменить",
+        "uz": "❌ Ha, bekor qilish",
     },
     "history_cancel_no": {
-        "ru": "← нет",
-        "uz": "← yo'q",
+        "ru": "← Нет",
+        "uz": "← Yo'q",
     },
     "history_page_of": {"ru": "стр. {page}/{total}", "uz": "sahifa {page}/{total}"},
 
