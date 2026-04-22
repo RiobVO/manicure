@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
@@ -6,6 +7,26 @@ from aiogram.exceptions import TelegramBadRequest
 from datetime import datetime, timedelta
 
 from utils.timezone import now_local
+
+
+# Глобальный set фоновых задач — не даём GC убить их до завершения.
+# Уведомления клиенту/мастеру/broadcast уходят fire-and-forget чтобы
+# админ не ждал 3 секунды синхронного цикла из 5 Telegram API-вызовов.
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _fire(coro, context: str) -> None:
+    """Запустить фоновую задачу, залогировать ошибку при падении."""
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
+    def _log(t: asyncio.Task) -> None:
+        exc = t.exception()
+        if exc is not None:
+            logger.warning("bg task '%s' failed: %s", context, exc)
+
+    task.add_done_callback(_log)
 
 from states import AdminStates
 from config import ADMIN_IDS
@@ -196,22 +217,28 @@ async def cb_appt_status(callback: CallbackQuery):
     appt = await get_appointment_by_id(appt_id)
     await update_appointment_status(appt_id, status)
 
+    # Лог действия — в фон.
     if appt:
-        await log_admin_action(
-            admin_id=callback.from_user.id,
-            action=f"status_{status}",
-            target_type="appointment",
-            target_id=appt_id,
-            details=f"{appt['name']} — {appt['service_name']} ({appt['date']} {appt['time']})",
+        _fire(
+            log_admin_action(
+                admin_id=callback.from_user.id,
+                action=f"status_{status}",
+                target_type="appointment",
+                target_id=appt_id,
+                details=f"{appt['name']} — {appt['service_name']} ({appt['date']} {appt['time']})",
+            ),
+            context=f"log status_{status}",
         )
 
     label = STATUS_LABEL.get(status, status)
     await callback.answer(f"Статус обновлён: {label}", show_alert=False)
 
-    # Запрос отзыва клиенту при завершении визита
+    # Запрос отзыва клиенту при завершении визита — в фон.
     if status == "completed" and appt:
-        existing_review = await get_review_by_appointment(appt_id)
-        if not existing_review:
+        async def _send_review_request() -> None:
+            existing_review = await get_review_by_appointment(appt_id)
+            if existing_review:
+                return
             from db import get_user_lang
             from utils.i18n import t
             client_lang = await get_user_lang(appt["user_id"])
@@ -225,10 +252,14 @@ async def cb_appt_status(callback: CallbackQuery):
             except Exception:
                 logger.warning("Не удалось отправить запрос отзыва user_id=%s", appt["user_id"])
 
-    # Уведомление мастеру об изменении статуса
+        _fire(_send_review_request(), context="send review request")
+
+    # Уведомление мастеру об изменении статуса — в фон.
     if appt and appt.get("master_id"):
-        _master = await get_master(appt["master_id"])
-        if _master and _master.get("user_id") and _master["user_id"] not in ADMIN_IDS:
+        async def _notify_master_status() -> None:
+            _master = await get_master(appt["master_id"])
+            if not (_master and _master.get("user_id") and _master["user_id"] not in ADMIN_IDS):
+                return
             _status_text = {"completed": "✅ Выполнено", "no_show": "🚫 Не пришёл", "cancelled": "❌ Отменено"}
             try:
                 await callback.bot.send_message(
@@ -243,16 +274,19 @@ async def cb_appt_status(callback: CallbackQuery):
             except Exception:
                 logger.warning("Не удалось уведомить мастера user_id=%s", _master["user_id"])
 
-    # Уведомление клиенту об изменении статуса (кроме completed — там запрос отзыва)
+        _fire(_notify_master_status(), context="notify master status")
+
+    # Уведомление клиенту об изменении статуса — в фон.
     if appt and status != "completed":
-        try:
-            await notify_client(
+        _fire(
+            notify_client(
                 callback.bot, appt["user_id"], "status_changed",
                 {"date": appt["date"], "time": appt["time"], "status": label},
-            )
-        except Exception:
-            logger.error("Ошибка уведомления клиента при смене статуса", exc_info=True)
+            ),
+            context="notify client status",
+        )
 
+    # UI админа — единственное await, который админ ждёт синхронно.
     if appt:
         from utils.payment_ui import payment_pill
         text = (
@@ -323,75 +357,90 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
         await callback.answer("Запись не найдена.", show_alert=True)
         return
 
+    # Критичный путь: обновить БД + UI админа. Всё что касается
+    # уведомлений третьим лицам (клиент, мастер, другие админы) уходит
+    # в фон через _fire — админу нет смысла ждать 3 секунды пока все
+    # send_message последовательно сходят в Telegram API. В случае
+    # ошибки уведомления — warning в лог, UX админа не страдает.
     await update_appointment_status(appt_id, "cancelled")
 
-    await log_admin_action(
-        admin_id=callback.from_user.id,
-        action="cancel",
-        target_type="appointment",
-        target_id=appt_id,
-        details=f"{appt['name']} — {appt['service_name']} ({appt['date']} {appt['time']})",
+    # Лог действия — в фон (аудит не блокирует UX).
+    _fire(
+        log_admin_action(
+            admin_id=callback.from_user.id,
+            action="cancel",
+            target_type="appointment",
+            target_id=appt_id,
+            details=f"{appt['name']} — {appt['service_name']} ({appt['date']} {appt['time']})",
+        ),
+        context="log cancel",
     )
 
-    # Refund-алерт: запись была оплачена → админам в чат «сделай возврат руками».
-    # MVP без авто-refund — auto-refund через API провайдера отложен (v4 Phase 5+).
+    # Refund-алерт админам — в фон.
     if appt.get("paid_at"):
-        try:
-            from utils.notifications import admin_dismiss_kb, broadcast_to_admins
-            price = appt.get("service_price", 0)
-            await broadcast_to_admins(
-                callback.bot,
-                f"🔴 <b>Нужен возврат</b>\n"
-                f"Запись #{appt_id} отменена после оплаты.\n"
-                f"Клиент: {h(appt['name'])}\n"
-                f"Сумма: {price:,} UZS\n".replace(",", " ") +
-                f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
-                f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>\n\n"
-                f"<i>сделай возврат вручную в дашборде провайдера.</i>",
+        from utils.notifications import admin_dismiss_kb, broadcast_to_admins
+        price = appt.get("service_price", 0)
+        refund_text = (
+            f"🔴 <b>Нужен возврат</b>\n"
+            f"Запись #{appt_id} отменена после оплаты.\n"
+            f"Клиент: {h(appt['name'])}\n"
+            f"Сумма: {price:,} UZS\n".replace(",", " ") +
+            f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
+            f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>\n\n"
+            f"<i>сделай возврат вручную в дашборде провайдера.</i>"
+        )
+        _fire(
+            broadcast_to_admins(
+                callback.bot, refund_text,
                 reply_markup=admin_dismiss_kb("✅ Возврат сделан"),
                 log_context="refund needed",
+            ),
+            context="refund alert",
+        )
+
+    # Уведомление клиенту — в фон (собираем сообщение здесь, чтобы
+    # не тянуть get_user_lang / refund_contact_line в синхронный путь).
+    async def _notify_client_cancelled() -> None:
+        from db import get_user_lang
+        from utils.i18n import t
+        client_lang = await get_user_lang(appt["user_id"])
+        refund_block = ""
+        if appt.get("paid_at"):
+            from utils.salon_info import refund_contact_line
+            refund_block = (
+                "\n\n" + t("refund_needed_intro", client_lang)
+                + "\n" + await refund_contact_line(client_lang)
             )
+        if client_lang == "uz":
+            cancel_msg = (
+                f"❌ Yozilishingiz usta tomonidan bekor qilindi.\n\n"
+                f"📅 {appt['date']} · {appt['time']}\n"
+                f"💅 {appt['service_name']}\n\n"
+                f"Boshqa vaqtga yozilish uchun usta bilan bog'laning."
+            )
+        else:
+            cancel_msg = (
+                f"❌ Ваша запись отменена мастером.\n\n"
+                f"📅 {appt['date']} в {appt['time']}\n"
+                f"💅 {appt['service_name']}\n\n"
+                f"Пожалуйста, свяжитесь с мастером для записи на другое время."
+            )
+        try:
+            await callback.bot.send_message(appt["user_id"], cancel_msg + refund_block)
         except Exception:
-            logger.exception("Не смог отправить refund-алерт для appt=%s", appt_id)
+            logger.warning(
+                "Could not notify user_id=%s about cancellation",
+                appt["user_id"],
+            )
 
-    # Для оплаченной записи дописываем клиенту строку с контактом салона —
-    # настраивается админом в ⚙ Настройки → «Контакт для клиентов». Если не
-    # задан — нейтральный текст. Осознанно не обещаем сроки возврата, чтобы
-    # бот не врал за салон.
-    from db import get_user_lang
-    from utils.i18n import t
-    client_lang = await get_user_lang(appt["user_id"])
-    refund_block = ""
-    if appt.get("paid_at"):
-        from utils.salon_info import refund_contact_line
-        refund_block = "\n\n" + t("refund_needed_intro", client_lang) + "\n" + await refund_contact_line(client_lang)
+    _fire(_notify_client_cancelled(), context="notify client cancelled")
 
-    if client_lang == "uz":
-        cancel_msg = (
-            f"❌ Yozilishingiz usta tomonidan bekor qilindi.\n\n"
-            f"📅 {appt['date']} · {appt['time']}\n"
-            f"💅 {appt['service_name']}\n\n"
-            f"Boshqa vaqtga yozilish uchun usta bilan bog'laning."
-        )
-    else:
-        cancel_msg = (
-            f"❌ Ваша запись отменена мастером.\n\n"
-            f"📅 {appt['date']} в {appt['time']}\n"
-            f"💅 {appt['service_name']}\n\n"
-            f"Пожалуйста, свяжитесь с мастером для записи на другое время."
-        )
-
-    notified = False
-    try:
-        await callback.bot.send_message(appt["user_id"], cancel_msg + refund_block)
-        notified = True
-    except Exception:
-        logger.warning("Could not notify user_id=%s about cancellation", appt["user_id"])
-
-    # Уведомление мастеру об отмене
+    # Уведомление мастеру об отмене — в фон.
     if appt.get("master_id"):
-        _master = await get_master(appt["master_id"])
-        if _master and _master.get("user_id") and _master["user_id"] not in ADMIN_IDS:
+        async def _notify_master_cancelled() -> None:
+            _master = await get_master(appt["master_id"])
+            if not (_master and _master.get("user_id") and _master["user_id"] not in ADMIN_IDS):
+                return
             try:
                 await callback.bot.send_message(
                     _master["user_id"],
@@ -405,8 +454,12 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
             except Exception:
                 logger.warning("Не удалось уведомить мастера user_id=%s", _master["user_id"])
 
-    result = "Клиент уведомлён." if notified else "Клиент не уведомлён (заблокировал бота)."
-    await edit_panel_with_callback(callback, f"✅ Запись отменена. {result}", None)
+        _fire(_notify_master_cancelled(), context="notify master cancelled")
+
+    # UI админа — единственное await, который клиент ждёт.
+    await edit_panel_with_callback(
+        callback, "✅ Запись отменена. Уведомление клиенту отправлено.", None,
+    )
     await callback.answer()
 
 
