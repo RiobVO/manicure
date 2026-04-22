@@ -43,11 +43,17 @@ def _price_short(price: int) -> str:
     return f"{price:,}".replace(",", " ")
 
 
-def category_keyboard() -> InlineKeyboardMarkup:
+def category_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     """Первый экран записи: выбор ручек/ножек."""
+    if lang == "uz":
+        hands = "❋ qo'l"
+        feet = "○ oyoq"
+    else:
+        hands = "❋ ручки"
+        feet = "○ ножки"
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="❋ ручки", callback_data="cat_hands"),
-        InlineKeyboardButton(text="○ ножки", callback_data="cat_feet"),
+        InlineKeyboardButton(text=hands, callback_data="cat_hands"),
+        InlineKeyboardButton(text=feet, callback_data="cat_feet"),
     ]])
 
 
@@ -62,7 +68,11 @@ def admin_category_picker() -> InlineKeyboardMarkup:
     ]])
 
 
-def services_keyboard(services: list[dict], with_back: bool = False) -> InlineKeyboardMarkup:
+def services_keyboard(
+    services: list[dict],
+    with_back: bool = False,
+    lang: str = "ru",
+) -> InlineKeyboardMarkup:
     """
     Список услуг с ценами в кнопках: «гель-лак · 150 000».
     with_back=True добавляет «‹ назад» — возврат к выбору категории.
@@ -81,7 +91,8 @@ def services_keyboard(services: list[dict], with_back: bool = False) -> InlineKe
             callback_data=f"service_{s['id']}"
         )])
     if with_back:
-        buttons.append([InlineKeyboardButton(text="‹ назад", callback_data="cat_back")])
+        back = "‹ orqaga" if lang == "uz" else "‹ назад"
+        buttons.append([InlineKeyboardButton(text=back, callback_data="cat_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -118,28 +129,34 @@ def times_keyboard(free_slots: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def contact_keyboard() -> ReplyKeyboardMarkup:
+def contact_keyboard(lang: str = "ru") -> ReplyKeyboardMarkup:
+    label = "raqamni ulashish" if lang == "uz" else "поделиться номером"
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="поделиться номером", request_contact=True)]],
+        keyboard=[[KeyboardButton(text=label, request_contact=True)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
 
 
-def addons_keyboard(addons: list[dict], selected_ids: set[int] | None = None) -> InlineKeyboardMarkup:
+def addons_keyboard(
+    addons: list[dict],
+    selected_ids: set[int] | None = None,
+    lang: str = "ru",
+) -> InlineKeyboardMarkup:
     """Клавиатура выбора доп. опций. Выбранные помечены акцентом ❀."""
     selected_ids = selected_ids or set()
     buttons = []
     for addon in addons:
         if addon["id"] in selected_ids:
-            label = f"{FLOWER} {addon['name']}  +{fmt_price(addon['price'])}"
+            label = f"{FLOWER} {addon['name']}  +{fmt_price(addon['price'], lang)}"
         else:
-            label = f"{addon['name']}  +{fmt_price(addon['price'])}"
+            label = f"{addon['name']}  +{fmt_price(addon['price'], lang)}"
         buttons.append([InlineKeyboardButton(
             text=label,
             callback_data=f"addon_{addon['id']}",
         )])
-    buttons.append([InlineKeyboardButton(text=f"{ARROW_DO} далее", callback_data="addons_done")])
+    next_label = "→ keyingi" if lang == "uz" else "→ далее"
+    buttons.append([InlineKeyboardButton(text=next_label, callback_data="addons_done")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -167,10 +184,16 @@ def addon_detail_keyboard(addon: dict) -> InlineKeyboardMarkup:
     ])
 
 
-def confirm_keyboard() -> InlineKeyboardMarkup:
+def confirm_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+    if lang == "uz":
+        yes = f"{ARROW_DO} tasdiqlash"
+        no = f"{CLOSE} bekor qilish"
+    else:
+        yes = f"{ARROW_DO} подтвердить"
+        no = f"{CLOSE} отмена"
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=f"{ARROW_DO} подтвердить", callback_data="confirm_yes"),
-        InlineKeyboardButton(text=f"{CLOSE} отмена", callback_data="confirm_no"),
+        InlineKeyboardButton(text=yes, callback_data="confirm_yes"),
+        InlineKeyboardButton(text=no, callback_data="confirm_no"),
     ]])
 
 
