@@ -62,6 +62,14 @@ def _date_human(date_str: str) -> str:
         return date_str
 
 
+_STATUS_EMOJI = {
+    "scheduled": "🕐",
+    "completed": "✅",
+    "no_show":   "➖",
+    "cancelled": "❌",
+}
+
+
 def _render_history_page(
     appointments: list[dict],
     page: int,
@@ -69,22 +77,23 @@ def _render_history_page(
     lang: str = "ru",
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Формирует текст и клавиатуру для одной страницы истории записей."""
-    lines: list[str] = [f"{t('history_title', lang)}\n{DIVIDER_SOFT}"]
+    lines: list[str] = [t("history_title", lang), ""]
     buttons: list[list[InlineKeyboardButton]] = []
     last_completed = None
 
-    open_label = "ochish" if lang == "uz" else "открыть"
-    repeat_label = "takrorlash" if lang == "uz" else "повторить"
+    open_label = "Otkrit" if lang == "uz" else "Открыть"  # placeholder
+    open_label = "Ochish" if lang == "uz" else "Открыть"
+    repeat_label = "Takrorlash" if lang == "uz" else "Повторить"
 
     for appt in appointments:
-        mark = STATUS_MARK.get(appt["status"], "·")
+        emoji = _STATUS_EMOJI.get(appt["status"], "•")
         word = status_word(appt["status"], lang)
         date_label = date_tiny(appt["date"], lang)
-        svc_short = appt["service_name"][:45] + ("…" if len(appt["service_name"]) > 45 else "")
+        svc_short = appt["service_name"][:40] + ("…" if len(appt["service_name"]) > 40 else "")
 
         lines.append(
-            f"<i>{mark}</i>  <b>{date_label}</b>  ·  <code>{appt['time']}</code>\n"
-            f"     {h(svc_short.lower())}  ·  <i>{word}</i>"
+            f"{emoji} <b>{date_label}</b> · {appt['time']}\n"
+            f"   {h(svc_short)} — {word}"
         )
 
         if appt["status"] == "completed" and last_completed is None:
@@ -92,9 +101,9 @@ def _render_history_page(
 
     first_scheduled = next((a for a in appointments if a["status"] == "scheduled"), None)
     if first_scheduled:
-        svc_short_sched = first_scheduled["service_name"][:35] + ("…" if len(first_scheduled["service_name"]) > 35 else "")
+        svc_short_sched = first_scheduled["service_name"][:30] + ("…" if len(first_scheduled["service_name"]) > 30 else "")
         buttons.append([InlineKeyboardButton(
-            text=f"{ARROW_SOFT} {open_label}: {svc_short_sched.lower()}",
+            text=f"📋 {open_label}: {svc_short_sched}",
             callback_data=f"my_appt_{first_scheduled['id']}",
         )])
 
@@ -103,14 +112,12 @@ def _render_history_page(
         buttons.extend(pagination_kb.inline_keyboard)
 
     if last_completed:
-        svc_short = last_completed["service_name"][:45] + ("…" if len(last_completed["service_name"]) > 45 else "")
+        svc_short = last_completed["service_name"][:30] + ("…" if len(last_completed["service_name"]) > 30 else "")
         buttons.append([InlineKeyboardButton(
-            text=f"{REPEAT}  {repeat_label} · {svc_short.lower()}",
+            text=f"🔄 {repeat_label}: {svc_short}",
             callback_data=f"quick_rebook_{last_completed['id']}",
         )])
 
-    # Смена языка — через команду /language (в меню бота setMyCommands),
-    # не через inline-кнопку в «мои записи» (семантически не к месту).
     text = "\n\n".join(lines)
     return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -198,26 +205,31 @@ async def cb_my_appt_detail(callback: CallbackQuery):
         await callback.answer(not_found, show_alert=True)
         return
 
-    mark = STATUS_MARK.get(appt["status"], "·")
+    emoji = _STATUS_EMOJI.get(appt["status"], "•")
     word = status_word(appt["status"], lang)
-    master_line = ""
+    master_name = "—"
     if appt.get("master_id"):
         m = await get_master(appt["master_id"])
         if m:
-            master_line = f"<i>{t('history_master', lang)} · {h(m['name'].title())}</i>\n"
+            master_name = h(m["name"].title())
+
+    service_label = "Xizmat:   " if lang == "uz" else "Услуга:   "
+    master_label = "Usta:     " if lang == "uz" else "Мастер:   "
+    date_label = "Sana:     " if lang == "uz" else "Дата:     "
+    time_label = "Vaqt:     " if lang == "uz" else "Время:    "
+    price_label = "Narxi:    " if lang == "uz" else "Цена:     "
+    status_label = "Holati:   " if lang == "uz" else "Статус:   "
 
     text = (
-        f"<blockquote>"
         f"{t('history_visit', lang)}\n\n"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<b>{h(appt['service_name'].lower())}</b>\n"
-        f"{master_line}"
-        f"\n"
-        f"<i>{t('history_when', lang)}</i>       <code>{date_soft(appt['date'], lang)} · {appt['time']}</code>\n"
-        f"<i>{t('history_price', lang)}</i>   <code>{fmt_price(appt['service_price'], lang)}</code>\n"
-        f"\n"
-        f"<i>{mark}  {word}</i>"
-        f"</blockquote>"
+        f"<code>"
+        f"{service_label}{h(appt['service_name'])}\n"
+        f"{master_label}{master_name}\n"
+        f"{date_label}{date_soft(appt['date'], lang)}\n"
+        f"{time_label}{appt['time']}\n"
+        f"{price_label}{fmt_price(appt['service_price'], lang)}\n"
+        f"{status_label}{emoji} {word}"
+        f"</code>"
     )
 
     kb_buttons = []
@@ -275,8 +287,8 @@ async def cb_my_appt_cancel(callback: CallbackQuery):
     try:
         await callback.message.edit_text(
             f"{t('history_cancel_confirm_q', lang)}\n\n"
-            f"<blockquote><b>{h(appt['service_name'].lower())}</b>\n"
-            f"<i>{date_soft(appt['date'], lang)} · {appt['time']}</i></blockquote>",
+            f"💅 <b>{h(appt['service_name'])}</b>\n"
+            f"📅 {date_soft(appt['date'], lang)} · {appt['time']}",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text=t("history_cancel_yes", lang), callback_data=f"my_appt_cancel_yes_{appt_id}"),
@@ -306,12 +318,12 @@ async def cb_my_appt_cancel_yes(callback: CallbackQuery):
         await callback.answer(not_found, show_alert=True)
         return
 
-    reason_prompt = "<i>nima bo'ldi?</i>" if lang == "uz" else "<i>что случилось?</i>"
+    reason_prompt = "<b>Nima bo'ldi?</b>" if lang == "uz" else "<b>Что случилось?</b>"
     try:
         await callback.message.edit_text(
             f"{reason_prompt}\n\n"
-            f"<blockquote><b>{h(appt['service_name'].lower())}</b>\n"
-            f"<i>{date_soft(appt['date'], lang)} · {appt['time']}</i></blockquote>",
+            f"💅 <b>{h(appt['service_name'])}</b>\n"
+            f"📅 {date_soft(appt['date'], lang)} · {appt['time']}",
             reply_markup=cancel_reason_keyboard(appt_id, lang),
             parse_mode="HTML",
         )
@@ -382,11 +394,11 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
 
     lang = await get_user_lang(callback.from_user.id)
     if lang == "uz":
-        txt = "<i>yozilish bekor qilindi.</i>\n\n<i>fikringiz o'zgarsa — biz shu yerdamiz.</i>"
-        btn = f"{ARROW_DO} qayta yozilish"
+        txt = "❌ <b>Yozilish bekor qilindi</b>\n\nFikringiz o'zgarsa — biz shu yerdamiz."
+        btn = "📅 Qayta yozilish"
     else:
-        txt = "<i>запись ушла.</i>\n\n<i>если передумаешь — мы рядом.</i>"
-        btn = f"{ARROW_DO} записаться снова"
+        txt = "❌ <b>Запись отменена</b>\n\nЕсли передумаешь — мы рядом."
+        btn = "📅 Записаться снова"
     try:
         await callback.message.edit_text(
             txt,
