@@ -46,8 +46,8 @@ def _price_short(price: int) -> str:
 def category_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     """Первый экран записи: выбор ручек/ножек."""
     if lang == "uz":
-        hands = "❋ qo'l"
-        feet = "○ oyoq"
+        hands = "❋ Qo'llar"
+        feet = "○ Oyoqlar"
     else:
         hands = "❋ ручки"
         feet = "○ ножки"
@@ -189,8 +189,8 @@ def addon_detail_keyboard(addon: dict) -> InlineKeyboardMarkup:
 
 def confirm_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     if lang == "uz":
-        yes = f"{ARROW_DO} tasdiqlash"
-        no = f"{CLOSE} bekor qilish"
+        yes = "Tasdiqlash ✅"
+        no = "Bekor qilish ❌"
     else:
         yes = f"{ARROW_DO} подтвердить"
         no = f"{CLOSE} отмена"
@@ -375,8 +375,8 @@ def client_reply_keyboard(lang: str = "ru") -> ReplyKeyboardMarkup:
     (его кнопки из прошлой сессии старого языка всё ещё работают).
     """
     if lang == "uz":
-        book_btn = "yozilish"
-        my_btn = "mening yozilishlarim"
+        book_btn = "Yozilish"
+        my_btn = "Mening yozuvlarim"
     else:
         book_btn = "записаться"
         my_btn = "мои записи"
@@ -390,9 +390,12 @@ def client_reply_keyboard(lang: str = "ru") -> ReplyKeyboardMarkup:
 
 
 # Все строки reply-кнопок клиента, по которым фильтруют хендлеры
-# (F.text.in_(CLIENT_BTN_BOOK) и т.п.). Расширяется при добавлении языков.
-CLIENT_BTN_BOOK = frozenset({"записаться", "yozilish"})
-CLIENT_BTN_MY_APPTS = frozenset({"мои записи", "mening yozilishlarim"})
+# (F.text.in_(CLIENT_BTN_BOOK) и т.п.). Старые написания оставлены —
+# у клиентов с прошлой сессии кнопки могут быть на них.
+CLIENT_BTN_BOOK = frozenset({"записаться", "yozilish", "Yozilish"})
+CLIENT_BTN_MY_APPTS = frozenset({
+    "мои записи", "mening yozilishlarim", "Mening yozuvlarim",
+})
 CLIENT_BTN_LANG = "🌐 Язык / Til"
 
 
