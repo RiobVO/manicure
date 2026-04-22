@@ -61,8 +61,8 @@ class Lang:
 TRANSLATIONS: dict[str, dict[str, str]] = {
     # ─── 1. Переключатель языка ────────────────────────────────────────────
     "lang_picker_prompt": {
-        "ru": "<i>выбери язык · tilni tanlang</i>",
-        "uz": "<i>выбери язык · tilni tanlang</i>",
+        "ru": "выбери язык · tilni tanlang",
+        "uz": "выбери язык · tilni tanlang",
     },
     "lang_btn_ru": {
         "ru": "🇷🇺 Русский",
@@ -73,8 +73,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "🇺🇿 O'zbek",
     },
     "lang_changed": {
-        "ru": "<i>язык изменён на русский.</i>",
-        "uz": "<i>til o'zgartirildi — o'zbekcha.</i>",
+        "ru": "✅ язык изменён на русский.",
+        "uz": "✅ til o'zgartirildi — o'zbekcha.",
     },
     "lang_change_button": {
         "ru": "🌐 Язык / Til",
@@ -90,7 +90,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "btn_confirm_no": {"ru": "❌ передумал", "uz": "❌ fikrim o'zgardi"},
     "btn_pick_another": {"ru": "› выбрать другое", "uz": "› boshqasini tanlash"},
     "btn_repeat": {"ru": "↻ повторить", "uz": "↻ takrorlash"},
-    "btn_what_today": {"ru": "<i>что сегодня?</i>", "uz": "<i>bugun nima?</i>"},
+    "btn_what_today": {"ru": "что сегодня?", "uz": "bugun nima?"},
 
     # ─── 3. Booking flow ───────────────────────────────────────────────────
     "book_no_services": {
@@ -170,20 +170,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "xizmat mavjud emas. qayta boshlang: /start",
     },
     "book_master_unavailable": {
-        "ru": "<i>мастер больше недоступен.</i>\n<i>начни заново: /start</i>",
-        "uz": "<i>usta endi mavjud emas.</i>\n<i>qayta boshlang: /start</i>",
+        "ru": "⚠️ мастер больше недоступен.\nначни заново: /start",
+        "uz": "⚠️ usta endi mavjud emas.\nqayta boshlang: /start",
     },
     "book_slot_taken": {
-        "ru": "<i>кто-то оказался быстрее. выбери другое время.</i>",
-        "uz": "<i>kimdir siz bilan ayni vaqtga yozildi. boshqa vaqtni tanlang.</i>",
+        "ru": "⚠️ кто-то оказался быстрее. выбери другое время.",
+        "uz": "⚠️ kimdir siz bilan ayni vaqtga yozildi. boshqa vaqtni tanlang.",
     },
     "book_generic_error": {
-        "ru": "<i>что-то пошло не так.</i>\n<i>попробуй /start.</i>",
-        "uz": "<i>nimadir noto'g'ri ketdi.</i>\n<i>/start buyrug'ini yuboring.</i>",
+        "ru": "⚠️ что-то пошло не так.\nпопробуй /start.",
+        "uz": "⚠️ nimadir noto'g'ri ketdi.\n/start buyrug'ini yuboring.",
     },
     "book_profile_saved_question": {
-        "ru": "<i>использовать сохранённое имя и телефон?</i>",
-        "uz": "<i>saqlangan ism va telefonni ishlatamizmi?</i>",
+        "ru": "<b>использовать сохранённое имя и телефон?</b>",
+        "uz": "<b>saqlangan ism va telefonni ishlatamizmi?</b>",
     },
     "book_profile_use_saved": {
         "ru": "✅ да",
@@ -238,52 +238,52 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     # ─── 5. Отзывы ─────────────────────────────────────────────────────────
     "review_prompt": {
-        "ru": "<i>как прошло?</i>",
-        "uz": "<i>qanday o'tdi?</i>",
+        "ru": "<b>как прошло?</b>",
+        "uz": "<b>qanday o'tdi?</b>",
     },
     "review_thanks": {
-        "ru": "<i>спасибо ✧</i>",
-        "uz": "<i>rahmat ✧</i>",
+        "ru": "✨ спасибо",
+        "uz": "✨ rahmat",
     },
     "review_comment_prompt": {
-        "ru": "<i>хочешь что-то добавить? напиши одним сообщением или пропусти.</i>",
-        "uz": "<i>biror narsa qo'shmoqchimisiz? bir xabar bilan yozing yoki o'tkazib yuboring.</i>",
+        "ru": "хочешь что-то добавить? напиши одним сообщением или пропусти.",
+        "uz": "biror narsa qo'shmoqchimisiz? bir xabar bilan yozing yoki o'tkazib yuboring.",
     },
     "review_skip_btn": {
         "ru": "пропустить",
         "uz": "o'tkazib yuborish",
     },
     "review_saved": {
-        "ru": "<i>записано. до встречи в следующий раз.</i>",
-        "uz": "<i>qabul qilindi. keyingi safargacha.</i>",
+        "ru": "✅ записано. до встречи в следующий раз.",
+        "uz": "✅ qabul qilindi. keyingi safargacha.",
     },
 
     # ─── 6. Напоминания ─────────────────────────────────────────────────────
     "reminder_24h_title": {
-        "ru": "<b><i>завтра у тебя запись</i></b>",
-        "uz": "<b><i>ertaga sizning tashrifingiz</i></b>",
+        "ru": "<b>завтра у тебя запись</b>",
+        "uz": "<b>ertaga sizning tashrifingiz</b>",
     },
     "reminder_2h_title": {
-        "ru": "<b><i>через пару часов жду</i></b>",
-        "uz": "<b><i>bir necha soatdan keyin kutamiz</i></b>",
+        "ru": "<b>через пару часов жду</b>",
+        "uz": "<b>bir necha soatdan keyin kutamiz</b>",
     },
 
     # ─── 7. Платежи / возврат ──────────────────────────────────────────────
     "pay_link_text": {
-        "ru": "<i>ссылка на оплату:</i>",
-        "uz": "<i>to'lov havolasi:</i>",
+        "ru": "💳 ссылка на оплату:",
+        "uz": "💳 to'lov havolasi:",
     },
     "pay_btn": {
         "ru": "Оплатить",
         "uz": "To'lov qilish",
     },
     "review_after_visit_title": {
-        "ru": "💅 <b>Спасибо за визит!</b>\n\n<i>ну как {service}?</i>",
-        "uz": "💅 <b>Tashrifingiz uchun rahmat!</b>\n\n<i>{service} yoqdimi?</i>",
+        "ru": "💅 <b>Спасибо за визит!</b>\n\nну как {service}?",
+        "uz": "💅 <b>Tashrifingiz uchun rahmat!</b>\n\n{service} yoqdimi?",
     },
     "pay_received_client": {
-        "ru": "<i>✓ оплата получена.</i>\n<i>жду тебя.</i>",
-        "uz": "<i>✓ To'lov qabul qilindi.</i>\n<i>Sizni kutamiz.</i>",
+        "ru": "✅ <b>оплата получена.</b>\nжду тебя.",
+        "uz": "✅ <b>to'lov qabul qilindi.</b>\nsizni kutamiz.",
     },
     "refund_needed_intro": {
         "ru": "💰 Оплата подлежит возврату.",
