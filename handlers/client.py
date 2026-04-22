@@ -868,9 +868,11 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
             logger.error("Ошибка уведомления мастера", exc_info=True)
 
     for coro in (_bg_admin_broadcast(), _bg_master_notify()):
-        t = asyncio.create_task(coro)
-        _bg_tasks.add(t)
-        t.add_done_callback(_bg_tasks.discard)
+        # Не называем переменную `t`: выше импортирован i18n-хелпер t(key, lang),
+        # который нужен ниже в confirm_yes (master_label, price_label и т.д.).
+        bg_task = asyncio.create_task(coro)
+        _bg_tasks.add(bg_task)
+        bg_task.add_done_callback(_bg_tasks.discard)
 
     # Уборка transient-сообщений флоу: "как тебя зовут?" (последнее состояние
     # цепочки edit_text), "поделись номером", summary "всё так?". Оставляем
