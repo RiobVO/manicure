@@ -109,6 +109,9 @@ def _render_history_page(
             callback_data=f"quick_rebook_{last_completed['id']}",
         )])
 
+    # Кнопка смены языка — тихая, внизу. Альтернатива — /language.
+    buttons.append([InlineKeyboardButton(text="🌐 Til / Язык", callback_data="lang_picker")])
+
     text = "\n\n".join(lines)
     return text, InlineKeyboardMarkup(inline_keyboard=buttons)
 

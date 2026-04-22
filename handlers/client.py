@@ -1152,9 +1152,29 @@ async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
     await _send_category_picker(callback.message, state, user_id=callback.from_user.id)
 
 
-@router.message(F.text == "🌐 Язык / Til")
-async def btn_change_lang(message: Message, state: FSMContext):
-    """Клиент хочет сменить язык из reply-меню."""
+@router.callback_query(F.data == "lang_picker")
+async def cb_lang_picker(callback: CallbackQuery, state: FSMContext):
+    """Открыть переключатель языка из «мои записи»."""
+    await state.clear()
+    from utils.i18n import t
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=t("lang_btn_ru"), callback_data="lang_set_ru"),
+            InlineKeyboardButton(text=t("lang_btn_uz"), callback_data="lang_set_uz"),
+        ],
+    ])
+    try:
+        await callback.message.edit_text(
+            t("lang_picker_prompt"), reply_markup=kb, parse_mode="HTML",
+        )
+    except TelegramBadRequest:
+        pass
+    await callback.answer()
+
+
+@router.message(F.text.regexp(r"^/(language|til|lang)(?:\s|$)") | (F.text == "🌐 Язык / Til"))
+async def cmd_change_lang(message: Message, state: FSMContext):
+    """Клиент сменяет язык через команду /language (или /til, /lang)."""
     await state.clear()
     try:
         await message.delete()
