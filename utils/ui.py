@@ -242,18 +242,18 @@ def greeting_new(lang: str = "ru") -> str:
     """Приветствие нового клиента."""
     if lang == "uz":
         return (
-            "Salom! Men Sabinaning yordamchisiman. U go'zal tirnoqlar "
-            "ustida sehr ko'rsatayotgan bir vaqtda, men sizga navbatga "
-            "yozilishda yordam beraman ✨\n\n"
-            "Bo'sh vaqt topamiz, darhol yozib qo'yaman va eslatma yuboraman.\n\n"
-            "Vaqtni tanlaymizmi? 👇"
+            "💅 <b>Sabina Nails</b>\n"
+            "Manikyur va pedikyurga yozilish\n\n"
+            "Bo'sh vaqtni topaman, sizni yozib qo'yaman va\n"
+            "tashrif oldidan eslataman — bir kun va 2 soat avval.\n\n"
+            "Boshlaymizmi? 👇"
         )
     return (
-        "Привет! Я бот Сабины. Пока она пилит красивые ноготочки, "
-        "я помогаю с записью ✨\n\n"
-        "Помогу найти свободное окно, моментально тебя запишу и пришлю "
-        "напоминалку, чтобы визит не вылетел из головы.\n\n"
-        "Посмотрим, что там по времени? 👇"
+        "💅 <b>Sabina Nails</b>\n"
+        "Запись на маникюр и педикюр\n\n"
+        "Помогу подобрать время, запишу и напомню\n"
+        "накануне и за 2 часа до визита.\n\n"
+        "Начнём? 👇"
     )
 
 
@@ -264,7 +264,7 @@ def greeting_returning(
     master: str | None,
     lang: str = "ru",
 ) -> str:
-    """Приветствие возвращающегося клиента. Коротко, без сантиментов."""
+    """Приветствие возвращающегося клиента. Коротко, по-деловому."""
     if lang == "uz":
         if days_ago == 0:
             when = "bugun"
@@ -274,10 +274,9 @@ def greeting_returning(
             when = days_ago_phrase(days_ago, lang=lang)
         master_line = f" · {h(master.title())}" if master else ""
         return (
-            f"{FLOWER}\n\n"
-            f"<b><i>{h(name)}.</i></b>\n\n"
-            f"<i>o'tgan safar — {h(service.lower())}{master_line}.</i>\n"
-            f"<i>{when}.</i>"
+            f"👋 <b>{h(name)}</b>, yana salom!\n\n"
+            f"O'tgan safar — {h(service)}{master_line}\n"
+            f"{when}."
         )
 
     # ru
@@ -289,33 +288,24 @@ def greeting_returning(
         when = days_ago_phrase(days_ago).replace("прошло ", "")
     master_line = f" · {h(master.title())}" if master else ""
     return (
-        f"{FLOWER}\n\n"
-        f"<b><i>{h(name)}.</i></b>\n\n"
-        f"<i>прошлый раз — {h(service.lower())}{master_line}.</i>\n"
-        f"<i>{when}.</i>"
+        f"👋 <b>{h(name)}</b>, рады видеть снова!\n\n"
+        f"В прошлый раз — {h(service)}{master_line}\n"
+        f"{when}."
     )
 
 
 def booking_done_hero(name: str, lang: str = "ru") -> str:
     """Первое сообщение после успешной записи — акцент."""
     if lang == "uz":
-        return f"{STAR}\n\n<b><i>{h(name)}, tayyor.</i></b>\n<i>siz yozildingiz.</i>"
-    return f"{STAR}\n\n<b><i>{h(name)}, всё.</i></b>\n<i>ты записана.</i>"
+        return f"✅ <b>YOZILDINGIZ</b>\nKutamiz, {h(name)}."
+    return f"✅ <b>ЗАПИСЬ ПОДТВЕРЖДЕНА</b>\nЖдём, {h(name)}."
 
 
 def booking_reminder_note(lang: str = "ru") -> str:
     """Третье сообщение после подтверждения — напоминание."""
     if lang == "uz":
-        return (
-            f"<i>bir kun oldin</i>\n"
-            f"<i>va tashrifingizdan ikki soat oldin eslataman.</i>\n\n"
-            f"<i>ko'rishguncha ✧</i>"
-        )
-    return (
-        f"<i>напомню за сутки</i>\n"
-        f"<i>и за два часа до визита.</i>\n\n"
-        f"<i>до встречи ✧</i>"
-    )
+        return "🔔 Tashrif oldidan 24 soat va 2 soat avval eslatib qo'yaman."
+    return "🔔 Напомним за 24 часа и за 2 часа до визита."
 
 
 # ─── ТОНКИЕ TEXTUAL-ИКОНКИ ДЛЯ СТАТУСОВ ──────────────────────────────────────
