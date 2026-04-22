@@ -746,8 +746,27 @@ async def get_phone(message: Message, state: FSMContext):
     await state.set_state(BookingStates.confirm)
 
 
+_confirm_in_progress: set[int] = set()
+
+
 @router.callback_query(BookingStates.confirm, F.data == "confirm_yes")
 async def confirm_yes(callback: CallbackQuery, state: FSMContext):
+    """Обёртка с дедупом двойного клика. Реальная логика в _do_confirm."""
+    user_id = callback.from_user.id
+    if user_id in _confirm_in_progress:
+        try:
+            await callback.answer()
+        except Exception:
+            pass
+        return
+    _confirm_in_progress.add(user_id)
+    try:
+        await _do_confirm(callback, state)
+    finally:
+        _confirm_in_progress.discard(user_id)
+
+
+async def _do_confirm(callback: CallbackQuery, state: FSMContext):
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
