@@ -56,6 +56,8 @@ router.message.filter(IsAdminFilter())
 router.callback_query.filter(IsAdminFilter())
 
 _STATUS_ICON = {"completed": "✅", "no_show": "🚫", "cancelled": "❌"}
+# Whitelist статусов для cb_appt_status — callback-data извне, валидируем.
+_ALLOWED_STATUSES = frozenset({"scheduled", "completed", "no_show", "cancelled"})
 
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -218,7 +220,6 @@ async def cb_appt_status(callback: CallbackQuery):
     # строка произвольной длины. Параметризация SQL спасает от инъекции, но
     # не от порчи модели: status='banana' → запись выпадает из всех SELECT-
     # фильтров (scheduled/!=cancelled), остаётся висящей в БД.
-    _ALLOWED_STATUSES = frozenset({"scheduled", "completed", "no_show", "cancelled"})
     if status not in _ALLOWED_STATUSES:
         logger.warning(
             "cb_appt_status: bad status=%r from admin=%s appt=%s",
