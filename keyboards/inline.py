@@ -1002,8 +1002,11 @@ def payment_keyboard(pay_url: str | None, label: str | None = None) -> InlineKey
     """
     if not pay_url:
         return None
-    from config import PAYMENT_LABEL
-    text = f"💳 {label or PAYMENT_LABEL}"
+    if label:
+        text = f"💳 {label}"
+    else:
+        from config import PAYMENT_LABEL
+        text = f"💳 {PAYMENT_LABEL}"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=text, url=pay_url)],
     ])

@@ -224,11 +224,15 @@ async def cb_my_appt_detail(callback: CallbackQuery):
         from utils.payment_ui import reconstruct_pay_url
         pay_url = reconstruct_pay_url(appt)
         if pay_url:
-            from config import PAYMENT_LABEL
             kb_buttons.append([InlineKeyboardButton(
-                text=f"💳 {PAYMENT_LABEL}",
+                text=f"💳 {t('pay_btn', lang)}",
                 url=pay_url,
             )])
+        else:
+            logger.warning(
+                "reconstruct_pay_url=None для appt=%s (status=scheduled, paid_at=None, payment_pay_url=%s)",
+                appt_id, appt.get("payment_pay_url"),
+            )
 
     if appt["status"] == "scheduled":
         kb_buttons.append([
