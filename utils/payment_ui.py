@@ -40,17 +40,63 @@ def payment_pill(appt: Mapping) -> str:
 
 def reconstruct_pay_url(appt: Mapping) -> str | None:
     """
-    Отдать сохранённый pay_url для повторного показа кнопки «Оплатить».
+    Отдать ссылку на оплату для повторного показа кнопки «Оплатить».
     Нужно когда клиент случайно ушёл с confirm-сообщения и возвращается
-    через «мои записи» — кнопка в карточке должна снова дать ту же ссылку.
+    через «мои записи» — кнопка в карточке должна снова дать ссылку.
 
-    Возвращает None если:
-      • запись уже оплачена (paid_at != NULL) — платить нечего;
-      • pay_url не сохранён (инвойс не выставлялся или запись до v4).
+    Возвращает None если запись уже оплачена.
 
-    URL детерминирован: он был записан в БД при attach_invoice(). Не зовём
-    create_invoice повторно — Click создал бы второй инвойс.
+    Приоритет источников:
+      1. payment_pay_url из БД (сохранён attach_invoice после create_invoice).
+      2. Legacy PAYMENT_URL из .env — детерминированный fallback, если
+         провайдер упал при записи (create_invoice timeout / mock не запущен),
+         но у оператора задана запасная ссылка.
+      3. Payme — детерминирован: URL собирается из appt_id + amount, API
+         не нужен.
+      4. Click — без API invoice_id мы URL собрать не можем (Click выдаёт
+         свой внутренний invoice_id), поэтому None.
     """
     if appt.get("paid_at"):
         return None
-    return appt.get("payment_pay_url") or None
+
+    saved = appt.get("payment_pay_url")
+    if saved:
+        return saved
+
+    # Fallback: провайдер упал при записи, но есть legacy PAYMENT_URL —
+    # из него всегда можно собрать URL по шаблону.
+    from config import PAYMENT_URL
+    if PAYMENT_URL:
+        amount = appt.get("service_price", 0)
+        appt_id = appt.get("id", 0)
+        return (
+            PAYMENT_URL
+            .replace("{amount}", str(amount))
+            .replace("{appt_id}", str(appt_id))
+        )
+
+    # Fallback для Payme: URL детерминирован из appt_id + amount.
+    provider_name = appt.get("payment_provider")
+    if provider_name == "payme" or (not provider_name and _active_provider() == "payme"):
+        import base64
+        from config import PAYME_MERCHANT_ID, PAYMENT_PUBLIC_URL
+        appt_id = appt.get("id")
+        amount = appt.get("service_price", 0)
+        if not PAYME_MERCHANT_ID or not appt_id:
+            return None
+        amount_tiyin = int(amount) * 100
+        return_url = f"{PAYMENT_PUBLIC_URL}/payment/return?appt={appt_id}"
+        raw = (
+            f"m={PAYME_MERCHANT_ID};"
+            f"ac.appointment_id={appt_id};"
+            f"a={amount_tiyin};"
+            f"c={return_url}"
+        )
+        return f"https://checkout.paycom.uz/{base64.b64encode(raw.encode()).decode()}"
+
+    return None
+
+
+def _active_provider() -> str:
+    from config import PAYMENT_PROVIDER
+    return PAYMENT_PROVIDER
