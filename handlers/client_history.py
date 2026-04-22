@@ -41,9 +41,11 @@ from utils.ui import (
     ARROW_SOFT, ARROW_DO, ARROW_BACK, REPEAT, CLOSE,
     price as fmt_price,
     date_soft, date_tiny,
-    STATUS_MARK, STATUS_WORD,
+    STATUS_MARK, status_word,
     h,
 )
+from db.clients import get_user_lang
+from utils.i18n import t
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -64,16 +66,20 @@ def _render_history_page(
     appointments: list[dict],
     page: int,
     total_pages: int,
+    lang: str = "ru",
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Формирует текст и клавиатуру для одной страницы истории записей."""
-    lines: list[str] = [f"<b><i>твои визиты</i></b>\n{DIVIDER_SOFT}"]
+    lines: list[str] = [f"{t('history_title', lang)}\n{DIVIDER_SOFT}"]
     buttons: list[list[InlineKeyboardButton]] = []
     last_completed = None
 
+    open_label = "ochish" if lang == "uz" else "открыть"
+    repeat_label = "takrorlash" if lang == "uz" else "повторить"
+
     for appt in appointments:
         mark = STATUS_MARK.get(appt["status"], "·")
-        word = STATUS_WORD.get(appt["status"], appt["status"])
-        date_label = date_tiny(appt["date"])
+        word = status_word(appt["status"], lang)
+        date_label = date_tiny(appt["date"], lang)
         svc_short = appt["service_name"][:45] + ("…" if len(appt["service_name"]) > 45 else "")
 
         lines.append(
@@ -84,12 +90,11 @@ def _render_history_page(
         if appt["status"] == "completed" and last_completed is None:
             last_completed = appt
 
-    # Одна кнопка «открыть ближайшую» вместо дубликатов по каждой scheduled
     first_scheduled = next((a for a in appointments if a["status"] == "scheduled"), None)
     if first_scheduled:
         svc_short_sched = first_scheduled["service_name"][:35] + ("…" if len(first_scheduled["service_name"]) > 35 else "")
         buttons.append([InlineKeyboardButton(
-            text=f"{ARROW_SOFT} открыть: {svc_short_sched.lower()}",
+            text=f"{ARROW_SOFT} {open_label}: {svc_short_sched.lower()}",
             callback_data=f"my_appt_{first_scheduled['id']}",
         )])
 
@@ -100,7 +105,7 @@ def _render_history_page(
     if last_completed:
         svc_short = last_completed["service_name"][:45] + ("…" if len(last_completed["service_name"]) > 45 else "")
         buttons.append([InlineKeyboardButton(
-            text=f"{REPEAT}  повторить · {svc_short.lower()}",
+            text=f"{REPEAT}  {repeat_label} · {svc_short.lower()}",
             callback_data=f"quick_rebook_{last_completed['id']}",
         )])
 
@@ -118,14 +123,15 @@ async def cb_noop(callback: CallbackQuery):
 async def cb_my_appointments(callback: CallbackQuery, state: FSMContext):
     """Показать записи клиента (первая страница)."""
     await state.clear()
+    lang = await get_user_lang(callback.from_user.id)
     total = await count_user_appointments(callback.from_user.id)
     if total == 0:
+        book_btn = t("btn_book", lang)
         try:
             await callback.message.edit_text(
-                f"<i>пока ничего.</i>\n\n"
-                f"<i>первая запись — пара касаний.</i>",
+                t("history_empty", lang),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text=f"{ARROW_DO} записаться", callback_data="client_restart"),
+                    InlineKeyboardButton(text=f"{ARROW_DO} {book_btn}", callback_data="client_restart"),
                 ]]),
                 parse_mode="HTML",
             )
@@ -136,7 +142,7 @@ async def cb_my_appointments(callback: CallbackQuery, state: FSMContext):
 
     total_pages = math.ceil(total / _HISTORY_PER_PAGE)
     appointments = await get_user_appointments_page(callback.from_user.id, page=0, per_page=_HISTORY_PER_PAGE)
-    text, kb = _render_history_page(appointments, 0, total_pages)
+    text, kb = _render_history_page(appointments, 0, total_pages, lang)
 
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -148,6 +154,7 @@ async def cb_my_appointments(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("history_page_"))
 async def on_history_page(callback: CallbackQuery):
     """Переключение страницы истории записей."""
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "history_page", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -163,7 +170,7 @@ async def on_history_page(callback: CallbackQuery):
         return
 
     appointments = await get_user_appointments_page(callback.from_user.id, page=page, per_page=_HISTORY_PER_PAGE)
-    text, kb = _render_history_page(appointments, page, total_pages)
+    text, kb = _render_history_page(appointments, page, total_pages, lang)
 
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -175,6 +182,7 @@ async def on_history_page(callback: CallbackQuery):
 @router.callback_query(F.data.regexp(r"^my_appt_(\d+)$"))
 async def cb_my_appt_detail(callback: CallbackQuery):
     """Детали записи клиента + кнопка отмены."""
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "my_appt", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -184,26 +192,27 @@ async def cb_my_appt_detail(callback: CallbackQuery):
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        not_found = "Yozilish topilmadi." if lang == "uz" else "Запись не найдена."
+        await callback.answer(not_found, show_alert=True)
         return
 
     mark = STATUS_MARK.get(appt["status"], "·")
-    word = STATUS_WORD.get(appt["status"], appt["status"])
+    word = status_word(appt["status"], lang)
     master_line = ""
     if appt.get("master_id"):
         m = await get_master(appt["master_id"])
         if m:
-            master_line = f"<i>мастер · {h(m['name'].title())}</i>\n"
+            master_line = f"<i>{t('history_master', lang)} · {h(m['name'].title())}</i>\n"
 
     text = (
         f"<blockquote>"
-        f"<b><i>твой визит</i></b>\n\n"
+        f"{t('history_visit', lang)}\n\n"
         f"{DIVIDER_SOFT}\n\n"
         f"<b>{h(appt['service_name'].lower())}</b>\n"
         f"{master_line}"
         f"\n"
-        f"<i>когда</i>       <code>{date_soft(appt['date'])} · {appt['time']}</code>\n"
-        f"<i>стоимость</i>   <code>{fmt_price(appt['service_price'])}</code>\n"
+        f"<i>{t('history_when', lang)}</i>       <code>{date_soft(appt['date'], lang)} · {appt['time']}</code>\n"
+        f"<i>{t('history_price', lang)}</i>   <code>{fmt_price(appt['service_price'], lang)}</code>\n"
         f"\n"
         f"<i>{mark}  {word}</i>"
         f"</blockquote>"
@@ -211,10 +220,6 @@ async def cb_my_appt_detail(callback: CallbackQuery):
 
     kb_buttons = []
 
-    # Кнопка оплаты для неоплаченной scheduled-записи. Нужна как «запасной
-    # выход»: клиент случайно ушёл с первоначального сообщения-оплаты и
-    # теперь возвращается к ней отсюда. invoice не пересоздаём — URL
-    # реконструируется по сохранённым payment_invoice_id + сумме.
     if appt["status"] == "scheduled" and not appt.get("paid_at"):
         from utils.payment_ui import reconstruct_pay_url
         pay_url = reconstruct_pay_url(appt)
@@ -227,10 +232,10 @@ async def cb_my_appt_detail(callback: CallbackQuery):
 
     if appt["status"] == "scheduled":
         kb_buttons.append([
-            InlineKeyboardButton(text=f"{CLOSE} отменить запись", callback_data=f"my_appt_cancel_{appt_id}"),
+            InlineKeyboardButton(text=t("history_cancel_btn", lang), callback_data=f"my_appt_cancel_{appt_id}"),
         ])
     kb_buttons.append([InlineKeyboardButton(
-        text=f"{ARROW_BACK} мои записи",
+        text=t("history_back_btn", lang),
         callback_data="client_my_appointments",
     )])
 
@@ -384,13 +389,14 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
 async def btn_my_appointments(message: Message, state: FSMContext):
     """Кнопка reply-клавиатуры — сбрасывает FSM и показывает записи клиента (стр. 1)."""
     await state.clear()
+    lang = await get_user_lang(message.from_user.id)
     total = await count_user_appointments(message.from_user.id)
     if total == 0:
+        book_btn = t("btn_book", lang)
         await message.answer(
-            f"<i>пока ничего.</i>\n\n"
-            f"<i>первая запись — пара касаний.</i>",
+            t("history_empty", lang),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text=f"{ARROW_DO} записаться", callback_data="client_restart"),
+                InlineKeyboardButton(text=f"{ARROW_DO} {book_btn}", callback_data="client_restart"),
             ]]),
             parse_mode="HTML",
         )
@@ -398,6 +404,6 @@ async def btn_my_appointments(message: Message, state: FSMContext):
 
     total_pages = math.ceil(total / _HISTORY_PER_PAGE)
     appointments = await get_user_appointments_page(message.from_user.id, page=0, per_page=_HISTORY_PER_PAGE)
-    text, kb = _render_history_page(appointments, 0, total_pages)
+    text, kb = _render_history_page(appointments, 0, total_pages, lang)
 
     await message.answer(text, reply_markup=kb, parse_mode="HTML")
