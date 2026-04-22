@@ -370,10 +370,16 @@ async def cb_my_appt_detail(callback: CallbackQuery):
                 url=pay_url,
             )])
         else:
-            logger.warning(
-                "resolve_pay_url=None для appt=%s (status=scheduled, paid_at=None, payment_pay_url=%s)",
-                appt_id, appt.get("payment_pay_url"),
-            )
+            # Warning только если провайдер включён. PAYMENT_PROVIDER=none +
+            # legacy PAYMENT_URL пуст → это by design (оплата на месте),
+            # не проблема.
+            from utils.payments import get_provider
+            from config import PAYMENT_URL
+            if get_provider() is not None or PAYMENT_URL:
+                logger.warning(
+                    "resolve_pay_url=None для appt=%s (status=scheduled, paid_at=None, payment_pay_url=%s)",
+                    appt_id, appt.get("payment_pay_url"),
+                )
 
     if appt["status"] == "scheduled":
         kb_buttons.append([
