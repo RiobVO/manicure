@@ -17,6 +17,16 @@ async def get_salon_contact() -> str | None:
     return v or None
 
 
+async def get_salon_name() -> str | None:
+    """
+    Название салона для QR-плакатов. None если не задано.
+    Редактируется админом в ⚙ Настройках → «Название салона».
+    """
+    v = await get_setting("salon_name", "")
+    v = (v or "").strip()
+    return v or None
+
+
 async def refund_contact_line() -> str:
     """
     Строка-подсказка клиенту, куда обращаться по вопросу возврата.
