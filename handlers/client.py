@@ -883,7 +883,7 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     when_label = t("book_confirm_when", lang)
     dur_label = t("book_confirm_duration", lang)
     price_label = "to'lovga" if lang == "uz" else "к оплате"
-    wait_line = f"{h(data['name'])}, kutaman." if lang == "uz" else f"{h(data['name'])}, жду тебя."
+    wait_line = f"{h(data['name'])}, sizni kutamiz." if lang == "uz" else f"{h(data['name'])}, жду тебя."
 
     # 1. Hero — АКЦЕНТ на успехе сразу же. Без await delete_message перед ним:
     # три sequential delete_message давали 500-800мс задержки до первого

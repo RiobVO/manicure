@@ -55,9 +55,12 @@ async def _notify_paid(bot: Bot, appt_id: int) -> None:
         logger.warning("_notify_paid: состояние не найдено для appt=%s", appt_id)
         return
     try:
+        from db import get_user_lang
+        from utils.i18n import t
+        client_lang = await get_user_lang(state["user_id"])
         await bot.send_message(
             state["user_id"],
-            "<i>✓ оплата получена.</i>\n<i>жду тебя.</i>",
+            t("pay_received_client", client_lang),
             parse_mode="HTML",
         )
     except Exception as exc:

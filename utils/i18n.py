@@ -275,11 +275,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "pay_btn": {
         "ru": "Оплатить",
-        "uz": "To'lov",
+        "uz": "To'lov qilish",
+    },
+    "review_after_visit_title": {
+        "ru": "💅 <b>Спасибо за визит!</b>\n\n<i>ну как {service}?</i>",
+        "uz": "💅 <b>Tashrifingiz uchun rahmat!</b>\n\n<i>{service} yoqdimi?</i>",
     },
     "pay_received_client": {
         "ru": "<i>✓ оплата получена.</i>\n<i>жду тебя.</i>",
-        "uz": "<i>✓ to'lov qabul qilindi.</i>\n<i>kutamiz.</i>",
+        "uz": "<i>✓ To'lov qabul qilindi.</i>\n<i>Sizni kutamiz.</i>",
     },
     "refund_needed_intro": {
         "ru": "💰 Оплата подлежит возврату.",
