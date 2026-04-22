@@ -387,13 +387,13 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(BookingStates.choose_addons, F.data.startswith("addon_"))
 async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
     """Переключить выбор доп. опции (toggle)."""
+    await callback.answer()  # ранний ack — спиннер уходит сразу
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "addon", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
-        await callback.answer()
         return
     addon_id = int(parts[0])
     data = await state.get_data()
@@ -422,7 +422,6 @@ async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
         )
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
 
 @router.callback_query(BookingStates.choose_addons, F.data == "addons_done")
@@ -503,13 +502,13 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.choose_date, F.data.startswith("date_"))
 async def choose_date(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()  # ранний ack
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "date", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
-        await callback.answer()
         return
     date_str = parts[0]
     data = await state.get_data()
@@ -532,7 +531,6 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
             )
         except TelegramBadRequest:
             pass
-        await callback.answer()
         return
 
     await state.update_data(date=date_str)
@@ -546,18 +544,17 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
     await state.set_state(BookingStates.choose_time)
-    await callback.answer()
 
 
 @router.callback_query(BookingStates.choose_time, F.data.startswith("time_"))
 async def choose_time(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()  # ранний ack
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "time", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
-        await callback.answer()
         return
     time_str = parts[0]
     await state.update_data(time=time_str)
@@ -588,7 +585,6 @@ async def choose_time(callback: CallbackQuery, state: FSMContext):
         except TelegramBadRequest:
             pass
         await state.set_state(BookingStates.get_name)
-    await callback.answer()
 
 
 def _render_summary(data: dict, lang: str) -> str:
@@ -626,6 +622,7 @@ def _render_summary(data: dict, lang: str) -> str:
 
 @router.callback_query(BookingStates.confirm_profile, F.data == "use_saved_profile")
 async def use_saved_profile(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()  # ранний ack
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
@@ -636,7 +633,6 @@ async def use_saved_profile(callback: CallbackQuery, state: FSMContext):
         except TelegramBadRequest:
             pass
         await state.set_state(BookingStates.get_name)
-        await callback.answer()
         return
 
     await state.update_data(name=profile["name"], phone=profile["phone"])
@@ -650,11 +646,11 @@ async def use_saved_profile(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
     await state.set_state(BookingStates.confirm)
-    await callback.answer()
 
 
 @router.callback_query(BookingStates.confirm_profile, F.data == "change_profile")
 async def change_profile(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()  # ранний ack
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
@@ -663,7 +659,6 @@ async def change_profile(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
     await state.set_state(BookingStates.get_name)
-    await callback.answer()
 
 
 _RESERVED_NAMES = frozenset({"записаться", "мои записи"})
@@ -1073,14 +1068,15 @@ async def confirm_text_fallback(message: Message):
 @router.callback_query(F.data == "client_restart")
 async def cb_client_restart(callback: CallbackQuery, state: FSMContext):
     """«выбрать другое» у возвращающегося клиента → обратно к выбору категории."""
+    await callback.answer()  # ранний ack
     await state.clear()
     await _edit_to_category_picker(callback, state)
-    await callback.answer()
 
 
 @router.callback_query(F.data.in_({"cat_hands", "cat_feet"}))
 async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     """Клиент выбрал категорию — показываем услуги в ней с ценами."""
+    await callback.answer()  # ранний ack
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
@@ -1096,7 +1092,6 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
             )
         except TelegramBadRequest:
             pass
-        await callback.answer()
         return
     _remember_services_msg(callback.message.chat.id, callback.message.message_id)
     try:
@@ -1108,15 +1103,14 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
     await state.set_state(BookingStates.choose_service)
-    await callback.answer()
 
 
 @router.callback_query(F.data == "cat_back")
 async def cb_category_back(callback: CallbackQuery, state: FSMContext):
     """«‹ назад» из списка услуг — возвращаемся к выбору категории."""
+    await callback.answer()  # ранний ack
     await state.clear()
     await _edit_to_category_picker(callback, state)
-    await callback.answer()
 
 
 @router.message(F.text.in_({"записаться", "yozilish", "Yozilish", "📅 Записаться", "📅 Yozilish"}))
