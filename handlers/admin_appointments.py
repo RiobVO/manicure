@@ -626,31 +626,25 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
 
     master_id = appt.get("master_id")
 
-    # Проверка выходного дня с учётом мастера
+    # Проверка выходного дня + рабочие часы в один заход.
+    # is_day_off смотрит только blocked_slots, а выходной может быть задан
+    # и через weekly_schedule.work_start=NULL (регулярный выходной).
     if master_id:
-        if await get_day_schedule_for_master(master_id, date_str) is None:
+        day_sched = await get_day_schedule_for_master(master_id, date_str)
+        if day_sched is None:
             await callback.answer("Этот день — выходной или заблокирован.", show_alert=True)
             return
     else:
-        # is_day_off смотрит только blocked_slots, а выходной может быть задан
-        # и через weekly_schedule.work_start=NULL (регулярный выходной). Без
-        # этой второй проверки fallback (9,19) ниже сгенерирует слоты в день,
-        # когда салон не работает → клиент приходит к закрытой двери.
         if await is_day_off(date_str):
             await callback.answer("Этот день заблокирован. Выберите другую дату.", show_alert=True)
             return
-        if await get_day_schedule(date_str) is None:
+        day_sched = await get_day_schedule(date_str)
+        if day_sched is None:
             await callback.answer("Салон не работает в этот день недели.", show_alert=True)
             return
 
-    # Рабочие часы — по мастеру если есть
-    if master_id:
-        day_sched = await get_day_schedule_for_master(master_id, date_str)
-    else:
-        day_sched = await get_day_schedule(date_str)
-    # До двух проверок выше day_sched мог быть None (выходной); теперь — точно не None.
-    # Fallback (9,19) остаётся только на случай пустого weekly_schedule (fresh install).
-    work_start, work_end = day_sched if day_sched else (9, 19)
+    # day_sched гарантированно не-None (выходные отсечены выше).
+    work_start, work_end = day_sched
     slot_step = int((await get_all_settings()).get("slot_step", 30))
 
     booked = await get_booked_times(date_str, master_id)

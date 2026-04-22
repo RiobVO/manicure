@@ -63,6 +63,17 @@
   переустановки без ключа, (в) наняли помощников по установке (своих больше не
   доверяешь в одностороннем порядке).
 
+## Supply chain
+
+- **Hash-pin в requirements.txt (`--require-hashes`).** Сейчас версии
+  прибиты (aiogram, aiosqlite, apscheduler, python-dotenv, openpyxl,
+  redis, cryptography, qrcode), но атака на PyPI через подмену
+  уже опубликованного wheel'а (typosquat или компрометация
+  maintainer'а) не ловится. Триггер: ≥10 платящих тенантов — тогда
+  один компромет в апстриме задевает всех. Решение:
+  `pip-compile --generate-hashes` + `pip install --require-hashes`
+  в Dockerfile. До этого pin по версиям достаточно.
+
 ## Масштабируемое (из senior-upgrade-prompt.md §3)
 
 - **Alembic** — при ~5 платящих тенантах.
