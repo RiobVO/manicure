@@ -417,7 +417,7 @@ async def get_user_appointments_full(user_id: int, limit: int = 30) -> list[dict
                   a.service_duration, a.date, a.time, a.status,
                   a.client_cancelled, a.paid_at, a.payment_provider,
                   a.payment_invoice_id, a.payment_pay_url,
-                  a.master_id, m.name AS master_name
+                  a.master_id, a.phone, m.name AS master_name
            FROM appointments a
            LEFT JOIN masters m ON m.id = a.master_id
            WHERE a.user_id = ?
