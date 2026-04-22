@@ -212,11 +212,13 @@ async def cb_appt_status(callback: CallbackQuery):
     if status == "completed" and appt:
         existing_review = await get_review_by_appointment(appt_id)
         if not existing_review:
+            from db import get_user_lang
+            from utils.i18n import t
+            client_lang = await get_user_lang(appt["user_id"])
             try:
                 await callback.bot.send_message(
                     appt["user_id"],
-                    f"💅 <b>Спасибо за визит!</b>\n\n"
-                    f"<i>ну как {h(appt['service_name'].lower())}?</i>",
+                    t("review_after_visit_title", client_lang, service=h(appt['service_name'].lower())),
                     reply_markup=review_rating_keyboard(appt_id),
                     parse_mode="HTML",
                 )
