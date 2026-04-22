@@ -247,11 +247,27 @@ async def cmd_start(message: Message, state: FSMContext):
         await show_master_cabinet_entry(message, state)
         return
 
-    # Показать reply-клавиатуру тихо (невидимый разделитель — иначе сообщение нельзя отправить)
-    await message.answer("\u2063", reply_markup=client_reply_keyboard())
-
-    # Проверить: возвращается клиент или новый
+    # Phase 3 v.4: если клиент в первый раз (нет заполненного профиля) —
+    # показываем переключатель языка ДО приветствия. После выбора колбэк
+    # `lang_set_*` сохранит lang в профиль и запустит обычный флоу.
+    from db import get_user_lang
     profile = await get_client_profile(message.from_user.id)
+    has_filled_profile = profile and (profile.get("name") or profile.get("phone"))
+    if not has_filled_profile:
+        from utils.i18n import t, Lang
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text=t("lang_btn_ru"), callback_data="lang_set_ru"),
+                InlineKeyboardButton(text=t("lang_btn_uz"), callback_data="lang_set_uz"),
+            ],
+        ])
+        await message.answer(t("lang_picker_prompt"), reply_markup=kb, parse_mode="HTML")
+        return
+
+    # Уже знакомый клиент — берём его язык, показываем reply-клаву и идём дальше.
+    lang = await get_user_lang(message.from_user.id)
+    await message.answer("\u2063", reply_markup=client_reply_keyboard(lang))
+
     last_appts = await get_client_appointments(message.from_user.id) if profile else []
     last_completed = next((a for a in last_appts if a["status"] == "completed"), None)
 
@@ -954,7 +970,7 @@ async def get_phone_wrong(message: Message):
     )
 
 
-@router.message(BookingStates.confirm, F.text.in_({"записаться", "/start"}))
+@router.message(BookingStates.confirm, F.text.in_({"записаться", "yozilish", "/start"}))
 async def confirm_escape_to_booking(message: Message, state: FSMContext):
     """
     Escape-hatch для клиентов, у которых FSM залип в BookingStates.confirm
@@ -1022,7 +1038,7 @@ async def cb_category_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(F.text == "записаться")
+@router.message(F.text.in_({"записаться", "yozilish"}))
 async def btn_book(message: Message, state: FSMContext):
     """Кнопка reply-клавиатуры — сбрасывает FSM и ведёт на выбор категории."""
     await state.clear()
@@ -1035,6 +1051,60 @@ async def btn_book(message: Message, state: FSMContext):
     await _cleanup_services_msg(message.bot, message.chat.id)
 
     await _send_category_picker(message, state)
+
+
+# ─── ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА (Phase 3 v.4) ──────────────────────────────────────
+
+@router.callback_query(F.data.in_({"lang_set_ru", "lang_set_uz"}))
+async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
+    """Сохранить выбор языка клиента + запустить обычный /start-флоу."""
+    from db import set_user_lang, get_client_profile, get_client_appointments
+    from utils.i18n import t, Lang
+    lang = Lang.UZ if callback.data == "lang_set_uz" else Lang.RU
+    await set_user_lang(callback.from_user.id, lang)
+
+    # Подтверждение + reply-клава на выбранном языке.
+    try:
+        await callback.message.edit_text(t("lang_changed", lang), parse_mode="HTML")
+    except TelegramBadRequest:
+        pass
+    await callback.answer()
+
+    await callback.message.answer(
+        "\u2063", reply_markup=client_reply_keyboard(lang)
+    )
+    await asyncio.sleep(0.3)
+
+    # Продолжение обычного /start для нового клиента — hero + категории.
+    # Полный текст приветствия пока на ru (будет переведён в чекпоинте 2).
+    profile = await get_client_profile(callback.from_user.id)
+    last_appts = await get_client_appointments(callback.from_user.id) if profile else []
+    last_completed = next((a for a in last_appts if a["status"] == "completed"), None)
+    if profile and last_completed:
+        # Возвращающийся клиент — не должен был сюда попасть, но safety.
+        return
+
+    await callback.message.answer(greeting_new(), parse_mode="HTML")
+    await asyncio.sleep(0.4)
+    await _send_category_picker(callback.message, state)
+
+
+@router.message(F.text == "🌐 Язык / Til")
+async def btn_change_lang(message: Message, state: FSMContext):
+    """Клиент хочет сменить язык из reply-меню."""
+    await state.clear()
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+    from utils.i18n import t
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=t("lang_btn_ru"), callback_data="lang_set_ru"),
+            InlineKeyboardButton(text=t("lang_btn_uz"), callback_data="lang_set_uz"),
+        ],
+    ])
+    await message.answer(t("lang_picker_prompt"), reply_markup=kb, parse_mode="HTML")
 
 
 @router.callback_query(F.data.regexp(r"^quick_rebook_(\d+)$"))
