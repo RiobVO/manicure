@@ -110,17 +110,24 @@ async def get_appointment_by_id(appointment_id: int) -> dict[str, Any] | None:
 
 async def update_appointment_status(appointment_id: int, status: str) -> None:
     db = await get_db()
-    if status == "cancelled":
-        await db.execute(
-            "UPDATE appointments SET status = ?, confirmed = 0 WHERE id = ?",
-            (status, appointment_id)
-        )
-    else:
-        await db.execute(
-            "UPDATE appointments SET status = ? WHERE id = ?",
-            (status, appointment_id)
-        )
-    await db.commit()
+    lock = await get_write_lock()
+    async with lock:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            if status == "cancelled":
+                await db.execute(
+                    "UPDATE appointments SET status = ?, confirmed = 0 WHERE id = ?",
+                    (status, appointment_id)
+                )
+            else:
+                await db.execute(
+                    "UPDATE appointments SET status = ? WHERE id = ?",
+                    (status, appointment_id)
+                )
+            await db.execute("COMMIT")
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
 
 
 async def reschedule_appointment(
@@ -295,22 +302,33 @@ async def cancel_appointment_by_client(
     """
     Клиент отменяет свою запись.
     Возвращает True если успешно, False если запись не найдена/не принадлежит клиенту.
+    SELECT+UPDATE внутри BEGIN IMMEDIATE под write_lock — без этого
+    параллельный UPDATE (напр. админский reschedule) мог пройти между
+    нашими SELECT и UPDATE, и мы бы «отменили» уже переехавшую запись.
     """
     db = await get_db()
-    cursor = await db.execute(
-        "SELECT id, status FROM appointments WHERE id = ? AND user_id = ? AND status = 'scheduled'",
-        (appointment_id, user_id)
-    )
-    row = await cursor.fetchone()
-    if not row:
-        return False
+    lock = await get_write_lock()
+    async with lock:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            cursor = await db.execute(
+                "SELECT id, status FROM appointments WHERE id = ? AND user_id = ? AND status = 'scheduled'",
+                (appointment_id, user_id)
+            )
+            row = await cursor.fetchone()
+            if not row:
+                await db.execute("ROLLBACK")
+                return False
 
-    await db.execute(
-        "UPDATE appointments SET status = 'cancelled', confirmed = 0, client_cancelled = 1, cancel_reason = ? WHERE id = ?",
-        (reason, appointment_id)
-    )
-    await db.commit()
-    return True
+            await db.execute(
+                "UPDATE appointments SET status = 'cancelled', confirmed = 0, client_cancelled = 1, cancel_reason = ? WHERE id = ?",
+                (reason, appointment_id)
+            )
+            await db.execute("COMMIT")
+            return True
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
 
 
 async def get_all_future_appointments() -> list[dict[str, Any]]:
@@ -502,22 +520,33 @@ async def get_user_appointments_full(user_id: int, limit: int = 30) -> list[dict
 
 
 async def save_appointment_addons(appointment_id: int, addon_ids: list[int]) -> None:
-    """Сохраняет выбранные аддоны с текущими ценами из service_addons."""
+    """Сохраняет выбранные аддоны с текущими ценами из service_addons.
+    Весь блок (SELECT цен + INSERT аддонов) внутри одной транзакции, иначе
+    админ может поменять цену аддона между нашими SELECT и INSERT, а также
+    параллельный commit() сфлашит наш первый INSERT без второго.
+    """
     if not addon_ids:
         return
     db = await get_db()
-    for addon_id in addon_ids:
-        # Берём актуальную цену аддона на момент записи
-        cursor = await db.execute(
-            "SELECT price FROM service_addons WHERE id = ? AND is_active = 1",
-            (addon_id,),
-        )
-        row = await cursor.fetchone()
-        if row is None:
-            continue
-        price = row[0]
-        await db.execute(
-            "INSERT OR IGNORE INTO appointment_addons (appointment_id, addon_id, price) VALUES (?, ?, ?)",
-            (appointment_id, addon_id, price),
-        )
-    await db.commit()
+    lock = await get_write_lock()
+    async with lock:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            for addon_id in addon_ids:
+                # Берём актуальную цену аддона на момент записи
+                cursor = await db.execute(
+                    "SELECT price FROM service_addons WHERE id = ? AND is_active = 1",
+                    (addon_id,),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    continue
+                price = row[0]
+                await db.execute(
+                    "INSERT OR IGNORE INTO appointment_addons (appointment_id, addon_id, price) VALUES (?, ?, ?)",
+                    (appointment_id, addon_id, price),
+                )
+            await db.execute("COMMIT")
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
