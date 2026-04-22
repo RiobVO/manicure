@@ -677,7 +677,10 @@ async def change_profile(callback: CallbackQuery, state: FSMContext):
 _RESERVED_NAMES = frozenset({"записаться", "мои записи"})
 
 
-_RESERVED_NAMES_UZ = frozenset({"yozilish", "mening yozilishlarim"})
+_RESERVED_NAMES_UZ = frozenset({
+    "yozilish", "mening yozilishlarim",
+    "Yozilish".lower(), "Mening yozuvlarim".lower(),
+})
 
 
 @router.message(BookingStates.get_name)
@@ -1020,7 +1023,7 @@ async def get_phone_wrong(message: Message):
     )
 
 
-@router.message(BookingStates.confirm, F.text.in_({"записаться", "yozilish", "/start"}))
+@router.message(BookingStates.confirm, F.text.in_({"записаться", "yozilish", "Yozilish", "/start"}))
 async def confirm_escape_to_booking(message: Message, state: FSMContext):
     """
     Escape-hatch для клиентов, у которых FSM залип в BookingStates.confirm
@@ -1093,7 +1096,7 @@ async def cb_category_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(F.text.in_({"записаться", "yozilish"}))
+@router.message(F.text.in_({"записаться", "yozilish", "Yozilish"}))
 async def btn_book(message: Message, state: FSMContext):
     """Кнопка reply-клавиатуры — сбрасывает FSM и ведёт на выбор категории."""
     await state.clear()

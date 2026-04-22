@@ -99,11 +99,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "book_category_prompt": {
         "ru": "<i>ручки или ножки?</i>",
-        "uz": "<i>qo'lmi yoki oyoqmi?</i>",
+        "uz": "<i>Qo'llarmi yoki oyoqlar?</i>",
     },
     "book_services_prompt": {
         "ru": "<i>что красим?</i>",
-        "uz": "<i>nimani bo'yaymiz?</i>",
+        "uz": "<i>Qanday xizmatni tanlaymiz?</i>",
     },
     "book_master_prompt": {
         "ru": "<i>кто тебя принимает?</i>",
@@ -159,12 +159,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "book_confirm_header": {
         "ru": "<b><i>всё верно?</i></b>",
-        "uz": "<b><i>hammasi to'g'rimi?</i></b>",
+        "uz": "<b><i>Ma'lumotlar to'g'rimi?</i></b>",
     },
-    "book_confirm_when": {"ru": "когда", "uz": "qachon"},
-    "book_confirm_price": {"ru": "стоимость", "uz": "narxi"},
-    "book_confirm_duration": {"ru": "длительность", "uz": "davomiyligi"},
-    "book_confirm_master": {"ru": "мастер", "uz": "usta"},
+    "book_confirm_when": {"ru": "когда", "uz": "Sana va vaqt"},
+    "book_confirm_price": {"ru": "стоимость", "uz": "Xizmat narxi"},
+    "book_confirm_duration": {"ru": "длительность", "uz": "Davomiyligi"},
+    "book_confirm_master": {"ru": "мастер", "uz": "Usta"},
     "book_service_unavailable": {
         "ru": "услуга недоступна. начни заново: /start",
         "uz": "xizmat mavjud emas. qayta boshlang: /start",
