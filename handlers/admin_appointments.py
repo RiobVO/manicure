@@ -100,9 +100,9 @@ async def _build_day_view(date_str: str) -> tuple[str, object]:
 
 async def show_day_view(callback: CallbackQuery, date_str: str) -> None:
     """Дневной вид — редактирует панель или создаёт новую."""
+    await callback.answer()  # ранний ack — убирает спиннер сразу
     text, markup = await _build_day_view(date_str)
     await edit_panel_with_callback(callback, text, markup)
-    await callback.answer()
 
 
 # ─── СЕГОДНЯ / ЗАВТРА ────────────────────────────────────────────────────────
@@ -132,13 +132,13 @@ async def cb_admin_cal(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()  # ранний ack
     now = now_local()
     await edit_panel(
         callback.bot, callback.message.chat.id,
         "🗓 Выберите дату:",
         calendar_keyboard(now.year, now.month),
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("cal_prev_"))
