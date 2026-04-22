@@ -28,6 +28,7 @@ from db.appointments import (
     get_stats_by_master,
     get_appointments_for_export,
     get_user_appointments_page,
+    get_user_appointments_full,
     count_user_appointments,
     save_appointment_addons,
 )
