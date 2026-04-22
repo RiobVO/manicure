@@ -46,6 +46,21 @@ def main() -> None:
         )
         sys.exit(1)
 
+    # Warning если ключ лежит в директории проекта (значит есть риск утечки
+    # через архив/git/облако). Правильное место — ~/.config/manicure/ или
+    # password manager. В .gitignore он есть, но не защитит от `tar -czf`
+    # или «скинь мне проект в Telegram» (аудит 2026-04-22).
+    resolved = PRIVATE_KEY_PATH.resolve()
+    try:
+        resolved.relative_to(Path.cwd().resolve())
+        sys.stderr.write(
+            "⚠ ВНИМАНИЕ: приватный ключ лежит в директории проекта.\n"
+            "  Рекомендуется перенести в ~/.config/manicure/license_private_key.pem\n"
+            "  или password manager. Случайный tar/zip выгрузит ключ наружу.\n\n"
+        )
+    except ValueError:
+        pass  # ключ снаружи проекта — то что нужно
+
     priv = load_pem_private_key(PRIVATE_KEY_PATH.read_bytes(), password=None)
     if not isinstance(priv, Ed25519PrivateKey):
         sys.stderr.write("Приватный ключ не Ed25519 — использовал не тот генератор?\n")
