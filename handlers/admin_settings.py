@@ -138,9 +138,8 @@ async def cb_settings_edit_contact(callback: CallbackQuery, state: FSMContext):
             f"Макс. длина — {_CONTACT_MAX_LEN} символов."
         ),
         admin_cancel_keyboard(),
+        parse_mode="HTML",
     )
-    # parse_mode нужно явно через edit_panel_with_callback? Проверю — но utils.panel
-    # по дефолту отправляет HTML, см. edit_panel реализацию.
     await state.set_state(AdminStates.settings_edit_contact)
     await callback.answer()
 
@@ -198,6 +197,7 @@ async def cb_settings_edit_name(callback: CallbackQuery, state: FSMContext):
             f"Макс. длина — {_SALON_NAME_MAX_LEN} символов."
         ),
         admin_cancel_keyboard(),
+        parse_mode="HTML",
     )
     await state.set_state(AdminStates.settings_edit_name)
     await callback.answer()
