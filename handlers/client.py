@@ -998,10 +998,14 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
             except Exception:
                 logger.exception("не смог доставить ссылку на оплату appt=%s", appt_id)
         else:
-            logger.warning(
-                "pay link не показан: provider=%s pay_url=%s legacy=%s",
-                (provider.name if provider else None), pay_url, bool(PAYMENT_URL),
-            )
+            # Warning только если провайдер должен был сработать и не смог.
+            # PAYMENT_PROVIDER=none + legacy PAYMENT_URL пуст — сознательная
+            # конфигурация (оплата на месте), логгировать нечего.
+            if provider is not None or PAYMENT_URL:
+                logger.warning(
+                    "pay link не показан: provider=%s pay_url=%s legacy=%s",
+                    (provider.name if provider else None), pay_url, bool(PAYMENT_URL),
+                )
 
     _pay_task = asyncio.create_task(_bg_send_pay_link())
     _bg_tasks.add(_pay_task)
