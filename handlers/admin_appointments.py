@@ -214,6 +214,19 @@ async def cb_appt_status(callback: CallbackQuery):
     appt_id = int(parts[0])
     status = parts[1]
 
+    # Whitelist: status = parts[1] приходит из callback_data, т.е. фактически
+    # строка произвольной длины. Параметризация SQL спасает от инъекции, но
+    # не от порчи модели: status='banana' → запись выпадает из всех SELECT-
+    # фильтров (scheduled/!=cancelled), остаётся висящей в БД.
+    _ALLOWED_STATUSES = frozenset({"scheduled", "completed", "no_show", "cancelled"})
+    if status not in _ALLOWED_STATUSES:
+        logger.warning(
+            "cb_appt_status: bad status=%r from admin=%s appt=%s",
+            status, callback.from_user.id, appt_id,
+        )
+        await callback.answer()
+        return
+
     appt = await get_appointment_by_id(appt_id)
     await update_appointment_status(appt_id, status)
 

@@ -77,3 +77,56 @@
 - **Реальный Click end-to-end тест.** Сейчас только моком. Фикс невозможен
   в коде — нужен реальный merchant-аккаунт и тестовый платёж. Триггер:
   получил доступ к Click production API.
+
+## Из аудита 2026-04-22
+
+- **Rate-limit webhook за reverse-proxy.** `request.remote` после Caddy/nginx
+  всегда будет 127.0.0.1 — все провайдеры будут шарить один bucket, легитимные
+  Click/Payme могут получить 429. Плюс утечка памяти: `_rate_log` не удаляет
+  пустые ключи IP. Фикс: читать `X-Forwarded-For`, очищать пустые deque.
+  Триггер: ставим Caddy/nginx перед ботом или используем webhook-tunnel
+  с shared-IP. Сейчас docker биндится напрямую — `request.remote` = реальный IP
+  провайдера, не ломается.
+
+- **`asyncio.timeout(1.5)` вокруг `BEGIN IMMEDIATE`.** Зависший `await` под
+  write-lock сейчас замораживает весь бот: все записи встают в очередь одного
+  lock'а. Timeout даст бизнес-ошибку вместо вечной очереди. Триггер: первый
+  инцидент с «бот завис на минуту» в проде.
+
+- **Refactor `handlers/client.py`** (1279 строк). `_do_confirm` ≈260 строк +
+  4 вложенных `_bg_*` closure — нечитаемо. Вынести: booking-finalize
+  в `services/booking.py`, рендер summary в `utils/ui.py::render_booking_summary`,
+  закрытия в `utils/notifications.py::notify_new_booking`. Триггер: следующий
+  баг в booking-flow, где понадобится менять `_do_confirm`.
+
+- **i18n labels helper.** Сейчас `if lang == "uz"` размазан в 5 местах
+  (`_render_summary`, `_do_confirm`, `client_history`, `scheduler._send_*h_reminder`).
+  Добавить `utils/i18n.py::labels(lang) -> dict` с ключами `service_label`,
+  `master_label` и т.д. Триггер: первое добавление языка помимо ru/uz.
+
+- **Overlap-SQL builder.** 4 почти идентичных SQL-фрагмента в
+  `db/appointments.py` (`create_appointment` и `reschedule_appointment` ×
+  master/no-master). Вынести `_count_overlaps(date, time, duration, master_id,
+  exclude_id) -> int`. Триггер: следующий багфикс overlap-формулы —
+  чтобы не править в 4 местах и не расходиться.
+
+- **`:` разделитель вместо `_` в callback-data.** `parse_callback` хрупок
+  на префиксах с `_` (коды траффика `story_apr20` уже содержат). Триггер:
+  первый случай, когда whitelist отказал корректному коду.
+
+- **Системный HTML-escape.** Ручной `h()` в каждом f-string — забытый `h`
+  = BadRequest, которое глотается в `except`. Переход на
+  `Bot(default=DefaultBotProperties(parse_mode="HTML"))` + единая
+  `safe_format()` — большой рефакторинг. Триггер: перед добавлением 3-го
+  языка или после первой молчаливой потери сообщения в проде.
+
+- **TTL у `_confirm_in_progress`.** Если `_do_confirm` упадёт до `finally`,
+  user_id залипнет в set — новый /start не поможет. Сейчас try/finally
+  защищает, но defence-in-depth: хранить `time.monotonic()` и чистить
+  старше 30 сек. Триггер: первая жалоба «бот не реагирует на записаться»
+  без видимых ошибок в логах.
+
+- **Модульный state → Redis.** `_client_services_msg`, `_bg_tasks`,
+  `_db_admins_cache`, `_panel_msg_ids`, `_rate_log`, `_last_error` — всё
+  в памяти процесса. Триггер: миграция на 2+ worker (вероятно — никогда
+  в рамках one-tenant-one-VPS).
