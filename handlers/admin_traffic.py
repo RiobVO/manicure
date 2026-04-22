@@ -111,10 +111,8 @@ async def msg_traffic_entry(message: Message, state: FSMContext):
     быстро засоряется.
     """
     await state.clear()
-    try:
-        await message.delete()
-    except Exception:
-        pass
+    from utils.panel import delete_in_bg
+    delete_in_bg(message)
     stats = await aggregate_by_source()
     await edit_panel(
         message.bot, message.chat.id,
