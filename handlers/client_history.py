@@ -29,7 +29,6 @@ from aiogram.types import (
 
 from constants import MONTHS_RU, WEEKDAYS_SHORT_RU
 from db import (
-    count_user_appointments,
     get_user_appointments_full,
     get_appointment_by_id,
     cancel_appointment_by_client,
@@ -135,13 +134,17 @@ def _split_upcoming_past(appts: list[dict]) -> tuple[list[dict], list[dict]]:
     return upcoming, past
 
 
-async def _render_history_b_style(user_id: int, lang: str) -> tuple[str, InlineKeyboardMarkup]:
+async def _render_history_b_style(
+    appts: list[dict], lang: str,
+) -> tuple[str, InlineKeyboardMarkup]:
     """
     B-стиль «Мои записи»: ближайшая карточкой + ещё предстоящие + история.
     Возвращает (text, keyboard). Keyboard строится динамически в зависимости
     от наличия ближайшей записи и последней завершённой.
+
+    Принимает готовый список записей, не делает SELECT — caller решает
+    что делать с пустым списком (шапка vs список).
     """
-    appts = await get_user_appointments_full(user_id, limit=_FETCH_LIMIT)
     upcoming, past = _split_upcoming_past(appts)
 
     nearest = upcoming[0] if upcoming else None
@@ -215,8 +218,7 @@ async def _render_history_b_style(user_id: int, lang: str) -> tuple[str, InlineK
             lines.append("")
             lines.append(more_uz if lang == "uz" else more_ru)
 
-    # Совсем пусто — но сюда по идее не приходим: cb_my_appointments
-    # отсекает через count_user_appointments.
+    # Совсем пусто — но сюда по идее не приходим: caller отсекает до вызова.
     if not nearest and not rest_upcoming and not past_shown:
         return t("history_empty", lang), InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(
@@ -269,10 +271,13 @@ async def cb_noop(callback: CallbackQuery):
 @router.callback_query(F.data == "client_my_appointments")
 async def cb_my_appointments(callback: CallbackQuery, state: FSMContext):
     """Показать записи клиента (B-стиль: ближайшая + ещё + история)."""
+    await callback.answer()  # ранний ack
     await state.clear()
     lang = await get_user_lang(callback.from_user.id)
-    total = await count_user_appointments(callback.from_user.id)
-    if total == 0:
+
+    # Один SELECT вместо count+fetch: второй знает len(appts) сам.
+    appts = await get_user_appointments_full(callback.from_user.id, limit=_FETCH_LIMIT)
+    if not appts:
         book_btn = t("btn_book", lang)
         try:
             await callback.message.edit_text(
@@ -284,15 +289,13 @@ async def cb_my_appointments(callback: CallbackQuery, state: FSMContext):
             )
         except TelegramBadRequest:
             pass
-        await callback.answer()
         return
 
-    text, kb = await _render_history_b_style(callback.from_user.id, lang)
+    text, kb = await _render_history_b_style(appts, lang)
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("history_page_"))
@@ -302,13 +305,14 @@ async def on_history_page(callback: CallbackQuery):
     — пагинация больше не используется. Оставлено на случай если старые
     сообщения у клиента ещё висят в чате и он по ним тапнет.
     """
+    await callback.answer()  # ранний ack
     lang = await get_user_lang(callback.from_user.id)
-    text, kb = await _render_history_b_style(callback.from_user.id, lang)
+    appts = await get_user_appointments_full(callback.from_user.id, limit=_FETCH_LIMIT)
+    text, kb = await _render_history_b_style(appts, lang)
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
 
 @router.callback_query(F.data.regexp(r"^my_appt_(\d+)$"))
@@ -580,8 +584,10 @@ async def btn_my_appointments(message: Message, state: FSMContext):
     """Кнопка reply-клавиатуры — сбрасывает FSM и показывает записи клиента (B-стиль)."""
     await state.clear()
     lang = await get_user_lang(message.from_user.id)
-    total = await count_user_appointments(message.from_user.id)
-    if total == 0:
+
+    # Один SELECT вместо count+fetch — fetch сам знает len(appts).
+    appts = await get_user_appointments_full(message.from_user.id, limit=_FETCH_LIMIT)
+    if not appts:
         book_btn = t("btn_book", lang)
         await message.answer(
             t("history_empty", lang),
@@ -592,5 +598,5 @@ async def btn_my_appointments(message: Message, state: FSMContext):
         )
         return
 
-    text, kb = await _render_history_b_style(message.from_user.id, lang)
+    text, kb = await _render_history_b_style(appts, lang)
     await message.answer(text, reply_markup=kb, parse_mode="HTML")
