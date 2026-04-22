@@ -96,6 +96,12 @@ async def set_client_source_if_empty(user_id: int, code: str) -> bool:
     не нужен — мы сделали INSERT с пустыми полями, а последующий
     INSERT OR REPLACE перетрёт source. Чтобы этого не было — save_client_profile
     обновлён через UPDATE, см. db/clients.py.
+
+    Race: без BEGIN IMMEDIATE два параллельных /start <code> от одного
+    user_id ловили оба row=None и падали на PRIMARY KEY с IntegrityError.
+    INSERT OR IGNORE делает INSERT безопасным: если профиль уже есть
+    после нашей проверки — ничего не вставим, source допишем через UPDATE
+    (который всё равно стоит в if-row[0]-пустой ветке).
     """
     db = await get_db()
     cursor = await db.execute(
@@ -103,12 +109,20 @@ async def set_client_source_if_empty(user_id: int, code: str) -> bool:
     )
     row = await cursor.fetchone()
     if row is None:
-        # Профиля ещё нет — создаём заглушку с source, name/phone пустые.
-        # save_client_profile позже заполнит name/phone через UPDATE.
+        # INSERT OR IGNORE — конкурентный /start с той же ссылкой не упадёт
+        # на PRIMARY KEY. Если другой корутин уже вставил — наш INSERT тихо
+        # пропустится, а source либо уже записан им, либо пуст (тогда UPDATE
+        # ниже дозапишет).
         await db.execute(
-            "INSERT INTO client_profiles (user_id, name, phone, source) "
+            "INSERT OR IGNORE INTO client_profiles (user_id, name, phone, source) "
             "VALUES (?, '', '', ?)",
             (user_id, code),
+        )
+        # Если параллельная вставка победила и source там пуст — допишем.
+        await db.execute(
+            "UPDATE client_profiles SET source = ? "
+            "WHERE user_id = ? AND (source IS NULL OR source = '')",
+            (code, user_id),
         )
         await db.commit()
         return True
@@ -116,7 +130,8 @@ async def set_client_source_if_empty(user_id: int, code: str) -> bool:
         # Уже атрибутирован — не переписываем.
         return False
     await db.execute(
-        "UPDATE client_profiles SET source = ? WHERE user_id = ?",
+        "UPDATE client_profiles SET source = ? WHERE user_id = ? "
+        "AND (source IS NULL OR source = '')",
         (code, user_id),
     )
     await db.commit()
