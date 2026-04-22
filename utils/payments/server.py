@@ -54,6 +54,24 @@ async def _notify_paid(bot: Bot, appt_id: int) -> None:
     if not state:
         logger.warning("_notify_paid: состояние не найдено для appt=%s", appt_id)
         return
+
+    # Удаляем старое pay-сообщение («💳 ссылка на оплату» с url-кнопкой).
+    # Telegram не даёт убрать url-кнопку постфактум — только удалить всё
+    # сообщение. Без этого клиент может тапнуть старую кнопку и Click
+    # спишет повторно (Payme защищён на CheckPerformTransaction).
+    pay_msg_id = state.get("payment_message_id")
+    if pay_msg_id:
+        try:
+            await bot.delete_message(
+                chat_id=state["user_id"], message_id=pay_msg_id,
+            )
+        except Exception as exc:
+            # 48 часов на delete — дальше Telegram не даёт. Не критично.
+            logger.debug(
+                "не удалил pay-сообщение appt=%s msg=%s: %s",
+                appt_id, pay_msg_id, exc,
+            )
+
     try:
         from db import get_user_lang
         from utils.i18n import t
@@ -132,6 +150,17 @@ async def _click_handler(request: web.Request) -> web.Response:
             "merchant_trans_id": appt_id_str,
             "error": -9,
             "error_note": "Transaction cancelled",
+        })
+    if status == "duplicate":
+        # Клиент тапнул старую pay-ссылку после оплаты (или наш delete_message
+        # не успел сработать). Defence-in-depth: -4 заставит Click откатить
+        # повторное списание. Payme защищён раньше (CheckPerformTransaction
+        # видит paid_at и отвечает -31008).
+        return web.json_response({
+            "click_trans_id": 0,
+            "merchant_trans_id": appt_id_str,
+            "error": -4,
+            "error_note": "Already paid",
         })
     return web.json_response({
         "click_trans_id": 0,  # настоящий id не нужен Click'у в ответе

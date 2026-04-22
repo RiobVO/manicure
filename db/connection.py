@@ -424,6 +424,23 @@ async def init_db() -> None:
                 logger.exception("Миграция v5→v6 упала на ALTER client_profiles")
         await db.execute("PRAGMA user_version = 6")
 
+    # v6 → v7: payment_message_id для pay-сообщения в чате клиента.
+    # После подтверждения записи бот шлёт отдельное сообщение «💳 ссылка на
+    # оплату» с URL-кнопкой. Telegram не даёт «убить» url-кнопку постфактум,
+    # а само сообщение остаётся в истории чата — если не удалить после
+    # успешной оплаты, клиент случайно тапнет ещё раз и Click спишет деньги
+    # повторно (Payme защищён на уровне CheckPerformTransaction, Click — нет).
+    # Сохраняем msg_id → после paid_at удаляем сообщение через bot.delete_message.
+    if current_version < 7:
+        try:
+            await db.execute(
+                "ALTER TABLE appointments ADD COLUMN payment_message_id INTEGER"
+            )
+        except aiosqlite.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                logger.exception("Миграция v6→v7 упала на ALTER appointments")
+        await db.execute("PRAGMA user_version = 7")
+
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
     cursor_m = await db.execute("SELECT COUNT(*) FROM masters")

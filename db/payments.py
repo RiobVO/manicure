@@ -189,14 +189,37 @@ async def get_payment_state(appt_id: int) -> dict[str, Any] | None:
 
     status нужен payme.verify_and_parse, чтобы отказать на CheckPerformTransaction
     для отменённых записей — иначе Payme разрешит оплату в никуда.
+    payment_message_id — чтобы удалить pay-сообщение после оплаты (иначе
+    клиент тапнет старую кнопку второй раз и Click спишет повторно).
     """
     db = await get_db()
     cursor = await db.execute(
         "SELECT paid_at, payment_provider, payment_invoice_id, payment_pay_url, "
-        "       service_price, user_id, name, service_name, date, time, status "
+        "       service_price, user_id, name, service_name, date, time, status, "
+        "       payment_message_id "
         "FROM appointments WHERE id = ?",
         (appt_id,),
     )
     cursor.row_factory = aiosqlite.Row
     row = await cursor.fetchone()
     return dict(row) if row else None
+
+
+async def save_pay_message_id(appt_id: int, message_id: int) -> None:
+    """
+    Запомнить message_id сообщения «💳 ссылка на оплату» чтобы удалить его
+    после успешной оплаты. Не транзакция — одиночный UPDATE, ошибка не должна
+    валить основной booking-flow (лучше дубль-оплата, чем упавший confirm).
+    """
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE appointments SET payment_message_id = ? WHERE id = ?",
+            (message_id, appt_id),
+        )
+        await db.commit()
+    except Exception:
+        logger.warning(
+            "не сохранил payment_message_id appt=%s msg=%s", appt_id, message_id,
+            exc_info=True,
+        )
