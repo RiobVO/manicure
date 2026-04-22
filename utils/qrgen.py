@@ -2,8 +2,15 @@
 Генерация QR-картинок для печати на ресепшене (Phase 2 v.4).
 
 Требование из спеки: A5, читается с ~1 метра на трёх разных телефонах.
-Достигается error_correction=H (30% избыточности) + box_size=10 и рамкой
-из салонного названия и подписи под QR.
+Достигается error_correction=H (30% избыточности) + box_size=10.
+
+Макет плаката:
+    [salon_name — мелко, если задан]
+    [source_label — крупно]
+       ▓▓▓▓▓▓▓▓▓▓▓▓▓
+       ▓    QR     ▓
+       ▓▓▓▓▓▓▓▓▓▓▓▓▓
+    [отсканируй — запишись]
 
 Возвращаем PNG-bytes через BytesIO — хендлер оборачивает в BufferedInputFile
 без записи на диск.
@@ -16,17 +23,18 @@ from io import BytesIO
 _FG = (17, 17, 17)
 _BG = (255, 255, 255)
 
-# Высота подписей под QR (в пикселях). Итоговая картинка — QR + top_label + bottom_label.
-_LABEL_TOP_H = 70
-_LABEL_BOTTOM_H = 90
+# Макетные константы (в пикселях).
 _PADDING = 40
+_SALON_NAME_H = 40      # мелкая строка сверху (убирается если salon_name пуст)
+_SOURCE_LABEL_H = 70    # крупная строка — label источника
+_BOTTOM_CAPTION_H = 70  # «отсканируй — запишись»
 
 
 def _load_font(size: int):
     """
-    Пробуем DejaVu (есть в python:slim docker-образе), откатываемся на default.
-    Default ImageFont у Pillow очень мелкий — поэтому DejaVu желателен,
-    но не блокер.
+    Пробуем DejaVu (добавлен в Dockerfile пакетом fonts-dejavu-core),
+    откатываемся на default. Default ImageFont у Pillow — только
+    латиница, кириллица рендерится квадратиками.
     """
     from PIL import ImageFont
     for path in (
@@ -41,22 +49,28 @@ def _load_font(size: int):
     return ImageFont.load_default()
 
 
-def generate_qr(url: str, salon_name: str, bottom_caption: str = "отсканируй — запишись") -> bytes:
+def generate_qr(
+    url: str,
+    source_label: str,
+    salon_name: str | None = None,
+    bottom_caption: str = "отсканируй — запишись",
+) -> bytes:
     """
-    Отрисовать QR + два текста (сверху salon_name, снизу инструкция).
+    Отрисовать QR-плакат.
 
     Args:
-        url: полный deep-link, который закодируется (t.me/<bot>?start=<code>).
-        salon_name: заголовок над QR (обычно название салона).
+        url: deep-link для кодирования (t.me/<bot>?start=<code>).
+        source_label: крупный заголовок над QR — label источника
+            («Зеркало», «Instagram bio»). Печатается на плакате, чтобы
+            владелец не запутался где какой QR висит.
+        salon_name: мелкая строка над source_label. None → не рисуем.
         bottom_caption: инструкция под QR. По умолчанию — как в спеке.
 
     Returns:
         PNG в bytes. Вызывающий оборачивает в BufferedInputFile.
     """
     # Lazy-импорт: qrcode/PIL — внешние зависимости, нужны только на
-    # рендеринге. Модуль должен грузиться даже когда пакет не установлен
-    # (например в тестовом .venv без pip install). Админ увидит понятную
-    # ошибку только при нажатии «QR», бот не падает.
+    # рендеринге. Модуль должен грузиться даже когда пакет не установлен.
     import qrcode
     from PIL import Image, ImageDraw
     from qrcode.constants import ERROR_CORRECT_H
@@ -72,23 +86,31 @@ def generate_qr(url: str, salon_name: str, bottom_caption: str = "отскани
     qr_img = qr.make_image(fill_color=_FG, back_color=_BG).convert("RGB")
     qr_w, qr_h = qr_img.size
 
-    # Итоговый холст: вертикальный sandwich с подписями.
+    show_salon = bool(salon_name and salon_name.strip())
+    top_total_h = (_SALON_NAME_H if show_salon else 0) + _SOURCE_LABEL_H
+
     canvas_w = qr_w + _PADDING * 2
-    canvas_h = _LABEL_TOP_H + qr_h + _LABEL_BOTTOM_H + _PADDING * 2
+    canvas_h = _PADDING + top_total_h + qr_h + _BOTTOM_CAPTION_H + _PADDING
     canvas = Image.new("RGB", (canvas_w, canvas_h), _BG)
 
     # Вклеиваем QR по центру.
     qr_x = (canvas_w - qr_w) // 2
-    qr_y = _PADDING + _LABEL_TOP_H
+    qr_y = _PADDING + top_total_h
     canvas.paste(qr_img, (qr_x, qr_y))
 
     draw = ImageDraw.Draw(canvas)
-    font_top = _load_font(36)
-    font_bottom = _load_font(24)
+    font_salon = _load_font(22)
+    font_label = _load_font(44)
+    font_caption = _load_font(26)
 
-    _draw_centered_text(draw, salon_name, font_top, canvas_w, _PADDING + 10)
+    y_cursor = _PADDING
+    if show_salon:
+        _draw_centered_text(draw, salon_name.strip(), font_salon, canvas_w, y_cursor)
+        y_cursor += _SALON_NAME_H
+    _draw_centered_text(draw, source_label, font_label, canvas_w, y_cursor + 5)
+
     _draw_centered_text(
-        draw, bottom_caption, font_bottom, canvas_w,
+        draw, bottom_caption, font_caption, canvas_w,
         qr_y + qr_h + 20,
     )
 

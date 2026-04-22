@@ -177,15 +177,19 @@ async def cb_traffic_qr(callback: CallbackQuery):
         await callback.answer("Источник не найден.", show_alert=True)
         return
 
-    from utils.salon_info import get_salon_contact
+    from utils.salon_info import get_salon_name
 
     username = await _bot_username(callback.bot)
     link = _deep_link(username, src["code"])
-    # Заголовок на картинке — название салона из настроек, иначе fallback.
-    contact = await get_salon_contact()
-    salon_name = contact if contact else "Beauty salon"
+    # Заголовок плаката — label источника («Зеркало», «Instagram bio»).
+    # Сверху мелко — название салона, если задано в настройках.
+    salon_name = await get_salon_name()
     try:
-        png = generate_qr(link, salon_name=salon_name)
+        png = generate_qr(
+            link,
+            source_label=src["label"],
+            salon_name=salon_name,
+        )
     except Exception:
         logger.exception("QR generation failed for source=%s", src["code"])
         await callback.answer("Не удалось сгенерить QR.", show_alert=True)
