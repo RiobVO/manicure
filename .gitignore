@@ -28,6 +28,11 @@ node_modules/
 *.rar
 *.zip
 *.7z
+
+# Скриншоты / вложения из Telegram, которые автор кидает в корень проекта
+photo_*.jpg
+photo_*.jpeg
+photo_*.png
 *.tar.gz
 *.tgz
 
