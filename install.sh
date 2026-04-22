@@ -58,8 +58,12 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 if [[ -f .env ]]; then
-    cp .env ".env.bak.$(date +%s)"
-    echo "Найден существующий .env → сохранён в .env.bak.*"
+    BAK=".env.bak.$(date +%s)"
+    cp .env "$BAK"
+    # Копия наследует umask (обычно 022 → 644). В .env лежат BOT_TOKEN,
+    # LICENSE_KEY, *_SECRET_KEY — читать их должен только root/1000.
+    chmod 600 "$BAK"
+    echo "Найден существующий .env → сохранён в $BAK (chmod 600)"
 fi
 
 BACKUP_CHAT_ID=""
