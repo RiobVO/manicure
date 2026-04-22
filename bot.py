@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import ErrorEvent
+from aiogram.types import BotCommand, ErrorEvent
 
 from config import (
     ADMIN_IDS,
@@ -161,6 +161,21 @@ async def main() -> None:
     # Запоминаем reply keyboard для админ-чатов
     for admin_id in ADMIN_IDS:
         set_reply_kb(admin_id, admin_reply_keyboard())
+
+    # Регистрируем команду /language в меню бота (синяя «/»-кнопка в чате).
+    # Отдельные версии для ru/uz — клиент видит подпись на своём языке
+    # Telegram-клиента. Не фатально если упадёт — команда всё равно работает
+    # через F.text.regexp, просто не появится в выпадающем меню.
+    try:
+        await bot.set_my_commands(
+            [BotCommand(command="language", description="Сменить язык / Tilni o'zgartirish")],
+        )
+        await bot.set_my_commands(
+            [BotCommand(command="language", description="Tilni o'zgartirish")],
+            language_code="uz",
+        )
+    except Exception:
+        logger.warning("Не удалось зарегистрировать /language в меню бота", exc_info=True)
 
     scheduler = setup_scheduler(bot, license_state)
     scheduler.start()
