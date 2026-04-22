@@ -273,6 +273,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "ru": "<i>ссылка на оплату:</i>",
         "uz": "<i>to'lov havolasi:</i>",
     },
+    "pay_btn": {
+        "ru": "Оплатить",
+        "uz": "To'lov",
+    },
     "pay_received_client": {
         "ru": "<i>✓ оплата получена.</i>\n<i>жду тебя.</i>",
         "uz": "<i>✓ to'lov qabul qilindi.</i>\n<i>kutamiz.</i>",

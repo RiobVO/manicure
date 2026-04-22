@@ -974,7 +974,7 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
                 .replace("{appt_id}", str(appt_id))
             )
 
-        pay_kb = payment_keyboard(pay_url)
+        pay_kb = payment_keyboard(pay_url, label=t("pay_btn", lang))
         if pay_kb:
             try:
                 await callback.message.answer(
