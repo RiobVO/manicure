@@ -407,11 +407,20 @@ async def cb_my_appt_cancel(callback: CallbackQuery):
         await callback.answer(not_found, show_alert=True)
         return
 
+    # Если запись оплачена — предупреждаем про ручной возврат ДО подтверждения,
+    # чтобы клиент успел передумать. Авто-рефанд через API провайдера в MVP
+    # не делаем — у первого салона Сабина сама делает refund в дашборде
+    # Click/Payme, это минута работы.
+    paid_warning = ""
+    if appt.get("paid_at"):
+        paid_warning = f"\n\n{t('history_cancel_paid_warning', lang)}"
+
     try:
         await callback.message.edit_text(
             f"{t('history_cancel_confirm_q', lang)}\n\n"
             f"💅 <b>{h(appt['service_name'])}</b>\n"
-            f"📅 {date_soft(appt['date'], lang)} · {appt['time']}",
+            f"📅 {date_soft(appt['date'], lang)} · {appt['time']}"
+            f"{paid_warning}",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text=t("history_cancel_yes", lang), callback_data=f"my_appt_cancel_yes_{appt_id}"),
@@ -482,16 +491,28 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
 
     appt = await get_appointment_by_id(appt_id)
 
+    # Для оплаченных записей — подсказка админу сделать ручной рефанд.
+    # Сабина сама кликнет refund в дашборде Click/Payme. Авто-рефанд
+    # через API — FUTURE (нужны права мерчанта, доп. error handling).
+    was_paid = bool(appt.get("paid_at"))
+    paid_badge = "  💰 <b>БЫЛА ОПЛАЧЕНА</b>" if was_paid else ""
+    refund_hint = (
+        f"\n\n💸 <i>Сделай возврат вручную в дашборде "
+        f"{h(appt.get('payment_provider') or 'провайдера')}.</i>"
+        if was_paid else ""
+    )
+
     # Уведомить админа с причиной. С кнопкой закрытия, иначе сообщение
     # висит в чате и отвлекает от админ-панели.
     reason_line = f"\n💬 Причина: {h(reason_label)}" if reason_label else ""
     await broadcast_to_admins(
         callback.bot,
-        f"⚠️ <b>Клиент отменил запись</b>\n\n"
+        f"⚠️ <b>Клиент отменил запись</b>{paid_badge}\n\n"
         f"👤 {h(appt['name'])} ({h(appt['phone'])})\n"
         f"📅 {_date_human(appt['date'])}  ·  {appt['time']}\n"
         f"💅 {h(appt['service_name'])}"
-        f"{reason_line}",
+        f"{reason_line}"
+        f"{refund_hint}",
         reply_markup=admin_dismiss_kb(),
         log_context="client cancellation",
     )
@@ -516,11 +537,30 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
     )
 
     lang = await get_user_lang(callback.from_user.id)
+
+    # Для оплаченных — клиенту строка про возврат (контакт салона из
+    # settings.salon_contact если задан). Сабина сама вернёт деньги.
+    refund_block = ""
+    if was_paid:
+        from utils.salon_info import refund_contact_line
+        refund_block = (
+            f"\n\n{t('refund_needed_intro', lang)}\n"
+            f"{await refund_contact_line(lang)}"
+        )
+
     if lang == "uz":
-        txt = "❌ <b>Yozilish bekor qilindi</b>\n\nFikringiz o'zgarsa — biz shu yerdamiz."
+        txt = (
+            f"❌ <b>Yozilish bekor qilindi</b>\n\n"
+            f"Fikringiz o'zgarsa — biz shu yerdamiz."
+            f"{refund_block}"
+        )
         btn = "📅 Qayta yozilish"
     else:
-        txt = "❌ <b>Запись отменена</b>\n\nЕсли передумаешь — мы рядом."
+        txt = (
+            f"❌ <b>Запись отменена</b>\n\n"
+            f"Если передумаешь — мы рядом."
+            f"{refund_block}"
+        )
         btn = "📅 Записаться снова"
     try:
         await callback.message.edit_text(
