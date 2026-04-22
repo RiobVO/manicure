@@ -8,13 +8,21 @@ DB-операции для платежей (Phase 1 v.4).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 import aiosqlite
 
 from db.connection import get_db, get_write_lock
 
 logger = logging.getLogger(__name__)
+
+# Результат mark_paid() — различаем четыре случая, чтобы webhook-сервер мог
+# ответить провайдеру корректным error-кодом. До фикса возвращали просто None
+# для всех нон-paid случаев, и сервер отвечал Success даже на оплату cancelled
+# записи → реальный риск: клиент оплачивает старой ссылкой отменённую запись,
+# провайдер списывает деньги, бот молчит. Теперь cancelled → провайдер видит
+# error и возвращает деньги.
+MarkPaidStatus = Literal["paid", "duplicate", "cancelled", "not_found"]
 
 
 async def attach_invoice(
@@ -65,16 +73,23 @@ async def attach_invoice(
             raise
 
 
-async def mark_paid(provider: str, invoice_id: str) -> int | None:
+async def mark_paid(
+    provider: str, invoice_id: str
+) -> tuple[MarkPaidStatus, int | None]:
     """
     Пометить запись оплаченной по (provider, invoice_id).
 
-    Возвращает appt_id при первой успешной пометке, None если:
-      • invoice не найден (левый webhook, но подпись прошла — странно, но возможно);
-      • paid_at уже был выставлен (дубль-webhook от провайдера);
-      • запись отменена — ставить paid_at бессмысленно, админ должен
-        делать рефанд вручную. Отсутствие пометки сигнализирует в логах
-        что webhook пришёл «поздно» (после cancel).
+    Возвращает (status, appt_id):
+      • ("paid", id)      — первая успешная пометка; сервер уведомляет клиента/админов.
+      • ("duplicate", id) — paid_at уже был (дубль-webhook от провайдера).
+                            Сервер отвечает Success, клиенту ничего не шлём.
+      • ("cancelled", id) — запись отменена до прихода webhook. Сервер ДОЛЖЕН
+                            вернуть провайдеру ошибку, иначе провайдер спишет
+                            с клиента деньги без услуги. Рефанд — автоматом у
+                            провайдера по его error-коду.
+      • ("not_found", None) — invoice не найден (левый webhook или race c
+                              attach_invoice). Сервер возвращает Success, чтобы
+                              провайдер не ретраил бесконечно.
     """
     lock = await get_write_lock()
     async with lock:
@@ -93,7 +108,7 @@ async def mark_paid(provider: str, invoice_id: str) -> int | None:
                     "mark_paid: invoice не найден provider=%s invoice=%s",
                     provider, invoice_id,
                 )
-                return None
+                return ("not_found", None)
             appt_id, already_paid, status = row
             if already_paid:
                 await db.execute("ROLLBACK")
@@ -101,21 +116,21 @@ async def mark_paid(provider: str, invoice_id: str) -> int | None:
                     "mark_paid: дубль webhook appt=%s invoice=%s — игнор",
                     appt_id, invoice_id,
                 )
-                return None
+                return ("duplicate", appt_id)
             if status == "cancelled":
                 await db.execute("ROLLBACK")
                 logger.warning(
-                    "mark_paid: запись уже отменена appt=%s invoice=%s — "
-                    "админу нужен ручной рефанд (оплата прошла после cancel)",
+                    "mark_paid: запись отменена appt=%s invoice=%s — "
+                    "отклоняем webhook, провайдер вернёт деньги клиенту",
                     appt_id, invoice_id,
                 )
-                return None
+                return ("cancelled", appt_id)
             await db.execute(
                 "UPDATE appointments SET paid_at = datetime('now') WHERE id = ?",
                 (appt_id,),
             )
             await db.execute("COMMIT")
-            return appt_id
+            return ("paid", appt_id)
         except Exception:
             try:
                 await db.execute("ROLLBACK")
@@ -170,11 +185,15 @@ async def mark_paid_manual(appt_id: int) -> bool:
 
 
 async def get_payment_state(appt_id: int) -> dict[str, Any] | None:
-    """Прочитать платёжные поля + сумму. None если записи нет."""
+    """Прочитать платёжные поля + сумму + статус. None если записи нет.
+
+    status нужен payme.verify_and_parse, чтобы отказать на CheckPerformTransaction
+    для отменённых записей — иначе Payme разрешит оплату в никуда.
+    """
     db = await get_db()
     cursor = await db.execute(
         "SELECT paid_at, payment_provider, payment_invoice_id, payment_pay_url, "
-        "       service_price, user_id, name, service_name, date, time "
+        "       service_price, user_id, name, service_name, date, time, status "
         "FROM appointments WHERE id = ?",
         (appt_id,),
     )

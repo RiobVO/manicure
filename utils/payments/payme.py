@@ -124,6 +124,18 @@ class PaymeProvider(PaymentProvider):
             if amount_tiyin != expected_tiyin:
                 raise _PaymeError(-31001, "amount mismatch", rpc_id)
 
+            # Запись отменена между созданием invoice и приходом Payme —
+            # отказываем. Без этой проверки CheckPerformTransaction вернёт
+            # allow:true и Payme спишет деньги с клиента за услугу, которой
+            # не будет. -31008 «Невозможно выполнить» — штатный код отказа.
+            if state.get("status") == "cancelled":
+                raise _PaymeError(-31008, "appointment cancelled", rpc_id)
+            # Уже оплачена — тоже отказ (повторный платёж вторым пальцем/чеком).
+            # PerformTransaction с тем же Payme-trans_id идемпотентен на стороне
+            # Payme; сюда приходим только если пришёл новый платёжный запрос.
+            if state.get("paid_at"):
+                raise _PaymeError(-31008, "already paid", rpc_id)
+
             if method == "PerformTransaction":
                 return appt_id_raw
             # Check/Create — валидация прошла, отдаём allow-path.

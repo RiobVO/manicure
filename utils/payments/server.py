@@ -116,13 +116,23 @@ async def _click_handler(request: web.Request) -> web.Response:
 
     # Complete: помечаем paid. Идемпотентно — повторный webhook не переписывает.
     # В БД payment_invoice_id = str(appt_id) = то, что Click шлёт как merchant_trans_id.
-    paid_appt = await mark_paid("click", invoice_id=appt_id_str)
-    if paid_appt is not None:
+    status, paid_appt = await mark_paid("click", invoice_id=appt_id_str)
+    if status == "paid":
         bot: Bot = request.app["bot"]
         asyncio.create_task(_notify_paid(bot, paid_appt))
 
-    # Click требует merchant_confirm_id в ответ на Complete.
+    # Click error-коды (docs): 0 Success, -4 already paid, -9 transaction
+    # cancelled. Для cancelled ОБЯЗАТЕЛЬНО вернуть -9, иначе Click считает
+    # оплату принятой и клиент списан впустую. Для duplicate/not_found
+    # отвечаем Success — Click перестаёт ретраить.
     appt_id_int = int(appt_id_str) if appt_id_str.isdigit() else 0
+    if status == "cancelled":
+        return web.json_response({
+            "click_trans_id": 0,
+            "merchant_trans_id": appt_id_str,
+            "error": -9,
+            "error_note": "Transaction cancelled",
+        })
     return web.json_response({
         "click_trans_id": 0,  # настоящий id не нужен Click'у в ответе
         "merchant_trans_id": appt_id_str,
@@ -166,18 +176,29 @@ async def _payme_handler(request: web.Request) -> web.Response:
         logger.exception("payme webhook: unexpected error → fail-closed 401")
         return web.Response(status=401, text="unauthorized")
 
-    paid_appt = await mark_paid("payme", invoice_id=appt_id_str)
-    if paid_appt is not None:
+    status, paid_appt = await mark_paid("payme", invoice_id=appt_id_str)
+    if status == "paid":
         bot: Bot = request.app["bot"]
         asyncio.create_task(_notify_paid(bot, paid_appt))
 
-    # Ответ PerformTransaction согласно спеке Payme.
+    # rpc_id нужен для любого ответа — ok и error.
     try:
         body = json.loads(raw.decode("utf-8"))
         rpc_id = body.get("id")
     except Exception:
         rpc_id = None
-    appt_id_int = int(appt_id_str) if appt_id_str.isdigit() else 0
+
+    # Defence-in-depth: payme.verify_and_parse уже отклоняет cancelled на
+    # CheckPerformTransaction, но race возможна (cancel между Check и Perform).
+    # -31008 «Невозможно выполнить» заставит Payme вернуть деньги клиенту.
+    if status == "cancelled":
+        return web.json_response({
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "error": {"code": -31008, "message": "appointment cancelled"},
+        })
+
+    # Ответ PerformTransaction согласно спеке Payme.
     return web.json_response({
         "jsonrpc": "2.0",
         "id": rpc_id,
