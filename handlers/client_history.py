@@ -253,27 +253,28 @@ async def cb_my_appt_detail(callback: CallbackQuery):
 @router.callback_query(F.data.regexp(r"^my_appt_cancel_(\d+)$"))
 async def cb_my_appt_cancel(callback: CallbackQuery):
     """Подтверждение отмены записи клиентом."""
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "my_appt_cancel", 1)
     if not parts:
-        logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
         return
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        not_found = "Yozilish topilmadi." if lang == "uz" else "Запись не найдена."
+        await callback.answer(not_found, show_alert=True)
         return
 
     try:
         await callback.message.edit_text(
-            f"<i>точно отменить?</i>\n\n"
+            f"{t('history_cancel_confirm_q', lang)}\n\n"
             f"<blockquote><b>{h(appt['service_name'].lower())}</b>\n"
-            f"<i>{date_soft(appt['date'])} · {appt['time']}</i></blockquote>",
+            f"<i>{date_soft(appt['date'], lang)} · {appt['time']}</i></blockquote>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text=f"{CLOSE} да, отменить", callback_data=f"my_appt_cancel_yes_{appt_id}"),
-                    InlineKeyboardButton(text=f"{ARROW_BACK} оставить", callback_data=f"my_appt_{appt_id}"),
+                    InlineKeyboardButton(text=t("history_cancel_yes", lang), callback_data=f"my_appt_cancel_yes_{appt_id}"),
+                    InlineKeyboardButton(text=t("history_cancel_no", lang), callback_data=f"my_appt_{appt_id}"),
                 ]
             ]),
             parse_mode="HTML",
@@ -286,24 +287,26 @@ async def cb_my_appt_cancel(callback: CallbackQuery):
 @router.callback_query(F.data.regexp(r"^my_appt_cancel_yes_(\d+)$"))
 async def cb_my_appt_cancel_yes(callback: CallbackQuery):
     """Показать выбор причины отмены."""
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "my_appt_cancel_yes", 1)
     if not parts:
-        logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
         return
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        not_found = "Yozilish topilmadi." if lang == "uz" else "Запись не найдена."
+        await callback.answer(not_found, show_alert=True)
         return
 
+    reason_prompt = "<i>nima bo'ldi?</i>" if lang == "uz" else "<i>что случилось?</i>"
     try:
         await callback.message.edit_text(
-            f"<i>что случилось?</i>\n\n"
+            f"{reason_prompt}\n\n"
             f"<blockquote><b>{h(appt['service_name'].lower())}</b>\n"
-            f"<i>{date_soft(appt['date'])} · {appt['time']}</i></blockquote>",
-            reply_markup=cancel_reason_keyboard(appt_id),
+            f"<i>{date_soft(appt['date'], lang)} · {appt['time']}</i></blockquote>",
+            reply_markup=cancel_reason_keyboard(appt_id, lang),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
@@ -371,18 +374,24 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
         details=f"Клиент {appt['name']} отменил запись. Причина: {reason_label}",
     )
 
+    lang = await get_user_lang(callback.from_user.id)
+    if lang == "uz":
+        txt = "<i>yozilish bekor qilindi.</i>\n\n<i>fikringiz o'zgarsa — biz shu yerdamiz.</i>"
+        btn = f"{ARROW_DO} qayta yozilish"
+    else:
+        txt = "<i>запись ушла.</i>\n\n<i>если передумаешь — мы рядом.</i>"
+        btn = f"{ARROW_DO} записаться снова"
     try:
         await callback.message.edit_text(
-            f"<i>запись ушла.</i>\n\n"
-            f"<i>если передумаешь — мы рядом.</i>",
+            txt,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text=f"{ARROW_DO} записаться снова", callback_data="client_restart"),
+                InlineKeyboardButton(text=btn, callback_data="client_restart"),
             ]]),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
         pass
-    await callback.answer("Запись отменена")
+    await callback.answer(t("history_cancelled", lang))
 
 
 @router.message(F.text.in_({"мои записи", "mening yozilishlarim"}))
