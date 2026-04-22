@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from utils.timezone import now_local
 from db.connection import get_db, _dict_rows, _dict_row
 
 
@@ -133,10 +134,14 @@ async def toggle_addon_active(addon_id: int) -> None:
 
 
 async def service_has_future_appointments(service_id: int) -> bool:
+    # date('now') = UTC; локальная дата нужна, чтобы в окне 00:00-05:00
+    # Ташкент не считать вчерашние записи будущими (иначе админ не сможет
+    # удалить услугу, у которой реальных будущих записей нет).
     db = await get_db()
+    today_local = now_local().strftime("%Y-%m-%d")
     cursor = await db.execute(
         """SELECT COUNT(*) FROM appointments
-           WHERE service_id = ? AND status = 'scheduled' AND date >= date('now')""",
-        (service_id,)
+           WHERE service_id = ? AND status = 'scheduled' AND date >= ?""",
+        (service_id, today_local),
     )
     return (await cursor.fetchone())[0] > 0

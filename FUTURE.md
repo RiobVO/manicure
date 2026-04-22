@@ -49,6 +49,29 @@
 - **Лишний `service_duration` в `get_master_appointments_upcoming`** — поле читается
   из SELECT, но в UI-слое (msg_upcoming) не используется. Можно убрать.
 
+## Надёжность инфры
+
+- **Кэш заблокировавших бот клиентов.** `scheduler.py:155, 188` и
+  `utils/notifications.py:159` ловят `TelegramAPIError`/`TelegramForbiddenError`
+  при отправке напоминаний/уведомлений, пишут warning и возвращаются — но
+  `mark_reminder_sent` не вызывается (только после успешного send). Клиент
+  заблокировал бота → каждые 15 минут пытаемся снова → лог-шум. За пару
+  месяцев накопится десяток зомби и логи заспамлены. Фикс: ловить
+  `TelegramForbiddenError` отдельно + либо `mark_reminder_sent` (чтобы не
+  повторяться), либо in-memory set `_blocked_users` с TTL. Триггер: первая
+  жалоба «логи засраны» или добавление Sentry, где каждый такой warning
+  считается событием.
+
+- **Timeout на graceful shutdown.** `bot.py:212-222` делает
+  `scheduler.shutdown()` → `payment_runner.cleanup()` → `close_db()` →
+  `bot.session.close()` последовательно без таймаутов. Docker SIGTERM →
+  10 сек → SIGKILL. Если `payment_runner.cleanup()` или WAL checkpoint
+  в `close_db()` зависнет под нагрузкой — Docker убьёт на середине,
+  возможна повреждённая `.db`. Фикс: `asyncio.wait_for(close_db(),
+  timeout=5)` + `shutdown_timeout` для aiohttp runner. Триггер: первый
+  рестарт в прайм-тайм (Сабина делает `./scripts/update.sh` когда
+  реальный клиент в FSM) или первое повреждение БД после SIGKILL.
+
 ## UX и мелочи
 
 - **Неизвестная команда у админа → клиентское меню.** Сейчас если админ шлёт
