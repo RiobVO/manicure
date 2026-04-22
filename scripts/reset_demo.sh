@@ -26,7 +26,7 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 
 # Страховка: если .env содержит не-демо tenant_slug — требуем явное подтверждение.
 # Меняй DEMO_SLUGS под свои имена демо-инстансов.
-DEMO_SLUGS=("demo-nails" "demo" "test")
+DEMO_SLUGS=("demo-nails" "demo" "test" "sabina-nails")
 CURRENT_SLUG=$(grep "^TENANT_SLUG=" .env 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
 
 is_demo=false
