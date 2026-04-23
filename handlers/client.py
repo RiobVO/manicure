@@ -774,6 +774,51 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    # Финальная проверка времени: клиент мог зависнуть на summary 2+ часа
+    # и подтвердить слот, который уже в прошлом. compute_free_slots
+    # фильтрует по MIN_BOOKING_ADVANCE_HOURS только на генерации — между
+    # показом слотов и confirm проходит время. Здесь — чистый past-check
+    # (строгое "<", чтобы не ловить 5-минутный UX-лаг заполнения формы,
+    # MIN_ADVANCE на confirm стрельнул бы ложноположительно).
+    try:
+        slot_dt = datetime.strptime(
+            f"{data['date']} {data['time']}", "%Y-%m-%d %H:%M"
+        )
+    except (ValueError, KeyError):
+        # FSM подбросила битые/отсутствующие data[date/time] — не должно
+        # случаться в штатном флоу, но не роняем бота.
+        logger.warning(
+            "Bad FSM data on confirm (user_id=%s): %r",
+            callback.from_user.id, data,
+        )
+        try:
+            await callback.message.edit_text(
+                t("book_generic_error", lang), parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            pass
+        await state.clear()
+        await callback.answer()
+        return
+
+    if slot_dt < now_local().replace(tzinfo=None):
+        # Слот ушёл в прошлое. Рефрешим список и возвращаем к выбору времени —
+        # список уже не содержит прошлое благодаря compute_free_slots.
+        try:
+            _, free_slots = await compute_free_slots(
+                master_id, data["date"], data["service_duration"],
+            )
+            await callback.message.edit_text(
+                t("book_slot_taken", lang),
+                reply_markup=times_keyboard(free_slots),
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            pass
+        await state.set_state(BookingStates.choose_time)
+        await callback.answer()
+        return
+
     try:
         appt_id = await create_appointment(
             user_id=callback.from_user.id,
