@@ -502,11 +502,15 @@ async def backup_db(backup_dir: str = "backups") -> str | None:
         backup_name = f"manicure_backup_{timestamp}.db"
         backup_path = os.path.join(backup_dir, backup_name)
 
-        # Сброс WAL перед копированием — гарантия целостности бэкапа
+        # Сброс WAL перед копированием — гарантия целостности бэкапа.
+        # Checkpoint + copy выполняются под write_lock: иначе между checkpoint
+        # и copy может пройти INSERT → он уйдёт в свежий WAL, а shutil.copy2
+        # копирует только .db (не -wal/-shm), и запись потеряется в бэкапе.
         db = await get_db()
-        await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-
-        shutil.copy2(DB_PATH, backup_path)
+        lock = await get_write_lock()
+        async with lock:
+            await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            shutil.copy2(DB_PATH, backup_path)
 
         # Ротация: оставляем только 7 последних бэкапов
         existing = sorted(glob.glob(os.path.join(backup_dir, "manicure_backup_*.db")))

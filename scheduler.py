@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timezone
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
 from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -164,7 +164,18 @@ async def _send_24h_reminder(
 
     try:
         await bot.send_message(user_id, text, reply_markup=kb, parse_mode="HTML")
+    except TelegramForbiddenError:
+        # Клиент заблокировал бота / удалил чат. Ретраить бесполезно —
+        # каждые 15 мин scheduler снова дёрнет. Маркируем как «отправлено»,
+        # чтобы выйти из цикла. Запись в БД остаётся (админ её видит).
+        logger.info(
+            "User %s blocked bot — marking 24h reminder as sent to stop retries (appt=%s)",
+            user_id, appt_id,
+        )
+        await mark_reminder_sent(appt_id, "reminder_24h")
+        return
     except TelegramAPIError:
+        # Transient (429, 5xx, network) — не маркируем, следующий тик повторит.
         logger.warning("Failed to send 24h reminder to user_id=%s (appt=%s)", user_id, appt_id)
         logger.debug("24h reminder error", exc_info=True)
         return
@@ -197,6 +208,14 @@ async def _send_2h_reminder(
         )
     try:
         await bot.send_message(user_id, text, parse_mode="HTML")
+    except TelegramForbiddenError:
+        # Клиент заблокировал бота / удалил чат. См. комментарий в _send_24h_reminder.
+        logger.info(
+            "User %s blocked bot — marking 2h reminder as sent to stop retries (appt=%s)",
+            user_id, appt_id,
+        )
+        await mark_reminder_sent(appt_id, "reminder_2h")
+        return
     except TelegramAPIError:
         logger.warning("Failed to send 2h reminder to user_id=%s (appt=%s)", user_id, appt_id)
         logger.debug("2h reminder error", exc_info=True)
