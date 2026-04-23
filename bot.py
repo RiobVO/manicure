@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, ErrorEvent
@@ -135,14 +136,18 @@ async def main() -> None:
     async def on_handler_error(event: ErrorEvent, bot: Bot) -> bool:
         user_id: int | None = None
         context = "unknown"
+        update = event.update
+        callback_query = None
+        message = None
         try:
-            update = event.update
             if update.message is not None:
+                message = update.message
                 if update.message.from_user is not None:
                     user_id = update.message.from_user.id
                 text = update.message.text or update.message.caption or "(no text)"
                 context = f"message: {text[:50]}"
             elif update.callback_query is not None:
+                callback_query = update.callback_query
                 user_id = update.callback_query.from_user.id
                 context = f"callback: {update.callback_query.data}"
         except Exception:
@@ -150,6 +155,23 @@ async def main() -> None:
             pass
         logger.error("Unhandled exception in handler: %s", event.exception, exc_info=event.exception)
         await report_error(bot, event.exception, context=context, user_id=user_id)
+
+        # Клиент не должен видеть 30-секундные часики: сразу короткий ack.
+        # Админ уже получил алерт в ERROR_CHAT_ID через report_error.
+        # TelegramAPIError при ack — игнор: клиент закрыл чат / заблокировал / TG лёг,
+        # ничего дельного мы тут не сделаем, и паниковать в polling loop нельзя.
+        try:
+            if callback_query is not None:
+                await callback_query.answer(
+                    "Что-то пошло не так. Попробуй ещё раз или /start.",
+                    show_alert=True,
+                )
+            elif message is not None:
+                await message.answer("⚠ Что-то пошло не так. Попробуй ещё раз или /start.")
+        except TelegramAPIError:
+            pass
+        except Exception:
+            logger.warning("Не удалось уведомить клиента об ошибке", exc_info=True)
         return True
     # master.router — ПОСЛЕ всех admin-роутеров, но ДО reviews/client_reminders/client_history/client:
     # IsMasterFilter поймает только активных мастеров с user_id, остальные провалятся дальше.
