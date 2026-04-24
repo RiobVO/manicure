@@ -145,7 +145,13 @@ async def cb_block_type_dayoff(callback: CallbackQuery, state: FSMContext):
     date_str = parts[0]
     data = await state.get_data()
     master_id = data.get("block_master_id")
-    await add_day_off(date_str, master_id=master_id)
+    try:
+        await add_day_off(date_str, master_id=master_id)
+    except ValueError as exc:
+        # Conflict: на эту дату есть scheduled записи или блокировка уже стоит.
+        # Показываем alert, FSM не сбрасываем — админ может выбрать другую дату.
+        await callback.answer(str(exc), show_alert=True)
+        return
     await state.clear()
     await callback.answer("Выходной добавлен.", show_alert=False)
     await _show_blocks(callback)
@@ -215,7 +221,14 @@ async def msg_block_time_end(message: Message, state: FSMContext):
         await edit_panel(message.bot, message.chat.id, f"⚠️ Конец блокировки должен быть позже начала ({time_start}):", admin_cancel_keyboard())
         return
 
-    await add_time_block(date_str, time_start, text, master_id=master_id)
+    try:
+        await add_time_block(date_str, time_start, text, master_id=master_id)
+    except ValueError as exc:
+        # Conflict: диапазон пересекается с записями. FSM сбрасываем —
+        # пусть админ начнёт заново и сначала разрулит конфликтующие записи.
+        await state.clear()
+        await edit_panel(message.bot, message.chat.id, f"⚠️ {exc}", admin_cancel_keyboard())
+        return
     await state.clear()
 
     blocks = await get_future_blocks()
