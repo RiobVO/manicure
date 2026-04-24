@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from db.connection import get_db, _dict_rows, _dict_row
+from db.connection import get_db, _dict_rows, _dict_row, get_write_lock
 
 
 async def get_setting(key: str, default: str = "") -> str:
@@ -89,13 +89,61 @@ async def get_future_blocks() -> list[dict[str, Any]]:
     )
 
 
-async def add_day_off(date: str, reason: str = "", master_id: int | None = None) -> None:
+async def add_day_off(date: str, reason: str = "", master_id: int | None = None) -> int:
+    """
+    Поставить выходной на дату. Бросает ValueError если:
+      • на эту дату уже есть scheduled записи (защита от закрытия живых записей);
+      • выходной на эту дату/мастера уже существует.
+    Без этой проверки админ мог тихо закрыть день поверх продаж — клиент
+    остался бы с валидной записью, мастер не вышел, у двери оффлайн-конфликт.
+    """
     db = await get_db()
-    await db.execute(
-        "INSERT INTO blocked_slots (date, is_day_off, reason, master_id) VALUES (?, 1, ?, ?)",
-        (date, reason, master_id),
-    )
-    await db.commit()
+    lock = await get_write_lock()
+    async with lock:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            # Глобальный day_off (master_id=None) закрывает всех мастеров,
+            # значит и проверять должен записи всех мастеров на дату.
+            if master_id is None:
+                cursor = await db.execute(
+                    "SELECT COUNT(*) FROM appointments "
+                    "WHERE date = ? AND status = 'scheduled'",
+                    (date,),
+                )
+            else:
+                cursor = await db.execute(
+                    "SELECT COUNT(*) FROM appointments "
+                    "WHERE date = ? AND master_id = ? AND status = 'scheduled'",
+                    (date, master_id),
+                )
+            conflicts = (await cursor.fetchone())[0]
+            if conflicts > 0:
+                await db.execute("ROLLBACK")
+                raise ValueError("На эту дату уже есть записи. Сначала перенеси или отмени их.")
+
+            # Идемпотентность: повторный day_off на ту же дату/мастера — отказ.
+            cursor = await db.execute(
+                "SELECT COUNT(*) FROM blocked_slots "
+                "WHERE date = ? AND is_day_off = 1 "
+                "AND ((master_id IS NULL AND ? IS NULL) OR master_id = ?)",
+                (date, master_id, master_id),
+            )
+            duplicates = (await cursor.fetchone())[0]
+            if duplicates > 0:
+                await db.execute("ROLLBACK")
+                raise ValueError("На эту дату блокировка уже стоит.")
+
+            cursor = await db.execute(
+                "INSERT INTO blocked_slots (date, is_day_off, reason, master_id) VALUES (?, 1, ?, ?)",
+                (date, reason, master_id),
+            )
+            await db.execute("COMMIT")
+            return cursor.lastrowid
+        except ValueError:
+            raise
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
 
 
 async def add_time_block(
@@ -104,14 +152,52 @@ async def add_time_block(
     time_end: str,
     reason: str = "",
     master_id: int | None = None,
-) -> None:
+) -> int:
+    """
+    Заблокировать диапазон времени. Бросает ValueError если диапазон
+    пересекается с существующими scheduled записями. Симметричный overlap:
+    existing.start < block.end AND existing.end > block.start.
+    """
     db = await get_db()
-    await db.execute(
-        """INSERT INTO blocked_slots (date, time_start, time_end, is_day_off, reason, master_id)
-           VALUES (?, ?, ?, 0, ?, ?)""",
-        (date, time_start, time_end, reason, master_id),
-    )
-    await db.commit()
+    lock = await get_write_lock()
+    async with lock:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            if master_id is None:
+                cursor = await db.execute(
+                    """SELECT COUNT(*) FROM appointments
+                       WHERE date = ? AND status = 'scheduled'
+                         AND datetime(date || ' ' || time) < datetime(date || ' ' || ?)
+                         AND datetime(date || ' ' || time, '+' || service_duration || ' minutes')
+                             > datetime(date || ' ' || ?)""",
+                    (date, time_end, time_start),
+                )
+            else:
+                cursor = await db.execute(
+                    """SELECT COUNT(*) FROM appointments
+                       WHERE date = ? AND master_id = ? AND status = 'scheduled'
+                         AND datetime(date || ' ' || time) < datetime(date || ' ' || ?)
+                         AND datetime(date || ' ' || time, '+' || service_duration || ' minutes')
+                             > datetime(date || ' ' || ?)""",
+                    (date, master_id, time_end, time_start),
+                )
+            conflicts = (await cursor.fetchone())[0]
+            if conflicts > 0:
+                await db.execute("ROLLBACK")
+                raise ValueError("Этот диапазон пересекается с существующими записями.")
+
+            cursor = await db.execute(
+                """INSERT INTO blocked_slots (date, time_start, time_end, is_day_off, reason, master_id)
+                   VALUES (?, ?, ?, 0, ?, ?)""",
+                (date, time_start, time_end, reason, master_id),
+            )
+            await db.execute("COMMIT")
+            return cursor.lastrowid
+        except ValueError:
+            raise
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
 
 
 async def delete_blocked_slot(block_id: int) -> None:

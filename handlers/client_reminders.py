@@ -17,7 +17,7 @@ from db import (
     get_user_lang,
 )
 from utils.callbacks import parse_callback
-from utils.notifications import notify_master, broadcast_to_admins
+from utils.notifications import notify_master, broadcast_to_admins, admin_dismiss_kb
 from utils.ui import FLOWER, ARROW_DO, date_soft, h
 from utils.i18n import t
 
@@ -78,13 +78,27 @@ async def cb_client_cancel_reminder(callback: CallbackQuery):
         await callback.answer("Не удалось отменить запись.", show_alert=True)
         return
 
-    # Уведомить админа
+    # Для оплаченных записей — подсказка админу сделать ручной рефанд.
+    # Парный путь в client_history.py:507-528 — там же логика. Без этого
+    # отмена из напоминания уходила бы как обычная, и возврат легко пропустить.
+    was_paid = bool(appt.get("paid_at"))
+    paid_badge = "  💰 <b>БЫЛА ОПЛАЧЕНА</b>" if was_paid else ""
+    refund_hint = (
+        f"\n\n💸 <i>Сделай возврат вручную в дашборде "
+        f"{h(appt.get('payment_provider') or 'провайдера')}.</i>"
+        if was_paid else ""
+    )
+
+    # Уведомить админа. С admin_dismiss_kb — иначе сообщение висит в чате
+    # и отвлекает от админ-панели (то же поведение, что в client_history).
     await broadcast_to_admins(
         callback.bot,
-        f"⚠️ <b>Клиент отменил запись</b> (из напоминания)\n\n"
+        f"⚠️ <b>Клиент отменил запись</b> (из напоминания){paid_badge}\n\n"
         f"👤 {h(appt['name'])} ({h(appt['phone'])})\n"
         f"📅 {appt['date']} в {appt['time']}\n"
-        f"💅 {h(appt['service_name'])}",
+        f"💅 {h(appt['service_name'])}"
+        f"{refund_hint}",
+        reply_markup=admin_dismiss_kb(),
         log_context="client cancellation (reminder)",
     )
 
