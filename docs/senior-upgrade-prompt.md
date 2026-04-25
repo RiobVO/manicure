@@ -131,7 +131,7 @@ This upgrade has **7 phases**, each ending in a single deployable commit. After 
 
 **Problem:** The author will be his own installer for the next 80 salons. If installation takes 30 minutes per salon, that is **40 hours** of his life, and every manual step is a chance to misconfigure something a customer will call about at 22:00.
 
-**Goal:** `./install.sh <tenant_slug> <bot_token> <admin_id>` on a fresh VPS → working bot in under 5 minutes, no interactive prompts except the final "ready, send this to the customer".
+**Goal:** `./install.sh <tenant_slug> <admin_id>` (BOT_TOKEN via stdin/env, hidden — `ps aux` would expose it) on a fresh VPS → working bot in under 5 minutes, no extra friction.
 
 **Do:**
 
