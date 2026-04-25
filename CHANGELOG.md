@@ -10,8 +10,8 @@ Reserve for the next wave of changes.
 ## [1.0.0] — TBD (first paid license)
 
 First commercially-sellable release. One-command install, per-tenant VPS
-isolation, offline license verification (enforcement off by default until
-~20 customers), off-site backups, remote triage.
+isolation, offline license verification (enforcement active — `LICENSE_KEY`
+required for production), off-site backups, remote triage.
 
 ### Added
 
@@ -64,15 +64,6 @@ isolation, offline license verification (enforcement off by default until
 - `middlewares/fsm_guard.py` (`FSMGuardMiddleware`). It invalidated FSM
   state on every restart via a per-process UUID — no-op with
   `MemoryStorage`, actively harmful with Redis. No tests referenced it.
-
-### Disabled by design
-
-- **License enforcement middleware** is registered in the codebase but
-  NOT activated in `bot.py`. Three commented lines with a `TODO` mark
-  the re-enable point. Rationale in `FUTURE.md` and `docs/LICENSING.md`:
-  first 20 customers are non-technical, pirating is not a realistic
-  risk yet, and a false positive would lock out a working salon during
-  business hours.
 
 ### Preserved deliberately
 

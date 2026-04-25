@@ -48,7 +48,7 @@ Respond in Russian, matching my energy.
 - **FSM на Redis (aiogram `RedisStorage`, TTL=86400).** Fallback на `MemoryStorage` при недоступности. Не трогать.
 - **Booking-логика с симметричной проверкой пересечений + write-lock.** Сотни часов UX-итераций. Не переписывать, даже «для ясности».
 - **86+ интеграционных тестов в `tests/`.** Не ломать. Новые писать только если автор явно попросит.
-- **v.1 commercial track доставлен:** `install.sh`, Dockerfile, docker-compose, бэкапы в TG-канал каждые 6ч, централизованные ошибки через `ERROR_CHAT_ID`, `/status`, Ed25519-лицензии (enforcement сейчас выключен — в `bot.py` 3 строки закомментированы), heartbeat к автору.
+- **v.1 commercial track доставлен:** `install.sh`, Dockerfile, docker-compose, бэкапы в TG-канал каждые 6ч, централизованные ошибки через `ERROR_CHAT_ID`, `/status`, Ed25519-лицензии (enforcement активен — middleware зарегистрирован в `bot.py:133-135`, без `LICENSE_KEY` бот в RESTRICTED), heartbeat к автору.
 - **v.2 phase 1 — read-only кабинет мастера.** Мастер со своим `user_id` видит: «📋 Сегодня», «📅 Мои записи», «📆 Моё расписание». Фильтр `IsMasterFilter`, кэш `_db_masters_cache`, `refresh_masters_cache()`. Write-операций нет — все изменения графика делает админ через `admin_master_schedule.py`.
 
 ### Файлы, которые важно знать не глядя
@@ -146,7 +146,7 @@ Respond in Russian, matching my energy.
 
 Эти темы периодически всплывают, но сейчас **не трогать**. Когда они действительно созреют, триггер известен — см. `FUTURE.md`.
 
-- **License enforcement** — готов, выключен. Раскомментировать при ~20 платящих клиентах.
+- **License enforcement** — активен. Middleware зарегистрирован в `bot.py:133-135`. Без `LICENSE_KEY` бот в RESTRICTED.
 - **Master write через weekly_schedule (не override, а шаблон).** Отложено: шаблон — серьёзный контракт, мастер не должен его менять одним кликом.
 - **Мастер видит клиент-карту.** Нет: это PII (телефоны, история), не нужно давать всем мастерам доступ.
 - **Admin fallback на неизвестные команды** — мелкий UX-долг из `FUTURE.md`, к v.3 не относится.
