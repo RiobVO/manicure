@@ -131,9 +131,9 @@ async def cb_settings_edit_contact(callback: CallbackQuery, state: FSMContext):
             "📞 <b>Контакт для клиентов</b>\n\n"
             f"Сейчас: <code>{current}</code>\n\n"
             "Отправь новое значение одним сообщением — это может быть\n"
-            "• Telegram-handle: <code>@sabina_nails</code>\n"
+            "• Telegram-handle: <code>@your_salon</code>\n"
             "• Телефон: <code>+998 90 123 45 67</code>\n"
-            "• Короткая фраза: <code>напиши в директ @sabina</code>\n\n"
+            "• Короткая фраза: <code>напиши в директ @your_salon</code>\n\n"
             "Чтобы <b>очистить</b>, пришли одно слово <code>-</code> или <code>нет</code>.\n"
             f"Макс. длина — {_CONTACT_MAX_LEN} символов."
         ),
@@ -192,7 +192,7 @@ async def cb_settings_edit_name(callback: CallbackQuery, state: FSMContext):
             "Используется как мелкая строка сверху на QR-плакатах "
             "(«📈 Откуда клиенты» → «📱 QR для печати»).\n\n"
             "Пришли новое значение одним сообщением. Пример:\n"
-            "<code>Nail Studio Sabina</code>\n\n"
+            "<code>Nail Studio Demo</code>\n\n"
             "Чтобы <b>очистить</b>, пришли <code>-</code> или <code>нет</code>.\n"
             f"Макс. длина — {_SALON_NAME_MAX_LEN} символов."
         ),
