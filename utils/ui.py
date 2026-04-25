@@ -242,14 +242,14 @@ def greeting_new(lang: str = "ru") -> str:
     """Приветствие нового клиента."""
     if lang == "uz":
         return (
-            "💅 <b>Sabina Nails</b>\n"
+            "💅 <b>Nail Studio Demo</b>\n"
             "Manikyur va pedikyurga yozilish\n\n"
             "Bo'sh vaqtni topaman, sizni yozib qo'yaman va\n"
             "tashrif oldidan eslataman — bir kun va 2 soat avval.\n\n"
             "Boshlaymizmi? 👇"
         )
     return (
-        "💅 <b>Sabina Nails</b>\n"
+        "💅 <b>Nail Studio Demo</b>\n"
         "Запись на маникюр и педикюр\n\n"
         "Помогу подобрать время, запишу и напомню\n"
         "накануне и за 2 часа до визита.\n\n"
