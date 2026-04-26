@@ -193,6 +193,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "ru": "✏ ввести заново",
         "uz": "✏ qaytadan kiritish",
     },
+    "book_repeat_header": {
+        "ru": "🔄 <b>ПОВТОРЯЕМ</b>",
+        "uz": "🔄 <b>TAKRORLAYMIZ</b>",
+    },
+    "book_repeat_appt_not_found": {
+        "ru": "Запись не найдена.",
+        "uz": "Yozuv topilmadi.",
+    },
+    "book_repeat_service_inactive": {
+        "ru": "Эта услуга больше не доступна.",
+        "uz": "Bu xizmat endi mavjud emas.",
+    },
 
     # ─── 4. История записей / мои записи ───────────────────────────────────
     "history_empty": {
