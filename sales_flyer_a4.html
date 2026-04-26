@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Листовка · Бот записи</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   A4 — 210×297mm. Внутренний padding 14mm/14mm = 182×269mm usable.
+   Бюджет по высоте (269mm):
+     header .... 26mm
+     phones .... 128mm
+     benefits ..  28mm
+     price .....  22mm
+     footer ....  34mm
+     gaps (×4)   24mm
+     ─────────────────
+     итого:    262mm  → 7mm запас на печатном поле
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --ink: #1a1613;
+  --ink-soft: #7a716a;
+  --ink-whisper: #b6ada4;
+  --paper: #faf6f0;
+  --line: #e4ddd1;
+  --accent: #8a3d52;
+  --accent-tint: #f2e3e7;
+  --accent-ink: #5a2232;
+  --green: #3f7a5c;
+  --green-tint: #dfeee6;
+  --gold: #a68447;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  background: #7a7570;
+  font-family: 'Manrope', sans-serif;
+  color: var(--ink);
+  font-weight: 400;
+  font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding: 28px 20px 80px;
+}
+
+/* ─── лист A4 ────────────────────────────────────── */
+
+.sheet {
+  width: 210mm;
+  min-height: 297mm;
+  background: var(--paper);
+  padding: 14mm 14mm;
+  margin: 0 auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.15);
+  display: flex;
+  flex-direction: column;
+  gap: 6mm;
+  position: relative;
+  overflow: hidden;
+}
+
+/* декоративная акцентная «рубрика» в углу */
+.sheet::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 60mm; height: 4mm;
+  background: var(--accent);
+}
+
+@page { size: A4 portrait; margin: 0; }
+@media print {
+  html, body { background: white; padding: 0; }
+  .sheet { box-shadow: none; margin: 0; }
+  .guide { display: none !important; }
+}
+
+/* ─── HEADER ────────────────────────────────────── */
+
+.head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid var(--line);
+  gap: 10mm;
+}
+.eyebrow {
+  font-family: 'Manrope', sans-serif;
+  font-size: 8.5pt;
+  font-weight: 500;
+  letter-spacing: .34em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.head h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: 34pt;
+  line-height: .95;
+  letter-spacing: -.015em;
+  color: var(--ink);
+}
+.head h1 em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent);
+}
+.head .tag {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13pt;
+  color: var(--ink-soft);
+  text-align: right;
+  max-width: 70mm;
+  line-height: 1.35;
+}
+
+/* ─── PHONES ────────────────────────────────────── */
+
+.phones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8mm;
+  align-items: start;
+}
+
+.phone-wrap { display: flex; flex-direction: column; align-items: center; }
+
+.phone {
+  width: 78mm;
+  background: #0d131c;
+  border-radius: 18px;
+  padding: 7px 6px 8px;
+  color: #e8e8e8;
+  font-family: -apple-system, 'Manrope', sans-serif;
+  position: relative;
+}
+
+.phone-topbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 10px 6px;
+  font-size: 7.5pt;
+  font-weight: 600;
+  color: #cfcfcf;
+}
+.phone-topbar .ico { color: #9aa4b2; letter-spacing: 2px; }
+
+.phone-hdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 10px;
+  border-top: 0.5px solid #1a2230;
+  border-bottom: 0.5px solid #1a2230;
+}
+.phone-ava {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #b36478, #dcb8c3);
+  flex-shrink: 0;
+}
+.phone-ava.admin {
+  background: linear-gradient(135deg, #5b7a8c, #a8c1cf);
+}
+.phone-name {
+  font-size: 9pt; font-weight: 600; line-height: 1.1;
+}
+.phone-sub {
+  font-size: 7pt; color: #6e7a8a; margin-top: 1px;
+}
+
+.phone-body {
+  padding: 9px 7px 6px;
+}
+
+/* bubbles */
+.b {
+  background: #1b2330;
+  border-radius: 11px;
+  border-top-left-radius: 3px;
+  padding: 7px 9px;
+  font-size: 8.5pt;
+  line-height: 1.35;
+  margin-bottom: 6px;
+  max-width: 92%;
+}
+.b b { font-weight: 600; color: #fff; }
+.b.green {
+  background: #162a1f;
+  border-left: 2.5px solid var(--green);
+  border-top-left-radius: 3px;
+}
+.b.gold {
+  background: #2a2416;
+  border-left: 2.5px solid var(--gold);
+  border-top-left-radius: 3px;
+}
+.b .price { color: #d8b070; font-weight: 600; }
+.b .muted { color: #8892a6; font-size: 7.5pt; }
+
+/* inline keyboard buttons */
+.kb { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.kb-row { display: flex; gap: 4px; }
+.kb-btn {
+  flex: 1;
+  background: #182234;
+  border: 1px solid #253145;
+  color: #7ab8ff;
+  font-size: 8pt;
+  font-weight: 500;
+  text-align: center;
+  padding: 6px 6px;
+  border-radius: 7px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kb-btn b { color: #fff; font-weight: 600; margin-left: 3px; }
+.kb-btn.date { background: #0f2419; color: #6bd49a; border-color: #1a5a3a; }
+
+.phone-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 11.5pt;
+  color: var(--accent);
+  margin-top: 3mm;
+  letter-spacing: .02em;
+}
+.phone-label::before {
+  content: '';
+  display: inline-block;
+  width: 8mm;
+  height: 1px;
+  background: var(--accent);
+  vertical-align: middle;
+  margin-right: 4mm;
+  opacity: .4;
+}
+.phone-label::after {
+  content: '';
+  display: inline-block;
+  width: 8mm;
+  height: 1px;
+  background: var(--accent);
+  vertical-align: middle;
+  margin-left: 4mm;
+  opacity: .4;
+}
+
+/* ─── BENEFITS ──────────────────────────────────── */
+
+.benefits {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm 10mm;
+  padding-top: 5mm;
+  border-top: 1px solid var(--line);
+}
+.ben {
+  display: grid;
+  grid-template-columns: 9mm 1fr;
+  gap: 2mm;
+  align-items: baseline;
+}
+.ben-n {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 19pt;
+  color: var(--accent);
+  line-height: 1;
+  text-align: center;
+}
+.ben-t {
+  font-size: 10.5pt;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+  margin-bottom: 1mm;
+}
+.ben-d {
+  font-size: 9.5pt;
+  font-weight: 300;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+/* ─── PRICE ─────────────────────────────────────── */
+
+.price {
+  background: var(--accent-tint);
+  border-radius: 2px;
+  padding: 5mm 7mm;
+  display: grid;
+  grid-template-columns: 1fr 60mm;
+  align-items: center;
+  gap: 6mm;
+  position: relative;
+}
+.price::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2mm;
+  background: var(--accent);
+}
+.price-kicker {
+  font-size: 8pt;
+  font-weight: 600;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 2mm;
+}
+.price-main {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22pt;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+  letter-spacing: -.01em;
+}
+.price-main em { font-style: italic; color: var(--accent-ink); font-weight: 400; }
+.price-main .slash { color: var(--ink-whisper); margin: 0 3mm; font-weight: 300; }
+.price-note {
+  margin-top: 2mm;
+  font-size: 9pt;
+  color: var(--ink-soft);
+  font-weight: 300;
+}
+.price-trial {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 13pt;
+  color: var(--accent-ink);
+  line-height: 1.35;
+  text-align: right;
+  border-left: 1px solid rgba(138, 61, 82, .25);
+  padding-left: 6mm;
+}
+.price-trial b {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 11pt;
+  letter-spacing: .02em;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 1mm;
+}
+
+/* ─── CTA / FOOT ────────────────────────────────── */
+
+.foot {
+  display: grid;
+  grid-template-columns: 32mm 1fr;
+  gap: 7mm;
+  padding-top: 4mm;
+  border-top: 1px solid var(--line);
+  align-items: center;
+}
+
+.qr {
+  width: 32mm; height: 32mm;
+  background: #0f0e0d;
+  position: relative;
+  border-radius: 2px;
+}
+.qr .qr-inner {
+  position: absolute;
+  inset: 3mm;
+  background:
+    linear-gradient(90deg, #fff 50%, transparent 50%) 0 0/4mm 4mm,
+    linear-gradient(0deg, #fff 50%, transparent 50%) 0 0/4mm 4mm,
+    #0f0e0d;
+  opacity: .28;
+}
+.qr .qr-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 600;
+  font-size: 9pt;
+  letter-spacing: .3em;
+  z-index: 2;
+}
+
+.cta .try {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 400;
+  font-style: italic;
+  font-size: 16pt;
+  color: var(--ink);
+  line-height: 1.1;
+  margin-bottom: 3mm;
+}
+.cta .try em { color: var(--accent); font-weight: 500; }
+.cta .row {
+  display: grid;
+  grid-template-columns: 22mm 1fr;
+  gap: 4mm;
+  padding: 1.5mm 0;
+  border-top: 0.5px solid var(--line);
+  align-items: baseline;
+}
+.cta .row:first-of-type { border-top: none; }
+.cta .row .k {
+  font-size: 8pt;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.cta .row .v {
+  font-size: 11pt;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.cta .row .v.ph {
+  color: var(--accent);
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 12.5pt;
+}
+
+.micro {
+  margin-top: auto;
+  padding-top: 3mm;
+  text-align: center;
+  font-size: 7.5pt;
+  font-weight: 400;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--ink-whisper);
+}
+.micro span { color: var(--accent); }
+
+/* ─── ГАЙД (экран, не печать) ─── */
+
+.guide {
+  max-width: 210mm;
+  margin: 60px auto 40px;
+  padding: 24px 28px;
+  background: #1e1e1e;
+  color: #dcdcdc;
+  border-radius: 8px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.guide h3 {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #333;
+}
+.guide ol { padding-left: 22px; margin-bottom: 12px; }
+.guide li { margin-bottom: 6px; }
+.guide code {
+  background: #2a2a2a;
+  color: #e8c187;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+}
+.guide .note {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: #2a241a;
+  border-left: 3px solid #e8c187;
+  border-radius: 2px;
+  font-size: 12.5px;
+  color: #d8cfba;
+}
+</style>
+</head>
+<body>
+
+<section class="sheet">
+
+  <!-- ═══ HEADER ═══ -->
+  <header class="head">
+    <div>
+      <div class="eyebrow">Telegram · автозапись</div>
+      <h1>Бот записи<br><em>для мастера</em></h1>
+    </div>
+    <div class="tag">
+      Клиент выбирает день и время кнопками. Напоминалки отправляются сами.
+    </div>
+  </header>
+
+  <!-- ═══ PHONES ═══ -->
+  <div class="phones">
+
+    <!-- CLIENT -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="phone-topbar">
+          <span>9:41</span>
+          <span class="ico">●●● 5G</span>
+        </div>
+        <div class="phone-hdr">
+          <div class="phone-ava"></div>
+          <div>
+            <div class="phone-name">Запись к мастеру</div>
+            <div class="phone-sub">бот · онлайн</div>
+          </div>
+        </div>
+        <div class="phone-body">
+          <div class="b">
+            Добрый день 🌸 <br>Выберите услугу:
+          </div>
+          <div class="kb">
+            <div class="kb-row"><div class="kb-btn">Маникюр без покрытия<b>150 000</b></div></div>
+            <div class="kb-row"><div class="kb-btn">Маникюр с покрытием<b>270 000</b></div></div>
+            <div class="kb-row"><div class="kb-btn">Педикюр<b>290 000</b></div></div>
+            <div class="kb-row"><div class="kb-btn">Наращивание<b>370 000</b></div></div>
+          </div>
+          <div class="b" style="margin-top: 8px;">
+            Выбрано: <b>Маникюр с покрытием</b>.<br>Какой день?
+          </div>
+          <div class="kb">
+            <div class="kb-row">
+              <div class="kb-btn date">Пт&nbsp;01.05</div>
+              <div class="kb-btn date">Сб&nbsp;02.05</div>
+              <div class="kb-btn date">Вс&nbsp;03.05</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">что видит клиент</div>
+    </div>
+
+    <!-- ADMIN -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="phone-topbar">
+          <span>9:41</span>
+          <span class="ico">●●● 5G</span>
+        </div>
+        <div class="phone-hdr">
+          <div class="phone-ava admin"></div>
+          <div>
+            <div class="phone-name">Панель мастера</div>
+            <div class="phone-sub">сегодня · 4 записи</div>
+          </div>
+        </div>
+        <div class="phone-body">
+          <div class="b green">
+            ✓ <b>Новая запись</b><br>
+            Айгуль · +998 90 123-45-67<br>
+            Маникюр с покрытием · <span class="price">270 000</span><br>
+            <b>01.05 (пт) в 10:00</b>
+          </div>
+          <div class="b">
+            <b>Сегодня, 22 апреля</b><br>
+            10:00 — Мадина, маникюр<br>
+            12:00 — Нигора, педикюр<br>
+            14:00 — Камила, наращивание<br>
+            16:00 — Дилноза, коррекция
+          </div>
+          <div class="kb">
+            <div class="kb-row">
+              <div class="kb-btn">📅 Календарь</div>
+              <div class="kb-btn">📊 Статистика</div>
+            </div>
+          </div>
+          <div class="b gold" style="margin-top: 8px;">
+            <b>Эта неделя:</b> 18 записей · <span class="price">4.4 млн</span> · 0 пропусков
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">что видите вы</div>
+    </div>
+
+  </div>
+
+  <!-- ═══ BENEFITS ═══ -->
+  <div class="benefits">
+    <div class="ben">
+      <div class="ben-n">I</div>
+      <div>
+        <div class="ben-t">Клиент записывается сам</div>
+        <div class="ben-d">Выбирает услугу, день и время. Вы не сидите в чатах.</div>
+      </div>
+    </div>
+    <div class="ben">
+      <div class="ben-n">II</div>
+      <div>
+        <div class="ben-t">Напоминания — автоматом</div>
+        <div class="ben-d">За сутки и за 2 часа. No-show падает в 2–3 раза.</div>
+      </div>
+    </div>
+    <div class="ben">
+      <div class="ben-n">III</div>
+      <div>
+        <div class="ben-t">Двойных записей не бывает</div>
+        <div class="ben-d">Бот сам закрывает занятый слот. Путаница исключена.</div>
+      </div>
+    </div>
+    <div class="ben">
+      <div class="ben-n">IV</div>
+      <div>
+        <div class="ben-t">Бэкап каждые 6 часов</div>
+        <div class="ben-d">Телефон сломается — записи и клиенты сохранены.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PRICE ═══ -->
+  <div class="price">
+    <div>
+      <div class="price-kicker">Цена</div>
+      <div class="price-main">
+        <em>[X]</em> сум <span class="slash">/</span> установка
+        <span class="slash">·</span>
+        <em>[Y]</em> сум<span style="font-size:13pt;color:var(--ink-soft);font-weight:300;">&nbsp;в месяц</span>
+      </div>
+      <div class="price-note">Настройка, обучение и поддержка включены.</div>
+    </div>
+    <div class="price-trial">
+      <b>Первая неделя — бесплатно</b>
+      Не подойдёт — снесу, ничего не должны.
+    </div>
+  </div>
+
+  <!-- ═══ FOOT / CTA ═══ -->
+  <div class="foot">
+    <div class="qr">
+      <div class="qr-inner"></div>
+      <div class="qr-label">QR</div>
+    </div>
+    <div class="cta">
+      <div class="try">Попробовать прямо сейчас <em>→</em></div>
+      <div class="row">
+        <div class="k">Демо-бот</div>
+        <div class="v ph">[@your_demo_bot]</div>
+      </div>
+      <div class="row">
+        <div class="k">Telegram</div>
+        <div class="v ph">[@your_handle]</div>
+      </div>
+      <div class="row">
+        <div class="k">Телефон</div>
+        <div class="v ph">[+998 __ ___ __ __]</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="micro">
+    установка за 15 минут <span>·</span> данные на вашем сервере <span>·</span> Ташкент
+  </div>
+
+</section>
+
+<!-- ═══ инструкция (только экран) ═══ -->
+<div class="guide">
+  <h3>Что поправить перед печатью</h3>
+  <ol>
+    <li>Блок цены: замени <code>[X]</code> и <code>[Y]</code> на свои суммы.</li>
+    <li>Блок CTA: замени <code>[@your_demo_bot]</code>, <code>[@your_handle]</code>, <code>[+998 __ ___ __ __]</code>.</li>
+    <li>QR-квадрат: сгенерируй на <code>qr-code-generator.com</code> ссылку на свой demo-бот, скачай PNG, замени разметку <code>&lt;div class="qr"&gt;…&lt;/div&gt;</code> на <code>&lt;img src="qr.png" class="qr"&gt;</code> (те же 32×32mm).</li>
+    <li>Цены в клиентском телефоне — под средний чек района. Сейчас mid-premium Ташкент (150/270/290/370k).</li>
+    <li>Можно поменять акцентный цвет: найди в CSS <code>--accent: #8a3d52</code> и подставь бренд-цвет мастера.</li>
+  </ol>
+  <div class="note">
+    <b>Печать:</b> Cmd+P → A4 → Margins: <code>None</code> → «Background graphics» включить (иначе розовый блок цены будет белым) → Scale: 100%, без fit-to-page. Бумага — 120–150 г/м², матовая, типография. 100 штук в Ташкенте — 30–60к сум.
+  </div>
+</div>
+
+</body>
+</html>
