@@ -268,6 +268,12 @@ async def cmd_start(message: Message, state: FSMContext):
     has_filled_profile = profile and (profile.get("name") or profile.get("phone"))
     if not has_filled_profile:
         from utils.i18n import t, Lang
+        # Сбрасываем потенциальную старую reply-клаву (от прошлой сессии или
+        # старого UI) до показа language picker. Дефолт — по TG language_code:
+        # клиент уточнит флагом ниже, cb_lang_set перешлёт уже на выбранном.
+        tg_lang = (message.from_user.language_code or "").lower()
+        default_lang = Lang.UZ if tg_lang.startswith("uz") else Lang.RU
+        await message.answer("⁣", reply_markup=client_reply_keyboard(default_lang))
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text=t("lang_btn_ru"), callback_data="lang_set_ru"),
