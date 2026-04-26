@@ -107,8 +107,13 @@ async def notify_master(bot: Bot, master_id: int | None, event: str, data: dict)
         return False
 
     master = await get_master(master_id)
-    if not master or not master.get("user_id"):
-        logger.warning("Мастер id=%s не найден или не привязан к Telegram", master_id)
+    if not master:
+        logger.warning("Мастер id=%s не найден в БД", master_id)
+        return False
+    if not master.get("user_id"):
+        # Норма для салонов где мастер = админ-владелец без отдельной TG-привязки.
+        # Админский broadcast уже ушёл, master-уведомление дублирующее.
+        logger.debug("Мастер id=%s без user_id, master-уведомление пропущено", master_id)
         return False
 
     # Дедуп: если мастер одновременно админ — админский broadcast уже ушёл
