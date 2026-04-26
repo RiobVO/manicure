@@ -39,6 +39,7 @@ from db.traffic import (
 from keyboards.inline import admin_cancel_keyboard
 from states import AdminStates
 from utils.admin import IsAdminFilter
+from utils.notifications import admin_dismiss_kb
 from utils.panel import delete_in_bg, edit_panel, edit_panel_with_callback
 from utils.qrgen import generate_qr
 
@@ -196,6 +197,7 @@ async def cb_traffic_qr(callback: CallbackQuery):
             f"печатай на A5. снизу/сверху оставь белое поле — QR считывается с метра."
         ),
         parse_mode="HTML",
+        reply_markup=admin_dismiss_kb("✅ убрать из чата"),
     )
     await callback.answer()
 

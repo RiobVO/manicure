@@ -50,7 +50,7 @@ from services.booking import compute_free_slots
 from states import MasterStates
 from utils.admin import IsMasterFilter
 from utils.callbacks import parse_callback
-from utils.notifications import broadcast_to_admins, notify_client
+from utils.notifications import admin_dismiss_kb, broadcast_to_admins, notify_client
 from utils.panel import (
     clear_panel_msg_id,
     delete_in_bg,
@@ -367,6 +367,7 @@ async def cb_mdo_pick(callback: CallbackQuery) -> None:
             callback.bot,
             f"🌙 <b>[{h(master['name'])}]</b> поставил(а) отгул на "
             f"<b>{_date_human(date_str)}</b>.",
+            reply_markup=admin_dismiss_kb(),
             log_context="master day-off added",
         )
     except Exception:
@@ -439,6 +440,7 @@ async def cb_mdo_del(callback: CallbackQuery) -> None:
                 callback.bot,
                 f"☀ <b>[{h(master['name'])}]</b> убрал(а) отгул на "
                 f"<b>{_date_human(target['date'])}</b>.",
+                reply_markup=admin_dismiss_kb(),
                 log_context="master day-off removed",
             )
         except Exception:
@@ -626,6 +628,7 @@ async def cb_mappt_status(callback: CallbackQuery) -> None:
                 f"{label[:2]} <b>[{h(master['name'])}]</b> обновил(а) запись "
                 f"{h(appt['name'])} на {appt['date']} {appt['time']}: "
                 f"<b>{label}</b>.",
+                reply_markup=admin_dismiss_kb(),
                 log_context="master status change",
             )
         except Exception:
@@ -813,6 +816,7 @@ async def cb_mappt_rs_pick_time(callback: CallbackQuery, state: FSMContext) -> N
                 f"🔄 <b>[{h(master['name'])}]</b> перенёс(ла) запись "
                 f"{h(appt['name'])}:\n"
                 f"было {old_date} {old_time} → стало <b>{new_date} {new_time}</b>.",
+                reply_markup=admin_dismiss_kb(),
                 log_context="master reschedule",
             )
         except Exception:
