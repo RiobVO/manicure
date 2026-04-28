@@ -342,11 +342,35 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "ru": "Запись отменена",
         "uz": "Yozilish bekor qilindi",
     },
-    # Длинный блок «отменено» используют и handlers/client_reminders.py,
-    # и handlers/client_history.py (cb_cancel_with_reason) — единый ключ.
+    # Длинный блок «отменено» — используется когда причина НЕИЗВЕСТНА
+    # (отмена через напоминание без выбора reason). client_history с
+    # выбранной причиной берёт appt_cancelled_with_reason ниже.
     "appt_cancelled_full": {
         "ru": "❌ <b>Запись отменена</b>\n\nЕсли передумаешь — мы рядом.",
         "uz": "❌ <b>Yozilish bekor qilindi</b>\n\nFikringiz o'zgarsa — biz shu yerdamiz.",
+    },
+    # Эхо причины — клиент видит подтверждение что выбор записался.
+    # Без этого после тапа «изменились планы» бот молча принимал, клиент
+    # не уверен правильно ли всё прошло.
+    "appt_cancelled_with_reason": {
+        "ru": "❌ <b>Запись отменена</b>\n🔹 Причина: {reason}\n\nЕсли передумаешь — мы рядом.",
+        "uz": "❌ <b>Yozilish bekor qilindi</b>\n🔹 Sabab: {reason}\n\nFikringiz o'zgarsa — biz shu yerdamiz.",
+    },
+    # Шапка карточки уже-отменённой записи (когда клиент открывает её
+    # из «Мои записи»). Раньше показывали ту же табличку как для
+    # активной — клиент видел кнопку «отменить» и тапал, получая
+    # «запись не найдена». Теперь — отдельный мягкий вид.
+    "appt_already_cancelled_title": {
+        "ru": "❌ <b>Эта запись отменена</b>",
+        "uz": "❌ <b>Bu yozilish bekor qilingan</b>",
+    },
+    "appt_already_cancelled_was": {
+        "ru": "Должна была быть {when}",
+        "uz": "Rejalashtirilgan edi: {when}",
+    },
+    "appt_already_cancelled_reason": {
+        "ru": "🔹 Причина: {reason}",
+        "uz": "🔹 Sabab: {reason}",
     },
     "appt_book_again_btn": {
         "ru": "записаться снова",
