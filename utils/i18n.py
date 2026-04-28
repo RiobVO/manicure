@@ -296,6 +296,30 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "ru": "✅ записано. до встречи в следующий раз.",
         "uz": "✅ qabul qilindi. keyingi safargacha.",
     },
+    "review_not_available": {
+        "ru": "Отзыв недоступен.",
+        "uz": "Fikr qoldirib bo'lmaydi.",
+    },
+    "review_already_saved": {
+        "ru": "Отзыв уже сохранён, спасибо!",
+        "uz": "Fikr allaqachon saqlangan, rahmat!",
+    },
+    "review_rating_thanks": {
+        "ru": "{emoji} Оценка {rating}/5 — спасибо!",
+        "uz": "{emoji} Baho {rating}/5 — rahmat!",
+    },
+    "review_thanks_full": {
+        "ru": "Спасибо за отзыв! 🙏",
+        "uz": "Fikr uchun rahmat! 🙏",
+    },
+    "review_rebook_btn": {
+        "ru": "🔁 Записаться снова",
+        "uz": "🔁 Qayta yozilish",
+    },
+    "review_comment_input_prompt": {
+        "ru": "Напишите ваш комментарий:",
+        "uz": "Fikringizni yozing:",
+    },
 
     # ─── 6. Напоминания ─────────────────────────────────────────────────────
     "reminder_24h_title": {
@@ -305,6 +329,65 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "reminder_2h_title": {
         "ru": "<b>через пару часов жду</b>",
         "uz": "<b>bir necha soatdan keyin kutamiz</b>",
+    },
+    "reminder_we_wait": {
+        "ru": "ждём тебя.",
+        "uz": "Sizni kutamiz.",
+    },
+    "reminder_confirmed_short": {
+        "ru": "Запись подтверждена!",
+        "uz": "Yozilish tasdiqlandi!",
+    },
+    "reminder_cancelled_short": {
+        "ru": "Запись отменена",
+        "uz": "Yozilish bekor qilindi",
+    },
+    # Длинный блок «отменено» используют и handlers/client_reminders.py,
+    # и handlers/client_history.py (cb_cancel_with_reason) — единый ключ.
+    "appt_cancelled_full": {
+        "ru": "❌ <b>Запись отменена</b>\n\nЕсли передумаешь — мы рядом.",
+        "uz": "❌ <b>Yozilish bekor qilindi</b>\n\nFikringiz o'zgarsa — biz shu yerdamiz.",
+    },
+    "appt_book_again_btn": {
+        "ru": "записаться снова",
+        "uz": "qayta yozilish",
+    },
+    # Коротенькие общие алерты для callback'ов с напоминаний и истории.
+    "cb_invalid_data": {
+        "ru": "Неверный формат данных.",
+        "uz": "Ma'lumot formati noto'g'ri.",
+    },
+    "appt_not_found_short": {
+        "ru": "Запись не найдена.",
+        "uz": "Yozilish topilmadi.",
+    },
+    "cancel_failed": {
+        "ru": "Не удалось отменить запись.",
+        "uz": "Yozilishni bekor qilib bo'lmadi.",
+    },
+    "history_more_count": {
+        "ru": "… и ещё {more}",
+        "uz": "… yana {more} ta",
+    },
+    "history_cancel_reason_q": {
+        "ru": "<b>Что случилось?</b>",
+        "uz": "<b>Nima bo'ldi?</b>",
+    },
+    "book_confirm_no_text": {
+        "ru": "хорошо. ничего не создаём.",
+        "uz": "yaxshi. yozilish bekor.",
+    },
+    "book_confirm_no_btn": {
+        "ru": "← к услугам",
+        "uz": "← xizmatlarga",
+    },
+    "book_use_buttons_above": {
+        "ru": "👆 используй кнопки выше.",
+        "uz": "👆 yuqoridagi tugmalardan foydalaning.",
+    },
+    "book_category_empty": {
+        "ru": "тут пока пусто. попробуй другую:",
+        "uz": "bu bo'limda hali xizmatlar yo'q. boshqasini tanlang:",
     },
 
     # ─── 7. Платежи / возврат ──────────────────────────────────────────────

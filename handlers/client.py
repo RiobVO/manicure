@@ -1039,13 +1039,14 @@ async def confirm_no(callback: CallbackQuery, state: FSMContext):
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
     await state.clear()
-    back_text = "yaxshi. yozilish bekor." if lang == "uz" else "хорошо. ничего не создаём."
-    back_btn = "← xizmatlarga" if lang == "uz" else "← к услугам"
     try:
         await callback.message.edit_text(
-            back_text,
+            t("book_confirm_no_text", lang),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text=back_btn, callback_data="client_restart"),
+                InlineKeyboardButton(
+                    text=t("book_confirm_no_btn", lang),
+                    callback_data="client_restart",
+                ),
             ]]),
             parse_mode="HTML",
         )
@@ -1085,9 +1086,9 @@ async def confirm_escape_to_booking(message: Message, state: FSMContext):
 @router.message(BookingStates.confirm)
 async def confirm_text_fallback(message: Message):
     from db import get_user_lang
+    from utils.i18n import t
     lang = await get_user_lang(message.from_user.id)
-    text = "👆 yuqoridagi tugmalardan foydalaning." if lang == "uz" else "👆 используй кнопки выше."
-    await message.answer(text, parse_mode="HTML")
+    await message.answer(t("book_use_buttons_above", lang), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "client_restart")
@@ -1108,10 +1109,9 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     category = "hands" if callback.data == "cat_hands" else "feet"
     services = await get_services(active_only=True, category=category)
     if not services:
-        empty_hint = "tanlangan kategoriyada hozircha xizmatlar yo'q. boshqasini tanlang:" if lang == "uz" else "тут пока пусто. попробуй другую:"
         try:
             await callback.message.edit_text(
-                f"{empty_hint}\n\n{t('book_category_prompt', lang)}",
+                f"{t('book_category_empty', lang)}\n\n{t('book_category_prompt', lang)}",
                 reply_markup=category_keyboard(lang),
                 parse_mode="HTML",
             )

@@ -28,24 +28,23 @@ router = Router()
 @router.callback_query(F.data.startswith("client_confirm_"))
 async def cb_client_confirm(callback: CallbackQuery):
     """Клиент подтверждает запись из напоминания."""
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "client_confirm", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
-        await callback.answer("Неверный формат данных.", show_alert=True)
+        await callback.answer(t("cb_invalid_data", lang), show_alert=True)
         return
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer(t("appt_not_found_short", lang), show_alert=True)
         return
 
-    lang = await get_user_lang(callback.from_user.id)
-    heading = "Sizni kutamiz." if lang == "uz" else "ждём тебя."
     when_label = t("history_when", lang)
     try:
         await callback.message.edit_text(
-            f"✅ <b>{heading}</b>\n\n"
+            f"✅ <b>{t('reminder_we_wait', lang)}</b>\n\n"
             f"<code>"
             f"{when_label}{date_soft(appt['date'], lang)} · {appt['time']}\n"
             f"          {h(appt['service_name'])}"
@@ -54,28 +53,28 @@ async def cb_client_confirm(callback: CallbackQuery):
         )
     except TelegramBadRequest:
         pass
-    confirmed = "Yozilish tasdiqlandi!" if lang == "uz" else "Запись подтверждена!"
-    await callback.answer(confirmed)
+    await callback.answer(t("reminder_confirmed_short", lang))
 
 
 @router.callback_query(F.data.startswith("client_cancel_"))
 async def cb_client_cancel_reminder(callback: CallbackQuery):
     """Клиент отменяет запись из напоминания."""
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "client_cancel", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
-        await callback.answer("Неверный формат данных.", show_alert=True)
+        await callback.answer(t("cb_invalid_data", lang), show_alert=True)
         return
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer(t("appt_not_found_short", lang), show_alert=True)
         return
 
     success = await cancel_appointment_by_client(appt_id, callback.from_user.id)
     if not success:
-        await callback.answer("Не удалось отменить запись.", show_alert=True)
+        await callback.answer(t("cancel_failed", lang), show_alert=True)
         return
 
     # Для оплаченных записей — подсказка админу сделать ручной рефанд.
@@ -113,16 +112,10 @@ async def cb_client_cancel_reminder(callback: CallbackQuery):
         except Exception:
             logger.error("Ошибка уведомления мастера об отмене (напоминание)", exc_info=True)
 
-    lang = await get_user_lang(callback.from_user.id)
-    if lang == "uz":
-        txt = "❌ <b>Yozilish bekor qilindi</b>\n\nFikringiz o'zgarsa — biz shu yerdamiz."
-        btn = f"{ARROW_DO} qayta yozilish"
-    else:
-        txt = "❌ <b>Запись отменена</b>\n\nЕсли передумаешь — мы рядом."
-        btn = f"{ARROW_DO} записаться снова"
+    btn = f"{ARROW_DO} {t('appt_book_again_btn', lang)}"
     try:
         await callback.message.edit_text(
-            txt,
+            t("appt_cancelled_full", lang),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text=btn, callback_data="client_restart"),
             ]]),
@@ -130,5 +123,4 @@ async def cb_client_cancel_reminder(callback: CallbackQuery):
         )
     except TelegramBadRequest:
         pass
-    cancelled = "Yozilish bekor qilindi" if lang == "uz" else "Запись отменена"
-    await callback.answer(cancelled)
+    await callback.answer(t("reminder_cancelled_short", lang))
