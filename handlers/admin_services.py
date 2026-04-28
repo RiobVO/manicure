@@ -7,11 +7,12 @@ from states import AdminStates
 from db import (
     get_services, get_service_by_id,
     update_service_name, update_service_price, update_service_duration,
-    update_service_description,
+    update_service_description, update_service_category,
     toggle_service_active, delete_service, add_service,
     service_has_future_appointments, log_admin_action, _price_fmt,
     get_addons_for_service, get_addon_by_id, add_addon,
     delete_addon, toggle_addon_active,
+    get_categories_config,
 )
 from keyboards.inline import (
     services_list_keyboard, service_detail_keyboard, admin_cancel_keyboard,
@@ -51,7 +52,16 @@ async def _show_service_detail(callback: CallbackQuery, service_id: int):
     if not service:
         await callback.answer("Эта услуга больше не доступна.", show_alert=True)
         return
-    await edit_panel_with_callback(callback, _service_text(service), service_detail_keyboard(service))
+    # Кнопка «🏷 Категория» появляется только в режиме use_categories=true.
+    # В плоском режиме категория значения не имеет — кнопку не показываем.
+    cfg = await get_categories_config()
+    cat_label: str | None = None
+    if cfg["use_categories"]:
+        cat_label = cfg["label_a"] if service.get("category") == "hands" else cfg["label_b"]
+    await edit_panel_with_callback(
+        callback, _service_text(service),
+        service_detail_keyboard(service, cat_label=cat_label),
+    )
 
 
 @router.callback_query(F.data == "admin_services")
@@ -75,6 +85,43 @@ async def cb_svc_detail(callback: CallbackQuery):
         return
     service_id = int(parts[0])
     await callback.answer()  # ранний ack
+    await _show_service_detail(callback, service_id)
+
+
+@router.callback_query(F.data.startswith("svc_swapcat_"))
+async def cb_svc_swapcat(callback: CallbackQuery):
+    """Переключить категорию услуги между hands и feet (двустороний toggle).
+    Нужно когда владелец переключал режим (плоский ↔ две категории) и часть
+    услуг застряла в категории создания. Без этого пришлось бы пересоздавать
+    услуги, теряя историю записей."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "svc_swapcat", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    service_id = int(parts[0])
+    service = await get_service_by_id(service_id)
+    if not service:
+        await callback.answer("Эта услуга больше не доступна.", show_alert=True)
+        return
+    new_cat = "feet" if service.get("category") == "hands" else "hands"
+    await update_service_category(service_id, new_cat)
+    await log_admin_action(
+        admin_id=callback.from_user.id,
+        action="swap_category",
+        target_type="service",
+        target_id=service_id,
+        details=f"{service['name']}: {service.get('category')} → {new_cat}",
+    )
+    cfg = await get_categories_config()
+    new_label = cfg["label_a"] if new_cat == "hands" else cfg["label_b"]
+    try:
+        await callback.answer(f"✅ Категория: {new_label}", show_alert=False)
+    except Exception:
+        pass
     await _show_service_detail(callback, service_id)
 
 

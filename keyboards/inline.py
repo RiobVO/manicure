@@ -792,9 +792,18 @@ def services_list_keyboard(services: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def service_detail_keyboard(service: dict) -> InlineKeyboardMarkup:
+def service_detail_keyboard(
+    service: dict,
+    cat_label: str | None = None,
+) -> InlineKeyboardMarkup:
+    """
+    Карточка услуги в админке. Если cat_label передан — показываем кнопку
+    «🏷 {label}» для перехода между категориями (toggle hands↔feet). В
+    плоском режиме (use_categories=false) caller передаёт None — кнопка
+    скрывается, потому что категория там значения не имеет.
+    """
     toggle_text = "🔴 Деактивировать" if service["is_active"] else "🟢 Активировать"
-    return InlineKeyboardMarkup(inline_keyboard=[
+    rows = [
         [
             InlineKeyboardButton(text="✏️ Название", callback_data=f"svc_edit_name_{service['id']}"),
             InlineKeyboardButton(text="💰 Цена", callback_data=f"svc_edit_price_{service['id']}"),
@@ -803,6 +812,15 @@ def service_detail_keyboard(service: dict) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="⏱ Длительность", callback_data=f"svc_edit_dur_{service['id']}"),
             InlineKeyboardButton(text="📝 Описание", callback_data=f"svc_edit_desc_{service['id']}"),
         ],
+    ]
+    if cat_label:
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🏷 Категория: {cat_label}",
+                callback_data=f"svc_swapcat_{service['id']}",
+            ),
+        ])
+    rows.extend([
         [
             InlineKeyboardButton(text="✨ Доп. опции", callback_data=f"svc_addons_{service['id']}"),
         ],
@@ -814,6 +832,7 @@ def service_detail_keyboard(service: dict) -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton(text="🔙 К услугам", callback_data="admin_services")],
     ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # ─── SETTINGS ─────────────────────────────────────────────────────────────────
