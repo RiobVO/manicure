@@ -1297,3 +1297,38 @@ async def fallback_message(message: Message, state: FSMContext):
     if is_admin(message.from_user.id) or is_master(message.from_user.id):
         return
     await _send_category_picker(message, state)
+
+
+@router.callback_query()
+async def fallback_callback(callback: CallbackQuery):
+    """
+    Catch-all для callback'ов, не подхваченных никаким специфическим
+    хендлером. Срабатывает когда у пользователя в чате остались старые
+    inline-кнопки от прошлой версии бота (после deploy переименовали
+    callback_data, убрали фичу) — без catch-all клиент тапает, крутилка
+    висит, чат «сломался».
+
+    ВАЖНО: регистрируется ПОСЛЕДНИМ среди callback-хендлеров client.router,
+    а сам client.router — последний роутер в bot.py. Все живые callback'и
+    (admin_*, qadd_*, master_*, mappt_*, mstats_*, rev_*, my_appt_*,
+    booking-flow, lang_*) объявлены раньше и перехватят свои данные сами.
+
+    Текст в alert-окне на языке клиента (cb_invalid_data: «Кнопка устарела.
+    /start чтобы начать заново»). DEBUG-лог нужен чтобы заметить если
+    catch-all регулярно ловит «живые» callback_data — значит у нас баг
+    фильтра в каком-то предыдущем хендлере.
+    """
+    from db import get_user_lang
+    from utils.i18n import t
+    try:
+        lang = await get_user_lang(callback.from_user.id)
+    except Exception:
+        lang = "ru"
+    try:
+        await callback.answer(t("cb_invalid_data", lang), show_alert=True)
+    except TelegramBadRequest:
+        pass
+    logger.debug(
+        "fallback_callback: data=%r from user=%s",
+        callback.data, callback.from_user.id,
+    )
