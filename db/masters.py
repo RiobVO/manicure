@@ -159,6 +159,18 @@ async def get_time_blocks_for_master(master_id: int, date_str: str) -> list[tupl
     return [(r["time_start"], r["time_end"]) for r in rows]
 
 
+async def count_master_appointments_total(master_id: int) -> int:
+    """Сколько всего записей привязано к мастеру (любого статуса).
+    Используется в admin-confirm перед удалением — показать админу масштаб
+    («у мастера 28 записей в истории») до того как он нажмёт «удалить»."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT COUNT(*) FROM appointments WHERE master_id = ?",
+        (master_id,),
+    )
+    return (await cursor.fetchone())[0]
+
+
 async def delete_master(master_id: int) -> bool:
     """Удалить мастера. Возвращает False если у него есть записи (любого статуса) —
     историю сохраняем, мастер должен быть деактивирован, не удалён."""

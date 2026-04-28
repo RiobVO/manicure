@@ -440,6 +440,21 @@ def admin_cancel_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
+def confirm_delete_keyboard(
+    yes_callback: str,
+    back_callback: str,
+    yes_label: str = "✅ Да, удалить",
+    back_label: str = "↩️ Отмена",
+) -> InlineKeyboardMarkup:
+    """Универсальный confirm-экран для опасных удалений: «Да, удалить» / «Отмена».
+    Симметричен block_delete_confirm_keyboard для блокировок — общий стиль
+    подтверждения деструктивных действий по всей админке."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=yes_label, callback_data=yes_callback)],
+        [InlineKeyboardButton(text=back_label, callback_data=back_callback)],
+    ])
+
+
 def export_period_keyboard() -> InlineKeyboardMarkup:
     """Выбор периода для экспорта."""
     return InlineKeyboardMarkup(inline_keyboard=[

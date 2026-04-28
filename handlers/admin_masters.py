@@ -8,9 +8,12 @@ from aiogram.types import CallbackQuery, Message
 from db import (
     get_all_masters, get_master,
     create_master, update_master, toggle_master_active,
-    delete_master,
+    delete_master, count_master_appointments_total,
 )
-from keyboards.inline import admin_masters_keyboard, master_card_keyboard, admin_cancel_keyboard
+from keyboards.inline import (
+    admin_masters_keyboard, master_card_keyboard, admin_cancel_keyboard,
+    confirm_delete_keyboard,
+)
 from states import AdminStates
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter, refresh_masters_cache
 from utils.callbacks import parse_callback
@@ -101,9 +104,20 @@ async def cb_master_toggle(callback: CallbackQuery):
 
 
 # ─── УДАЛЕНИЕ МАСТЕРА ────────────────────────────────────────────────────────
+# Двухшаговый flow: master_delete_<id> показывает confirm-экран,
+# master_delete_confirm_<id> уже реально удаляет. Симметрично admin_blocks
+# и avoid случайного удаления одним кликом.
+# ВАЖНО: фильтр master_delete_ НЕ должен ловить master_delete_confirm_,
+# поэтому добавляем явное исключение через ~startswith.
 
-@router.callback_query(F.data.startswith("master_delete_"))
+@router.callback_query(
+    F.data.startswith("master_delete_") &
+    ~F.data.startswith("master_delete_confirm_")
+)
 async def cb_master_delete(callback: CallbackQuery):
+    """Первый клик «🗑 Удалить» в карточке мастера: показываем confirm.
+    Если у мастера есть записи в истории — удаление невозможно, alert
+    с предложением деактивировать (симметрично прежнему UX, без confirm)."""
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
@@ -113,16 +127,67 @@ async def cb_master_delete(callback: CallbackQuery):
         await callback.answer()
         return
     master_id = int(parts[0])
-    success = await delete_master(master_id)
-    if not success:
+    master = await get_master(master_id)
+    if not master:
+        await callback.answer("Этого мастера больше нет в списке.", show_alert=True)
+        return
+
+    # Предварительная проверка: если есть хоть одна запись — удалить нельзя.
+    # Показываем сразу alert (как было раньше), без confirm — чтобы не пугать
+    # админа двухшаговым диалогом который всё равно закончится отказом.
+    appt_count = await count_master_appointments_total(master_id)
+    if appt_count > 0:
         await callback.answer(
-            "У мастера есть записи в истории — удалить нельзя. "
-            "Лучше деактивировать: клиенты её больше не увидят, "
-            "но история сохранится.",
+            f"У мастера {appt_count} записей в истории — удалить нельзя. "
+            f"Лучше деактивируй: клиенты его больше не увидят, "
+            f"а история сохранится.",
             show_alert=True,
         )
         return
-    # Ранний ack для снятия spinner'а до SQL чтения и edit_panel.
+
+    text = (
+        f"⚠️ Удалить мастера <b>{master['name']}</b>?\n\n"
+        f"Записей в истории нет, удаление безопасно. Отменить будет нельзя."
+    )
+    await edit_panel_with_callback(
+        callback, text,
+        confirm_delete_keyboard(
+            yes_callback=f"master_delete_confirm_{master_id}",
+            back_callback=f"master_card_{master_id}",
+        ),
+        parse_mode="HTML",
+    )
+    try:
+        await callback.answer()
+    except TelegramBadRequest:
+        pass
+
+
+@router.callback_query(F.data.startswith("master_delete_confirm_"))
+async def cb_master_delete_confirm(callback: CallbackQuery):
+    """Второй клик — реально удаляем. Сюда попадаем только если confirm-
+    экран был показан, т.е. предварительная проверка истории прошла."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "master_delete_confirm", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    master_id = int(parts[0])
+    success = await delete_master(master_id)
+    if not success:
+        # Гонка: между показом confirm и нажатием «Да» к мастеру привязали запись.
+        # Аккуратно сообщаем и возвращаем на список.
+        await callback.answer(
+            "За это время к мастеру привязали запись — удалить уже нельзя. "
+            "Деактивируй вместо удаления.",
+            show_alert=True,
+        )
+        await refresh_masters_cache()
+        await _show_masters(callback)
+        return
     try:
         await callback.answer("✅ Мастер удалён")
     except TelegramBadRequest:
