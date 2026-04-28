@@ -533,15 +533,97 @@ def all_appointments_keyboard(appointments: list[dict]) -> InlineKeyboardMarkup 
 
 
 def day_view_keyboard(scheduled: list[dict], date_str: str) -> InlineKeyboardMarkup:
-    """Только АКТИВНЫЕ (scheduled) записи — каждая как кнопка."""
-    buttons = []
+    """
+    Клавиатура дневного вида: список активных записей + ➕ «Записать клиента»
+    в шапке. Кнопка ➕ есть всегда — даже на пустом дне, чтобы владелица
+    могла записать клиента на любой день одним тапом.
+    """
+    buttons: list[list[InlineKeyboardButton]] = []
+    buttons.append([InlineKeyboardButton(
+        text="➕ Записать клиента",
+        callback_data=f"qadd_start_{date_str}",
+    )])
     for appt in scheduled:
         name_trunc = appt["name"][:24] + ("…" if len(appt["name"]) > 24 else "")
         buttons.append([InlineKeyboardButton(
             text=f"🕐 {appt['time']} — {name_trunc}",
             callback_data=f"appt_detail_{appt['id']}",
         )])
-    return InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# ─── QUICK-ADD: ручная запись клиента из day-view ───────────────────────────
+
+def qadd_skip_phone_keyboard(date_str: str) -> InlineKeyboardMarkup:
+    """Шаг «телефон»: разрешаем пропустить — для звонков «впишите быстро»
+    телефон не критичен; напоминания не уйдут, но запись создастся."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏭ Пропустить", callback_data="qadd_skip_phone")],
+        [InlineKeyboardButton(text="↩️ Отмена", callback_data=f"qadd_cancel_{date_str}")],
+    ])
+
+
+def qadd_services_keyboard(services: list[dict], date_str: str) -> InlineKeyboardMarkup:
+    """Шаг «услуга»: показываем все активные с ценой и длительностью.
+    Аддоны в quick-add не выбираются (упрощаем — это редкий сценарий
+    у телефонной записи). Если нужны — добавит сама в карточке записи."""
+    rows = []
+    for svc in services:
+        label = f"{svc['name']} · {_price_short(svc['price'])} · {svc['duration']}мин"
+        rows.append([InlineKeyboardButton(
+            text=label,
+            callback_data=f"qadd_svc_{svc['id']}",
+        )])
+    rows.append([InlineKeyboardButton(text="↩️ Отмена", callback_data=f"qadd_cancel_{date_str}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def qadd_masters_keyboard(masters: list[dict], date_str: str) -> InlineKeyboardMarkup:
+    """Шаг «мастер»: список активных. Опция «Любой свободный» — записать
+    без привязки (master_id=NULL), как в клиентском flow. Полезно когда
+    владелица не помнит у кого окно или клиент не привязан к конкретной."""
+    rows = []
+    row: list[InlineKeyboardButton] = []
+    for m in masters:
+        row.append(InlineKeyboardButton(
+            text=m["name"],
+            callback_data=f"qadd_master_{m['id']}",
+        ))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(
+        text="👥 Любой свободный",
+        callback_data="qadd_master_any",
+    )])
+    rows.append([InlineKeyboardButton(text="↩️ Отмена", callback_data=f"qadd_cancel_{date_str}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def qadd_times_keyboard(free_slots: list[str], date_str: str) -> InlineKeyboardMarkup:
+    """Шаг «время»: 3 кнопки в ряду из свободных слотов. Симметрично
+    клиентскому times_keyboard — единый стиль выбора времени."""
+    rows = []
+    row: list[InlineKeyboardButton] = []
+    for slot in free_slots:
+        row.append(InlineKeyboardButton(text=slot, callback_data=f"qadd_time_{slot}"))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="↩️ Отмена", callback_data=f"qadd_cancel_{date_str}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def qadd_confirm_keyboard(date_str: str) -> InlineKeyboardMarkup:
+    """Финальный шаг: «✅ Записать» / «↩️ Отмена»."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Записать", callback_data="qadd_confirm")],
+        [InlineKeyboardButton(text="↩️ Отмена", callback_data=f"qadd_cancel_{date_str}")],
+    ])
 
 
 def appointment_actions_keyboard(
