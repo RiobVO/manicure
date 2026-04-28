@@ -213,20 +213,27 @@ async def main() -> None:
     for admin_id in ADMIN_IDS:
         set_reply_kb(admin_id, admin_reply_keyboard())
 
-    # Регистрируем команду /language в меню бота (синяя «/»-кнопка в чате).
+    # Регистрируем команды бота (синяя «/»-кнопка в чате).
     # Отдельные версии для ru/uz — клиент видит подпись на своём языке
-    # Telegram-клиента. Не фатально если упадёт — команда всё равно работает
-    # через F.text.regexp, просто не появится в выпадающем меню.
+    # Telegram-клиента. Не фатально если упадёт — команды всё равно работают
+    # через F.text-фильтры, просто не появятся в выпадающем меню.
+    # /start — главный вход и универсальный escape из любого FSM-флоу
+    # (см. admin.cmd_start с StateFilter("*"), без него admin-state-хендлеры
+    # перехватывали /start как текстовый ввод).
     try:
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Главное меню"),
+            BotCommand(command="language", description="Сменить язык / Tilni o'zgartirish"),
+        ])
         await bot.set_my_commands(
-            [BotCommand(command="language", description="Сменить язык / Tilni o'zgartirish")],
-        )
-        await bot.set_my_commands(
-            [BotCommand(command="language", description="Tilni o'zgartirish")],
+            [
+                BotCommand(command="start", description="Bosh menyu"),
+                BotCommand(command="language", description="Tilni o'zgartirish"),
+            ],
             language_code="uz",
         )
     except Exception:
-        logger.warning("Не удалось зарегистрировать /language в меню бота", exc_info=True)
+        logger.warning("Не удалось зарегистрировать команды в меню бота", exc_info=True)
 
     scheduler = setup_scheduler(bot, license_state)
     scheduler.start()

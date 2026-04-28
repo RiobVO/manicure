@@ -18,10 +18,13 @@ from keyboards.inline import (
     day_view_keyboard, calendar_keyboard,
     services_list_keyboard, settings_keyboard,
     blocks_list_keyboard, all_appointments_keyboard, clients_menu_keyboard,
-    admin_masters_keyboard,
+    admin_masters_keyboard, admin_reply_keyboard,
 )
 from utils.admin import is_admin, is_admin_callback, deny_access, IsAdminFilter
-from utils.panel import get_panel_msg_id, set_panel_msg_id, clear_panel_msg_id, get_panel_lock, delete_in_bg
+from utils.panel import (
+    get_panel_msg_id, set_panel_msg_id, clear_panel_msg_id, get_panel_lock,
+    delete_in_bg, set_reply_kb,
+)
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -234,8 +237,32 @@ async def cb_admin_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer("Отменено")
 
 
-@router.message(F.text == "/cancel")
+@router.message(StateFilter("*"), F.text.regexp(r"^/start(?:\s|$)"))
+async def admin_cmd_start(message: Message, state: FSMContext):
+    """
+    Универсальный escape: /start из любого админ-FSM возвращает на главную.
+    Без StateFilter('*') клиентский cmd_start в client.router не дотянется —
+    admin_services.msg_addon_add_name (и подобные state-message-хендлеры)
+    перехватывают сообщение раньше и записывают «/start» как введённое значение.
+    """
+    await state.clear()
+    try:
+        await message.delete()
+    except TelegramBadRequest:
+        pass
+    set_reply_kb(message.chat.id, admin_reply_keyboard())
+    await message.answer(
+        "👑 <b>Панель администратора</b>",
+        reply_markup=admin_reply_keyboard(),
+        parse_mode="HTML",
+    )
+
+
+@router.message(StateFilter("*"), F.text == "/cancel")
 async def cmd_cancel(message: Message, state: FSMContext):
+    """/cancel — выйти из FSM в любом состоянии. StateFilter('*') критичен:
+    без него хендлер срабатывает только при пустом state, и admin застревает
+    в addon_add_name/service_edit_* — текст «/cancel» сохраняется как ввод."""
     if not is_admin(message.from_user.id):
         return
     await state.clear()
