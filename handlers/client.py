@@ -1277,5 +1277,13 @@ async def ex_master_button(message: Message, state: FSMContext):
 
 @router.message()
 async def fallback_message(message: Message, state: FSMContext):
-    if await state.get_state() is None:
-        await _send_category_picker(message, state)
+    if await state.get_state() is not None:
+        return
+    # Неизвестные slash-команды от админа/мастера молча игнорим: иначе любой
+    # опечатанный /foobar показывает им клиентский каталог услуг.
+    text = (message.text or "").strip()
+    if text.startswith("/") and (
+        is_admin(message.from_user.id) or is_master(message.from_user.id)
+    ):
+        return
+    await _send_category_picker(message, state)
