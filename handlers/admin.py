@@ -9,7 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 from constants import format_date_short_ru
 from utils.timezone import now_local
 from db import (
-    get_appointments_by_date_full, get_stats,
+    get_appointments_by_date_full,
     get_services, get_future_blocks, get_all_settings,
     get_all_future_appointments, get_recent_clients, _price_fmt,
     get_all_masters,
@@ -305,29 +305,13 @@ async def msg_stats(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await state.clear()
-    stats = await get_stats()
-
-    conversion_str = f"{stats['conversion']:.0f}%" if stats['conversion'] > 0 else "—"
-    avg_check_str = f"{_price_fmt(int(stats['avg_check']))} сум" if stats['avg_check'] > 0 else "—"
-
-    text = (
-        "📊 <b>Статистика</b>\n\n"
-        f"📅 <b>Сегодня:</b> {stats['today_count']} записей\n"
-        f"📆 <b>Эта неделя:</b> {stats['week_count']} записей\n"
-        f"🗓 <b>Этот месяц:</b> {stats['month_count']} записей\n\n"
-        f"💰 <b>Выручка:</b> {_price_fmt(stats['total_revenue'])} сум\n"
-        f"🧾 <b>Средний чек:</b> {avg_check_str}\n"
-        f"📈 <b>Конверсия (месяц):</b> {conversion_str}\n"
-        f"🔄 <b>Возвраты клиентов:</b> {stats['returning_clients']}\n\n"
-        f"✅ Выполнено: {stats['completed_count']}\n"
-        f"❌ Отменено: {stats['cancelled_count']}\n"
-        f"💅 Популярная: {stats['top_service_name']} ({stats['top_service_count']} визитов)"
-    )
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    export_kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="📥 Экспорт в Excel", callback_data="admin_export"),
-    ]])
-    await _nav(message, text, export_kb, parse_mode="HTML")
+    # Локальный импорт: build_stats_payload живёт в admin_stats, который сам
+    # импортирует наши хелперы — уровневый импорт сверху создал бы цикл при
+    # загрузке роутеров через bot.py (admin → admin_stats → admin при unlucky
+    # порядке). Локально безопаснее.
+    from handlers.admin_stats import build_stats_payload
+    text, kb = await build_stats_payload()
+    await _nav(message, text, kb, parse_mode="HTML")
 
 
 @router.message(StateFilter("*"), F.text == "📒 Все записи")
