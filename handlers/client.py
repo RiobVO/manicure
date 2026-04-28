@@ -861,6 +861,15 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
         InlineKeyboardButton(text="📒 Все записи", callback_data="notif_all_appointments"),
     ]])
 
+    # Сервис + аддоны для подстановки в уведомления. Без аддонов админ/мастер
+    # не видят что клиент выбрал «маникюр + дизайн», а значит не успевают
+    # подготовить материалы заранее. addon_names — list, заполняется в
+    # cb_addons_done; пусто если у услуги нет аддонов или клиент ничего не выбрал.
+    addon_names_list = data.get("addon_names") or []
+    service_with_addons_plain = data["service_name"]
+    if addon_names_list:
+        service_with_addons_plain += " + " + ", ".join(addon_names_list)
+
     async def _bg_admin_broadcast() -> None:
         try:
             # h() на user-controlled полях (name, phone) и admin-controlled
@@ -868,7 +877,7 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
             await broadcast_to_admins(
                 callback.bot,
                 f"🔔 <b>Новая запись:</b> {date_str} в <b>{data['time']}</b>\n"
-                f"💅 {h(data['service_name'])} — {h(data['name'])}\n"
+                f"💅 {h(service_with_addons_plain)} — {h(data['name'])}\n"
                 f"📞 {h(data['phone'])}",
                 reply_markup=notif_kb,
                 log_context="new booking",
@@ -883,7 +892,7 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
             await notify_master(
                 callback.bot, master_id, "new_booking",
                 {"date": data["date"], "time": data["time"],
-                 "client_name": data["name"], "service_name": data["service_name"]},
+                 "client_name": data["name"], "service_name": service_with_addons_plain},
             )
         except Exception:
             logger.error("Ошибка уведомления мастера", exc_info=True)
