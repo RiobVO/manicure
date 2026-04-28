@@ -469,10 +469,43 @@ async def msg_svc_add_dur(message: Message, state: FSMContext):
         return
 
     await state.update_data(new_service_duration=duration)
+
+    # Если режим «плоский список» — шаг выбора категории пропускаем,
+    # услуга пишется в БД с category='hands' (БД-инвариант, клиенту не
+    # показывается потому что в плоском режиме фильтра по категории нет).
+    from db import get_categories_config
+    cats = await get_categories_config()
+    if not cats["use_categories"]:
+        data = await state.get_data()
+        service_id = await add_service(
+            data["new_service_name"],
+            data["new_service_price"],
+            duration,
+            category="hands",
+        )
+        await log_admin_action(
+            admin_id=message.from_user.id,
+            action="add_service",
+            target_type="service",
+            target_id=service_id,
+            details=(
+                f"{data['new_service_name']} — {data['new_service_price']} сум, "
+                f"{duration} мин (плоский режим)"
+            ),
+        )
+        await state.clear()
+        services = await get_services(active_only=False)
+        await edit_panel(
+            message.bot, message.chat.id,
+            f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
+            services_list_keyboard(services),
+        )
+        return
+
     await edit_panel(
         message.bot, message.chat.id,
         "🗂 К какой категории относится услуга?",
-        admin_category_picker(),
+        admin_category_picker(cats["label_a"], cats["label_b"]),
     )
     await state.set_state(AdminStates.service_add_category)
 

@@ -96,6 +96,7 @@ from db.settings import (
     get_setting,
     set_setting,
     get_all_settings,
+    get_categories_config,
     get_weekly_schedule,
     get_day_schedule,
     update_weekday_schedule,

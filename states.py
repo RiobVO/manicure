@@ -41,6 +41,8 @@ class AdminStates(StatesGroup):
     # Настройки
     settings_edit_contact = State()  # @handle / телефон / ссылка для клиентов
     settings_edit_name = State()     # название салона (для QR-плакатов)
+    settings_edit_cat_a_label = State()  # подпись категории А ('hands' под капотом)
+    settings_edit_cat_b_label = State()  # подпись категории Б ('feet' под капотом)
 
     # Гибкий график (салонно-глобальный)
     schedule_edit_start = State()

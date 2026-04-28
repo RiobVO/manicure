@@ -26,6 +26,40 @@ async def get_all_settings() -> dict[str, str]:
     return {k: v for k, v in rows}
 
 
+# ─── Категории услуг (универсальный режим) ─────────────────────────────────
+# get_categories_config — единая точка чтения трёх связанных ключей. Везде
+# где UI зависит от подписей или режима — зовём этот хелпер, не трогаем
+# таблицу services напрямую. Это позволит в будущем добавить кэш без
+# охоты по callsites.
+
+_DEFAULT_CAT_A = "💅 Маникюр"
+_DEFAULT_CAT_B = "🦶 Педикюр"
+
+
+async def get_categories_config() -> dict[str, Any]:
+    """
+    Возвращает конфигурацию режима категорий:
+      use_categories: bool — двухуровневое меню vs плоский список услуг.
+      label_a: str         — подпись для категории А (под капотом 'hands').
+      label_b: str         — подпись для категории Б (под капотом 'feet').
+
+    Защита от пустых/кривых значений: если в БД ключа нет (старая БД до
+    апдейта) или значение пустое — отдаём дефолт. Это обеспечивает
+    обратную совместимость без необходимости запускать миграцию: старый
+    бот после деплоя видит use_categories=true, «💅 Маникюр»/«🦶 Педикюр»
+    как раньше.
+    """
+    s = await get_all_settings()
+    raw_use = (s.get("use_categories") or "1").strip()
+    label_a = (s.get("cat_a_label") or "").strip() or _DEFAULT_CAT_A
+    label_b = (s.get("cat_b_label") or "").strip() or _DEFAULT_CAT_B
+    return {
+        "use_categories": raw_use != "0",
+        "label_a": label_a,
+        "label_b": label_b,
+    }
+
+
 async def get_weekly_schedule() -> dict[int, dict]:
     """Расписание по дням: {0: {weekday, work_start, work_end}, ...}"""
     rows = await _dict_rows(

@@ -94,30 +94,49 @@ async def _send_category_picker(
     state: FSMContext,
     user_id: int | None = None,
 ) -> None:
-    """Первый экран записи — выбор ручек/ножек. Отправляет новое сообщение.
+    """Первый экран записи — выбор категории А/Б ИЛИ сразу плоский список услуг.
+
+    Поведение зависит от settings.use_categories:
+      • true  → двухуровневое меню (как было), подписи из cat_a_label/cat_b_label.
+      • false → клиент сразу видит все активные услуги, минуя choose_category.
+        Это для салонов одного типа (только депиляция, только массаж).
+
     user_id явно — если message это callback.message (from_user = бот),
     вызывающий обязан передать реальный user_id клиента."""
     from utils.i18n import t
-    from db import get_user_lang
+    from db import get_user_lang, get_categories_config
     uid = user_id if user_id is not None else message.from_user.id
     lang = await get_user_lang(uid)
     services = await get_services(active_only=True)
     if not services:
         await message.answer(t("book_no_services", lang), parse_mode="HTML")
         return
-    sent = await message.answer(
-        t("book_category_prompt", lang),
-        reply_markup=category_keyboard(lang),
-        parse_mode="HTML",
-    )
-    _remember_services_msg(message.chat.id, sent.message_id)
-    await state.set_state(BookingStates.choose_category)
+    cats = await get_categories_config()
+    if cats["use_categories"]:
+        sent = await message.answer(
+            t("book_category_prompt", lang),
+            reply_markup=category_keyboard(lang, cats["label_a"], cats["label_b"]),
+            parse_mode="HTML",
+        )
+        _remember_services_msg(message.chat.id, sent.message_id)
+        await state.set_state(BookingStates.choose_category)
+    else:
+        # Плоский режим: пропускаем choose_category — все услуги без фильтра
+        # категории. Под капотом БД всё равно держит services.category, но
+        # клиенту это не показываем.
+        sent = await message.answer(
+            t("book_services_prompt", lang),
+            reply_markup=services_keyboard(services, with_back=False, lang=lang),
+            parse_mode="HTML",
+        )
+        _remember_services_msg(message.chat.id, sent.message_id)
+        await state.set_state(BookingStates.choose_service)
 
 
 async def _edit_to_category_picker(callback: CallbackQuery, state: FSMContext) -> None:
     """То же, но через edit_text — не плодит новые сообщения при навигации."""
     from utils.i18n import t
-    from db import get_user_lang
+    from db import get_user_lang, get_categories_config
     lang = await get_user_lang(callback.from_user.id)
     services = await get_services(active_only=True)
     if not services:
@@ -126,16 +145,28 @@ async def _edit_to_category_picker(callback: CallbackQuery, state: FSMContext) -
         except TelegramBadRequest:
             pass
         return
+    cats = await get_categories_config()
     _remember_services_msg(callback.message.chat.id, callback.message.message_id)
-    try:
-        await callback.message.edit_text(
-            t("book_category_prompt", lang),
-            reply_markup=category_keyboard(lang),
-            parse_mode="HTML",
-        )
-    except TelegramBadRequest:
-        pass
-    await state.set_state(BookingStates.choose_category)
+    if cats["use_categories"]:
+        try:
+            await callback.message.edit_text(
+                t("book_category_prompt", lang),
+                reply_markup=category_keyboard(lang, cats["label_a"], cats["label_b"]),
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            pass
+        await state.set_state(BookingStates.choose_category)
+    else:
+        try:
+            await callback.message.edit_text(
+                t("book_services_prompt", lang),
+                reply_markup=services_keyboard(services, with_back=False, lang=lang),
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            pass
+        await state.set_state(BookingStates.choose_service)
 
 
 def _date_human(date_str: str) -> str:
@@ -1109,10 +1140,12 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     category = "hands" if callback.data == "cat_hands" else "feet"
     services = await get_services(active_only=True, category=category)
     if not services:
+        from db import get_categories_config
+        cats = await get_categories_config()
         try:
             await callback.message.edit_text(
                 f"{t('book_category_empty', lang)}\n\n{t('book_category_prompt', lang)}",
-                reply_markup=category_keyboard(lang),
+                reply_markup=category_keyboard(lang, cats["label_a"], cats["label_b"]),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
