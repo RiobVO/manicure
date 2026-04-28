@@ -57,7 +57,7 @@ from utils.timezone import now_local  # noqa: E402
 # Если TENANT_SLUG не в этом множестве — скрипт отказывается работать без
 # --force. Защита уровня reset_demo.sh: лучше ругаться, чем стереть прод.
 DEMO_SLUGS: frozenset[str] = frozenset({
-    "demo", "demo-nails", "test", "sabina-nails",
+    "demo", "demo-nails", "manicure-demo", "test", "sabina-nails",
 })
 
 # ─── Каталог: услуги ─────────────────────────────────────────────────────────
