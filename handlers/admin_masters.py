@@ -45,7 +45,7 @@ async def _render_master_card(callback: CallbackQuery, master_id: int) -> None:
     parse_callback вернёт None и обработчик тихо выйдет без обновления)."""
     master = await get_master(master_id)
     if not master:
-        await callback.answer("Мастер не найден.", show_alert=True)
+        await callback.answer("Этого мастера больше нет в списке.", show_alert=True)
         return
 
     uid_line = f"🆔 TG: {master['user_id']}\n" if master.get("user_id") else "🆔 TG: не привязан\n"
@@ -116,13 +116,15 @@ async def cb_master_delete(callback: CallbackQuery):
     success = await delete_master(master_id)
     if not success:
         await callback.answer(
-            "Нельзя удалить: у мастера есть история записей. Можно деактивировать.",
+            "У мастера есть записи в истории — удалить нельзя. "
+            "Лучше деактивировать: клиенты её больше не увидят, "
+            "но история сохранится.",
             show_alert=True,
         )
         return
     # Ранний ack для снятия spinner'а до SQL чтения и edit_panel.
     try:
-        await callback.answer("Мастер удалён.")
+        await callback.answer("✅ Мастер удалён")
     except TelegramBadRequest:
         pass
     await refresh_masters_cache()

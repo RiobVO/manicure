@@ -78,7 +78,7 @@ async def _show_master_weekly(callback: CallbackQuery, master_id: int) -> None:
     """Показать недельную сетку мастера в панели."""
     master = await get_master(master_id)
     if not master:
-        await callback.answer("Мастер не найден.", show_alert=True)
+        await callback.answer("Этого мастера больше нет в списке.", show_alert=True)
         return
     schedule = await get_master_schedule(master_id)
     text = f"📆 <b>Расписание: {master['name']}</b>\n\nВыбери день для редактирования:"

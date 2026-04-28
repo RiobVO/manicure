@@ -129,7 +129,7 @@ async def cb_client_card(callback: CallbackQuery):
     card = await get_client_card(user_id)
 
     if not card:
-        await callback.answer("Клиент не найден.", show_alert=True)
+        await callback.answer("Этого клиента больше нет в базе.", show_alert=True)
         return
 
     last_visit = card.get("last_visit") or "—"
@@ -188,7 +188,7 @@ async def cb_appt_detail(callback: CallbackQuery):
     appt = await get_appointment_by_id(appt_id)
 
     if not appt:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer("Эта запись больше не существует — возможно, её отменили.", show_alert=True)
         return
 
     status = STATUS_LABEL.get(appt["status"], appt["status"])

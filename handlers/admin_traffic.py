@@ -142,7 +142,7 @@ async def cb_traffic_src(callback: CallbackQuery):
     source_id = int(callback.data.split("_")[-1])
     src = await get_source_by_id(source_id)
     if not src:
-        await callback.answer("Источник не найден.", show_alert=True)
+        await callback.answer("Этот источник был удалён.", show_alert=True)
         return
     username = await _bot_username(callback.bot)
     link = _deep_link(username, src["code"])
@@ -167,7 +167,7 @@ async def cb_traffic_qr(callback: CallbackQuery):
     source_id = int(callback.data.split("_")[-1])
     src = await get_source_by_id(source_id)
     if not src:
-        await callback.answer("Источник не найден.", show_alert=True)
+        await callback.answer("Этот источник был удалён.", show_alert=True)
         return
 
     from utils.salon_info import get_salon_name
@@ -185,7 +185,7 @@ async def cb_traffic_qr(callback: CallbackQuery):
         )
     except Exception:
         logger.exception("QR generation failed for source=%s", src["code"])
-        await callback.answer("Не удалось сгенерить QR.", show_alert=True)
+        await callback.answer("Не получилось создать QR-плакат. Попробуй ещё раз.", show_alert=True)
         return
 
     file = BufferedInputFile(png, filename=f"qr_{src['code']}.png")
@@ -233,7 +233,7 @@ async def cb_traffic_del(callback: CallbackQuery):
 async def cb_traffic_del_yes(callback: CallbackQuery, state: FSMContext):
     source_id = int(callback.data.split("_")[-1])
     ok = await delete_source(source_id)
-    await callback.answer("Удалён." if ok else "Не удалось удалить.", show_alert=False)
+    await callback.answer("✅ Удалён" if ok else "Не получилось удалить — попробуй ещё раз.", show_alert=False)
     await cb_traffic_list(callback, state)
 
 
