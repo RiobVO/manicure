@@ -161,6 +161,110 @@ async def _top_service(start: str, end: str) -> dict[str, Any] | None:
     )
 
 
+async def get_master_personal_stats(
+    master_id: int,
+    period: str = DEFAULT_PERIOD,
+) -> dict[str, Any]:
+    """
+    Личная статистика мастера для его кабинета: completed, выручка, средний
+    чек, рейтинг + дельты к предыдущему окну + место среди мастеров по
+    выручке. Все агрегаты — за окно периода (week/month/quarter).
+
+    Зачем: мастер сам видит свою ценность («я в этом месяце сделала 42
+    визита, рейтинг 4.8, доход 7.8м, +5 к прошлому месяцу») — без этого
+    она не верит в продукт и жалуется владельцу. Это retention-фича для
+    самого продукта.
+
+    При ошибке БД — возвращает «нулевой» payload с error-полем; хендлер
+    рендерит мягкую заглушку вместо 500.
+    """
+    period = _normalize_period(period)
+    try:
+        cs, ce, ps, pe = _period_window(period)
+
+        cur = await _dict_row(
+            """SELECT
+                COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END), 0) AS completed,
+                COALESCE(SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END), 0) AS cancelled,
+                COALESCE(SUM(CASE WHEN status='no_show'   THEN 1 ELSE 0 END), 0) AS no_show,
+                COALESCE(SUM(CASE WHEN status='completed' THEN service_price ELSE 0 END), 0) AS revenue
+               FROM appointments
+               WHERE master_id = ? AND date BETWEEN ? AND ?""",
+            (master_id, cs, ce),
+        ) or {}
+        prev = await _dict_row(
+            """SELECT
+                COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END), 0) AS completed,
+                COALESCE(SUM(CASE WHEN status='completed' THEN service_price ELSE 0 END), 0) AS revenue
+               FROM appointments
+               WHERE master_id = ? AND date BETWEEN ? AND ?""",
+            (master_id, ps, pe),
+        ) or {}
+
+        completed = cur.get("completed", 0) or 0
+        revenue   = cur.get("revenue", 0) or 0
+        avg_check = (revenue / completed) if completed else 0.0
+
+        # Рейтинг и количество отзывов — за всю жизнь (ко всем записям мастера),
+        # не за окно. Отзыв оставляется после визита, дата отзыва ≠ дата записи,
+        # фильтрация по периоду тут только запутает. Согласовано с админ-stats.
+        rating_row = await _dict_row(
+            """SELECT ROUND(AVG(r.rating), 1) AS avg_rating, COUNT(r.id) AS reviews_count
+               FROM reviews r
+               JOIN appointments a ON a.id = r.appointment_id
+               WHERE a.master_id = ?""",
+            (master_id,),
+        ) or {}
+
+        # Место в рейтинге — текущий мастер vs все активные за тот же период.
+        # Если мастер один — место = 1, total = 1; «#1 из 1» рендерим тонко.
+        ranking = await _dict_rows(
+            """SELECT m.id, COALESCE(SUM(a.service_price), 0) AS revenue
+               FROM masters m
+               LEFT JOIN appointments a
+                 ON a.master_id = m.id AND a.status = 'completed'
+                AND a.date BETWEEN ? AND ?
+               WHERE m.is_active = 1
+               GROUP BY m.id
+               ORDER BY revenue DESC""",
+            (cs, ce),
+        )
+        rank = None
+        for i, row in enumerate(ranking, 1):
+            if row["id"] == master_id:
+                rank = i
+                break
+
+        return {
+            "period": period,
+            "completed": completed,
+            "cancelled": cur.get("cancelled", 0) or 0,
+            "no_show":   cur.get("no_show", 0)   or 0,
+            "revenue":   revenue,
+            "avg_check": avg_check,
+            "prev_completed": prev.get("completed", 0) or 0,
+            "prev_revenue":   prev.get("revenue", 0)   or 0,
+            "avg_rating":    rating_row.get("avg_rating") or 0.0,
+            "reviews_count": rating_row.get("reviews_count", 0) or 0,
+            "rank": rank,
+            "rank_total": len(ranking),
+            "window": {"start": cs, "end": ce},
+            "error": None,
+        }
+    except Exception as exc:
+        logger.exception("get_master_personal_stats failed")
+        return {
+            "period": period,
+            "completed": 0, "cancelled": 0, "no_show": 0,
+            "revenue": 0, "avg_check": 0.0,
+            "prev_completed": 0, "prev_revenue": 0,
+            "avg_rating": 0.0, "reviews_count": 0,
+            "rank": None, "rank_total": 0,
+            "window": None,
+            "error": str(exc),
+        }
+
+
 async def get_stats_with_trend(period: str = DEFAULT_PERIOD) -> dict[str, Any]:
     """
     Полная сводка для экрана статистики: текущее окно + предыдущее окно

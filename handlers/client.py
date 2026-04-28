@@ -1271,7 +1271,9 @@ async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
 # деактивировал как мастера. IsMasterFilter в master.router их больше не
 # пропускает — ловим здесь и мягко переключаем на клиентский режим,
 # чтобы не падать в fallback_message → каталог услуг с мастерской клавиатурой.
-_EX_MASTER_BUTTON_TEXTS = frozenset({"📋 Сегодня", "📅 Мои записи", "📆 Моё расписание"})
+_EX_MASTER_BUTTON_TEXTS = frozenset({
+    "📋 Сегодня", "📅 Мои записи", "📆 Моё расписание", "📊 Моя статистика",
+})
 
 
 @router.message(F.text.in_(_EX_MASTER_BUTTON_TEXTS))

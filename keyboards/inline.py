@@ -428,9 +428,27 @@ def master_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="📋 Сегодня")],
             [KeyboardButton(text="📅 Мои записи")],
             [KeyboardButton(text="📆 Моё расписание")],
+            [KeyboardButton(text="📊 Моя статистика")],
         ],
         resize_keyboard=True,
     )
+
+
+def master_stats_keyboard(period: str) -> InlineKeyboardMarkup:
+    """Inline-переключатель периода ВНУТРИ экрана статистики мастера.
+    Текущий период помечен галочкой. Симметрично admin-stats screen,
+    но callback_data в неймспейсе mstats_period_* — никаких пересечений
+    с admin-роутером."""
+    def _btn(p: str, label: str) -> InlineKeyboardButton:
+        marker = " ✓" if p == period else ""
+        return InlineKeyboardButton(
+            text=f"{label}{marker}",
+            callback_data=f"mstats_period_{p}",
+        )
+
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [_btn("week", "Неделя"), _btn("month", "Месяц"), _btn("quarter", "3 мес")],
+    ])
 
 
 def admin_cancel_keyboard() -> InlineKeyboardMarkup:
