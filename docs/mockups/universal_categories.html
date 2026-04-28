@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Универсальные категории · вариант 2</title>
+<style>
+:root {
+  --bg: #0e1621;
+  --chat-bg: #17212b;
+  --bubble-bot: #182533;
+  --text: #ffffff;
+  --text-soft: #8195a8;
+  --accent: #6ab7ff;
+  --accent-hover: #4d9be7;
+  --divider: #2a3949;
+  --warm: #ffd47a;
+  --green: #4fdf73;
+  --pink: #ff8aa3;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text",
+               "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.title-block {
+  text-align: center;
+  padding: 24px 16px 12px;
+}
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.sub {
+  color: var(--text-soft);
+  font-size: 14px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 24px 48px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+@media (max-width: 1300px) { .wrap { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px)  { .wrap { grid-template-columns: 1fr; } }
+
+.col-label {
+  text-align: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+.col-label .badge {
+  display: inline-block;
+  background: var(--bubble-bot);
+  padding: 2px 10px;
+  border-radius: 10px;
+  margin-top: 4px;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+.phone {
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  background: var(--chat-bg);
+  border-radius: 24px;
+  border: 1px solid var(--divider);
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  position: relative;
+  height: 620px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-header {
+  background: #1d2733;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+.tg-header .avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+}
+.tg-header .a-pink { background: linear-gradient(135deg, #ff8aa3, #ffd47a); }
+.tg-header .a-blue { background: linear-gradient(135deg, #6ab7ff, #c4a8ff); }
+.tg-header .a-green { background: linear-gradient(135deg, #4fdf73, #6ab7ff); }
+.tg-header .a-orange { background: linear-gradient(135deg, #ffa86a, #ff8aa3); }
+.tg-header .name { font-weight: 600; font-size: 14px; }
+.tg-header .meta { font-size: 11px; color: var(--text-soft); }
+
+.chat {
+  padding: 14px 12px;
+  flex: 1;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255,212,122,0.04), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(106,183,255,0.04), transparent 40%),
+    var(--chat-bg);
+}
+
+.bubble {
+  max-width: 90%;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border-top-left-radius: 4px;
+  background: var(--bubble-bot);
+  font-size: 14px;
+}
+.bubble .head {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.bubble .time {
+  font-size: 10px;
+  color: var(--text-soft);
+  margin-top: 6px;
+  text-align: right;
+}
+
+.btn-row { display: flex; gap: 6px; margin-top: 6px; }
+.btn-grid { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.btn {
+  flex: 1;
+  padding: 10px 12px;
+  background: rgba(106,183,255,0.13);
+  color: var(--accent);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+}
+.btn.full { width: 100%; }
+.btn.primary { background: var(--accent); color: white; }
+.btn.muted { background: rgba(255,255,255,0.05); color: var(--text-soft); }
+
+.svc-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(106,183,255,0.13);
+  color: var(--accent);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.svc-btn .price { color: var(--warm); font-weight: 600; }
+
+.input-bar {
+  background: #1d2733;
+  border-top: 1px solid var(--divider);
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.input-bar .input {
+  flex: 1;
+  background: #17212b;
+  border-radius: 18px;
+  padding: 8px 14px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+.input-bar .icon { color: var(--text-soft); font-size: 18px; }
+
+.note {
+  margin-top: 12px;
+  background: var(--bubble-bot);
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.note b { color: var(--text); }
+.note .settings-line {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  background: rgba(0,0,0,0.3);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 6px;
+  color: var(--green);
+  display: inline-block;
+}
+
+/* admin-screen */
+.admin-screen .bubble.admin {
+  background: #1d2c3d;
+  border: 1px solid var(--divider);
+}
+.field {
+  display: flex;
+  align-items: center;
+  background: rgba(0,0,0,0.25);
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.field .key {
+  color: var(--text-soft);
+  width: 130px;
+  flex-shrink: 0;
+}
+.field .val {
+  color: var(--text);
+  font-weight: 500;
+}
+.field.toggle .val.on { color: var(--green); }
+.field.toggle .val.off { color: var(--text-soft); }
+.section-head {
+  font-weight: 600;
+  margin-bottom: 6px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--accent);
+}
+.section-head:first-child { margin-top: 0; }
+
+.divider-line {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-soft);
+  margin: 8px 0;
+}
+</style>
+</head>
+<body>
+
+<div class="title-block">
+  <div class="title">Универсальный бот · вариант 2</div>
+  <div class="sub">
+    Один и тот же код, четыре типа салона. Подписи и режим (с категориями /
+    плоский список) переключаются в админке за 30 секунд.
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ─── 1. Маникюрный (как сейчас, дефолт) ─────────────────────────── -->
+  <div>
+    <div class="col-label">
+      💅 Маникюрный салон<br>
+      <span class="badge">2 категории · дефолт</span>
+    </div>
+    <div class="phone">
+      <div class="tg-header">
+        <div class="avatar a-pink">💅</div>
+        <div>
+          <div class="name">Salon Bot</div>
+          <div class="meta">в сети</div>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="bubble">
+          <div class="head">Что хочется?</div>
+          <div class="btn-row">
+            <div class="btn full">💅 Маникюр</div>
+            <div class="btn full">🦶 Педикюр</div>
+          </div>
+          <div class="time">14:32</div>
+        </div>
+
+        <div class="bubble">
+          <div class="head">💅 Маникюр — выбери услугу</div>
+          <div class="btn-grid">
+            <div class="svc-btn"><span>классический</span><span class="price">80 000</span></div>
+            <div class="svc-btn"><span>с покрытием</span><span class="price">120 000</span></div>
+            <div class="svc-btn"><span>с гель-лаком</span><span class="price">180 000</span></div>
+            <div class="svc-btn"><span>наращивание</span><span class="price">350 000</span></div>
+            <div class="btn muted">‹ назад</div>
+          </div>
+          <div class="time">14:32</div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <span class="icon">📎</span>
+        <div class="input">Сообщение...</div>
+        <span class="icon">🎤</span>
+      </div>
+    </div>
+    <div class="note">
+      Существующее поведение, ничего не меняется. Двухуровневое меню.
+      <div class="settings-line">use_categories=true · «💅 Маникюр» · «🦶 Педикюр»</div>
+    </div>
+  </div>
+
+  <!-- ─── 2. Парикмахерская (две переименованные категории) ─────────────── -->
+  <div>
+    <div class="col-label">
+      💇 Парикмахерская<br>
+      <span class="badge">2 категории · кастом</span>
+    </div>
+    <div class="phone">
+      <div class="tg-header">
+        <div class="avatar a-blue">💇</div>
+        <div>
+          <div class="name">Salon Bot</div>
+          <div class="meta">в сети</div>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="bubble">
+          <div class="head">Что хочется?</div>
+          <div class="btn-row">
+            <div class="btn full">✂️ Стрижки</div>
+            <div class="btn full">🎨 Окрашивание</div>
+          </div>
+          <div class="time">14:32</div>
+        </div>
+
+        <div class="bubble">
+          <div class="head">✂️ Стрижки — выбери услугу</div>
+          <div class="btn-grid">
+            <div class="svc-btn"><span>женская стрижка</span><span class="price">200 000</span></div>
+            <div class="svc-btn"><span>мужская стрижка</span><span class="price">100 000</span></div>
+            <div class="svc-btn"><span>детская стрижка</span><span class="price">80 000</span></div>
+            <div class="svc-btn"><span>укладка</span><span class="price">120 000</span></div>
+            <div class="btn muted">‹ назад</div>
+          </div>
+          <div class="time">14:32</div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <span class="icon">📎</span>
+        <div class="input">Сообщение...</div>
+        <span class="icon">🎤</span>
+      </div>
+    </div>
+    <div class="note">
+      Та же логика что в маникюрном, но владелец перевёл подписи через
+      админку.
+      <div class="settings-line">use_categories=true · «✂️ Стрижки» · «🎨 Окрашивание»</div>
+    </div>
+  </div>
+
+  <!-- ─── 3. Студия депиляции (плоский список) ───────────────────────────── -->
+  <div>
+    <div class="col-label">
+      🪒 Студия депиляции<br>
+      <span class="badge">плоский список</span>
+    </div>
+    <div class="phone">
+      <div class="tg-header">
+        <div class="avatar a-green">🪒</div>
+        <div>
+          <div class="name">Salon Bot</div>
+          <div class="meta">в сети</div>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="bubble">
+          <div class="head">Выбери услугу</div>
+          <div class="btn-grid">
+            <div class="svc-btn"><span>ноги полностью</span><span class="price">300 000</span></div>
+            <div class="svc-btn"><span>ноги до колена</span><span class="price">180 000</span></div>
+            <div class="svc-btn"><span>руки</span><span class="price">200 000</span></div>
+            <div class="svc-btn"><span>подмышки</span><span class="price">100 000</span></div>
+            <div class="svc-btn"><span>бикини классич.</span><span class="price">250 000</span></div>
+            <div class="svc-btn"><span>бикини глубокое</span><span class="price">350 000</span></div>
+            <div class="svc-btn"><span>лицо</span><span class="price">150 000</span></div>
+          </div>
+          <div class="time">14:32</div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <span class="icon">📎</span>
+        <div class="input">Сообщение...</div>
+        <span class="icon">🎤</span>
+      </div>
+    </div>
+    <div class="note">
+      Один тип услуг — нет смысла в двух категориях. Клиент <b>не видит
+      шаг «выбери категорию»</b>, сразу плоский список.
+      <div class="settings-line">use_categories=false · одношаговое меню</div>
+    </div>
+  </div>
+
+  <!-- ─── 4. Админский экран настройки ───────────────────────────────────── -->
+  <div>
+    <div class="col-label">
+      ⚙️ Админка владельца<br>
+      <span class="badge">«🏷 Категории услуг»</span>
+    </div>
+    <div class="phone admin-screen">
+      <div class="tg-header">
+        <div class="avatar a-orange">👑</div>
+        <div>
+          <div class="name">Salon Bot</div>
+          <div class="meta">админ-панель</div>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="bubble admin">
+          <div class="head">🏷 Категории услуг</div>
+
+          <div class="section-head">Режим меню</div>
+          <div class="field toggle">
+            <div class="key">Категории:</div>
+            <div class="val on">✅ включены</div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-soft); margin-bottom: 8px; padding: 0 4px;">
+            Если выкл — клиент сразу видит список услуг без выбора категории.
+            Удобно для салонов одного типа (только депиляция, только массаж).
+          </div>
+
+          <div class="section-head">Подписи категорий</div>
+          <div class="field">
+            <div class="key">Категория А:</div>
+            <div class="val">💅 Маникюр</div>
+          </div>
+          <div class="field">
+            <div class="key">Категория Б:</div>
+            <div class="val">🦶 Педикюр</div>
+          </div>
+
+          <div class="btn-grid" style="margin-top: 10px;">
+            <div class="btn full">✏️ Изменить категорию А</div>
+            <div class="btn full">✏️ Изменить категорию Б</div>
+            <div class="btn full muted">🔄 Переключить режим (вкл/выкл)</div>
+            <div class="btn muted">↩ Назад в настройки</div>
+          </div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <span class="icon">📎</span>
+        <div class="input">Сообщение...</div>
+        <span class="icon">🎤</span>
+      </div>
+    </div>
+    <div class="note">
+      Один экран в Настройках. Владелец задаёт подписи через ввод текста
+      («Стрижки» / «Окрашивание»), эмодзи можно ввести с клавиатуры.
+      Переключатель режима — две кнопки.
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Manicure bot · client UI v2 mockup</title>
+<style>
+:root {
+  --bg: #0e1621;
+  --chat-bg: #17212b;
+  --bubble-bot: #182533;
+  --bubble-user: #2b5278;
+  --text: #ffffff;
+  --text-soft: #8195a8;
+  --accent: #6ab7ff;
+  --accent-hover: #4d9be7;
+  --divider: #2a3949;
+  --warm: #ffd47a;
+  --green: #4fdf73;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text",
+               "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+@media (max-width: 1100px) {
+  .wrap { grid-template-columns: 1fr; }
+}
+
+.label {
+  text-align: center;
+  margin-bottom: 12px;
+  color: var(--text-soft);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.phone {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  background: var(--chat-bg);
+  border-radius: 28px;
+  border: 1px solid var(--divider);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+  position: relative;
+}
+
+.tg-header {
+  background: #1d2733;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--divider);
+}
+.tg-header .avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff8aa3, #ffd47a);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.tg-header .name { font-weight: 600; }
+.tg-header .meta { font-size: 12px; color: var(--text-soft); }
+
+.chat {
+  padding: 16px 12px 90px;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255,212,122,0.05), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(106,183,255,0.05), transparent 40%),
+    var(--chat-bg);
+  min-height: 700px;
+}
+
+.bubble {
+  max-width: 86%;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  word-wrap: break-word;
+  position: relative;
+}
+.bubble.bot {
+  background: var(--bubble-bot);
+  border-top-left-radius: 4px;
+}
+.bubble.user {
+  background: var(--bubble-user);
+  margin-left: auto;
+  border-top-right-radius: 4px;
+}
+.bubble .time {
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-top: 4px;
+  text-align: right;
+}
+
+.hero-img {
+  width: calc(100% + 24px);
+  margin: -10px -12px 8px;
+  display: block;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 14px;
+  height: 180px;
+  background-size: cover;
+  background-position: center;
+}
+
+.hero-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.hero-sub {
+  color: var(--text-soft);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.rating-line {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.rating-line .stars { color: var(--warm); }
+.rating-line .count { color: var(--text-soft); font-size: 12px; }
+
+.btn-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.btn {
+  flex: 1;
+  padding: 10px 12px;
+  background: rgba(106,183,255,0.13);
+  color: var(--accent);
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn:hover { background: rgba(106,183,255,0.22); }
+.btn.primary { background: var(--accent); color: white; }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+
+.master-card {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+  background: var(--bubble-bot);
+  border-radius: 14px;
+  padding: 10px;
+  border-top-left-radius: 4px;
+}
+.master-card .photo {
+  width: 70px; height: 70px;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+}
+.master-card .info { flex: 1; min-width: 0; }
+.master-card .name {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.master-card .bio {
+  color: var(--text-soft);
+  font-size: 12px;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+.master-card .meta {
+  display: flex; gap: 8px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.master-card .meta .star { color: var(--warm); }
+.master-card .pick {
+  margin-top: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: rgba(106,183,255,0.13);
+  color: var(--accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.service-card {
+  margin-bottom: 8px;
+  background: var(--bubble-bot);
+  border-radius: 14px;
+  overflow: hidden;
+  border-top-left-radius: 4px;
+}
+.service-card .photo {
+  width: 100%; height: 140px;
+  background-size: cover;
+  background-position: center;
+}
+.service-card .body { padding: 10px 12px; }
+.service-card .name {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.service-card .meta {
+  color: var(--text-soft);
+  font-size: 12px;
+  display: flex; gap: 10px;
+  margin-bottom: 8px;
+}
+.service-card .meta .price { color: var(--warm); font-weight: 600; }
+
+.sticker {
+  font-size: 84px;
+  text-align: center;
+  margin: 12px 0 4px;
+  line-height: 1;
+}
+.confirm-summary {
+  background: var(--bubble-bot);
+  border-radius: 14px;
+  padding: 14px;
+  border-top-left-radius: 4px;
+  margin-bottom: 8px;
+}
+.confirm-summary .head {
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+.confirm-summary .row {
+  display: flex; gap: 8px;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.confirm-summary .row .label-mini {
+  color: var(--text-soft);
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.input-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: #1d2733;
+  border-top: 1px solid var(--divider);
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.input-bar .input {
+  flex: 1;
+  background: #17212b;
+  border-radius: 18px;
+  padding: 8px 14px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+.input-bar .icon { color: var(--text-soft); font-size: 20px; }
+
+.note {
+  text-align: center;
+  margin-top: 16px;
+  color: var(--text-soft);
+  font-size: 12px;
+  padding: 0 16px;
+}
+.before-after {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px; margin-top: 8px;
+}
+.before-after .col {
+  background: var(--bubble-bot);
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.before-after .col .head {
+  font-size: 11px;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.before-after .col.before .head { color: #ff7a7a; }
+.before-after .col.after .head { color: var(--green); }
+
+.title {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.sub {
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+</style>
+</head>
+<body>
+
+<div class="wrap" style="grid-template-columns: 1fr; padding-bottom: 4px;">
+  <div>
+    <h1 class="title">Manicure bot · client UI v2</h1>
+    <p class="sub">три экрана в стиле Telegram — что увидит клиент после улучшений (до/после внизу каждого)</p>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ─── ЭКРАН 1: HERO /start ──────────────────────────────────────────── -->
+  <div>
+    <div class="label">1. Hero /start</div>
+    <div class="phone">
+      <div class="tg-header">
+        <div class="avatar">💅</div>
+        <div>
+          <div class="name">Salon Bot</div>
+          <div class="meta">в сети</div>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="bubble bot">
+          <div class="hero-img" style="background-image: url('https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80'); background-position: center;"></div>
+          <div class="hero-title">✨ Salon · Маникюр и педикюр</div>
+          <div class="hero-sub">📍 Ташкент · работаем 9:00–19:00</div>
+          <div class="rating-line">
+            <span class="stars">★★★★★</span>
+            <span><b>4.8</b></span>
+            <span class="count">от 45 клиентов</span>
+          </div>
+          <div class="btn-row">
+            <div class="btn primary">📅 Записаться</div>
+            <div class="btn">📋 Мои записи</div>
+          </div>
+          <div class="time">14:32</div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <span class="icon">📎</span>
+        <div class="input">Сообщение...</div>
+        <span class="icon">🎤</span>
+      </div>
+    </div>
+    <div class="note">
+      <div class="before-after">
+        <div class="col before">
+          <div class="head">было</div>
+          <i>"привет, я бот салона. жми кнопку чтобы записаться."</i>
+        </div>
+        <div class="col after">
+          <div class="head">стало</div>
+          <i>фото салона + название + рейтинг + 2 кнопки</i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ЭКРАН 2: ВЫБОР МАСТЕРА С ФОТО ──────────────────────────────── -->
+  <div>
+    <div class="label">2. Выбор мастера</div>
+    <div class="phone">
+      <div class="tg-header">
+        <div class="avatar">💅</div>
+        <div>
+          <div class="name">Salon Bot</div>
+          <div class="meta">в сети</div>
+        </div>
+      </div>
+      <div class="chat">
+        <div class="bubble bot">
+          <div style="font-weight: 600; margin-bottom: 8px;">Выбери мастера</div>
+        </div>
+
+        <div class="master-card">
+          <div class="photo" style="background-image: url('https://images.unsplash.com/photo-1580618672591-eb180b1a973f?w=200&q=80');"></div>
+          <div class="info">
+            <div class="name">Алия Хасанова</div>
+            <div class="bio">6 лет опыта · гель-лак · nail-art</div>
+            <div class="meta">
+              <span><span class="star">★</span> 4.9 · 18 отзывов</span>
+            </div>
+            <button class="pick">Выбрать →</button>
+          </div>
+        </div>
+
+        <div class="master-card">
+          <div class="photo" style="background-image: url('https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=200&q=80');"></div>
+          <div class="info">
+            <div class="name">Севара Каримова</div>
+            <div class="bio">4 года · классика · педикюр</div>
+            <div class="meta">
+              <span><span class="star">★</span> 4.7 · 12 отзывов</span>
+            </div>
+            <button class="pick">Выбрать →</button>
+          </div>
+        </div>
+
+        <div class="master-card">
+          <div class="photo" style="background-image: url('https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&q=80');"></div>
+          <div class="info">
+            <div class="name">Камилла Юсупова</div>
+            <div class="bio">3 года · художественная роспись</div>
+            <div class="meta">
+              <span><span class="star">★</span> 4.8 · 8 отзывов</span>
+            </div>
+            <button class="pick">Выбрать →</button>
+          </div>
+        </div>
+
+        <div class="bubble bot" style="max-width: 100%; margin-top: 4px;">
+          <div class="btn">👥 Любой свободный</div>
+        </div>
+      </div>
+      <div class="input-bar">
+        <span class="icon">📎</span>
+        <div class="input">Сообщение...</div>
+        <span class="icon">🎤</span>
+      </div>
+    </div>
+    <div class="note">
+      <div class="before-after">
+        <div class="col before">
+          <div class="head">было</div>
+          текст «Выбери мастера» + 4 кнопки с одними именами
+        </div>
+        <div class="col after">
+          <div class="head">стало</div>
+          карточки с фото, опытом, рейтингом
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ЭКРАН 3: УСЛУГИ + СТИКЕР НА CONFIRM ────────────────────── -->
+  <div>
+    <div class="label">3. Карточки услуг + ✨ confirm</div>
+    <div class="phone">
+      <div class="tg-header">
+        <div class="avatar">💅</div>
+        <div>
+          <div class="name">Salon Bot</div>
+          <div class="meta">в сети</div>
+        </div>
+      </div>
+      <div class="chat">
+
+        <div class="service-card">
+          <div class="photo" style="background-image: url('https://images.unsplash.com/photo-1632345031435-8727f6897d53?w=600&q=80');"></div>
+          <div class="body">
+            <div class="name">Маникюр + гель-лак</div>
+            <div class="meta">
+              <span class="price">180 000 сум</span>
+              <span>· 90 мин</span>
+            </div>
+            <div class="btn primary">Выбрать</div>
+          </div>
+        </div>
+
+        <div class="service-card">
+          <div class="photo" style="background-image: url('https://images.unsplash.com/photo-1604902396830-aca29e19b067?w=600&q=80');"></div>
+          <div class="body">
+            <div class="name">Педикюр + гель-лак</div>
+            <div class="meta">
+              <span class="price">220 000 сум</span>
+              <span>· 90 мин</span>
+            </div>
+            <div class="btn primary">Выбрать</div>
+          </div>
+        </div>
+
+        <!-- разделитель показывает скачок к финалу -->
+        <div style="text-align: center; color: var(--text-soft); font-size: 12px; margin: 20px 0 12px;">
+          ⋮ ⋮ ⋮ позже, после confirm ⋮ ⋮ ⋮
+        </div>
+
+        <div class="bubble bot" style="text-align: center;">
+          <div class="sticker">🌸</div>
+          <div style="font-size: 16px; font-weight: 600;">Запись подтверждена!</div>
+        </div>
+
+        <div class="confirm-summary">
+          <div class="head">📋 Твой визит</div>
+          <div class="row"><div class="label-mini">Услуга:</div><div>Маникюр + гель-лак</div></div>
+          <div class="row"><div class="label-mini">Мастер:</div><div>Алия Хасанова</div></div>
+          <div class="row"><div class="label-mini">Когда:</div><div>завтра, 14:00</div></div>
+          <div class="row"><div class="label-mini">К оплате:</div><div style="color: var(--warm); font-weight: 600;">180 000 сум</div></div>
+        </div>
+
+        <div class="bubble bot" style="font-size: 13px; color: var(--text-soft);">
+          🔔 пришлём напоминание за 24 часа и за 2 часа.
+          <div class="time">14:38</div>
+        </div>
+
+      </div>
+      <div class="input-bar">
+        <span class="icon">📎</span>
+        <div class="input">Сообщение...</div>
+        <span class="icon">🎤</span>
+      </div>
+    </div>
+    <div class="note">
+      <div class="before-after">
+        <div class="col before">
+          <div class="head">было</div>
+          текстовые кнопки «гель-лак · 150 000» + табличка confirm
+        </div>
+        <div class="col after">
+          <div class="head">стало</div>
+          фото-карточки услуг + стикер на финале
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
