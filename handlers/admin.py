@@ -12,7 +12,7 @@ from db import (
     get_appointments_by_date_full,
     get_services, get_future_blocks, get_all_settings,
     get_all_future_appointments, get_recent_clients, _price_fmt,
-    get_all_masters,
+    get_all_masters, get_categories_config,
 )
 from keyboards.inline import (
     day_view_keyboard, calendar_keyboard,
@@ -297,7 +297,8 @@ async def msg_services(message: Message, state: FSMContext):
         return
     await state.clear()
     services = await get_services(active_only=False)
-    await _nav(message, "💅 Управление услугами:", services_list_keyboard(services))
+    cfg = await get_categories_config()
+    await _nav(message, "💅 Управление услугами:", services_list_keyboard(services, labels=cfg["labels"]))
 
 
 @router.message(StateFilter("*"), F.text == "📊 Статистика")
