@@ -563,7 +563,15 @@ def back_to_home() -> InlineKeyboardMarkup:
 
 # ─── CALENDAR ────────────────────────────────────────────────────────────────
 
-def calendar_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
+def calendar_keyboard(
+    year: int,
+    month: int,
+    marks: dict[str, str] | None = None,
+) -> InlineKeyboardMarkup:
+    """
+    Календарь админа. marks — словарь YYYY-MM-DD → префикс ("× " выходной,
+    "• " есть записи). Без marks — голые числа (legacy).
+    """
     buttons = []
 
     # Навигационная строка
@@ -592,11 +600,20 @@ def calendar_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
             if day == 0:
                 row.append(InlineKeyboardButton(text=" ", callback_data="cal_noop"))
             else:
+                date_str = f"{year}-{month:02d}-{day:02d}"
+                prefix = marks.get(date_str, "") if marks else ""
                 row.append(InlineKeyboardButton(
-                    text=str(day),
+                    text=f"{prefix}{day}",
                     callback_data=f"cal_day_{year}_{month}_{day}"
                 ))
         buttons.append(row)
+
+    # Легенда — только при наличии меток, чтобы не загромождать пустой месяц
+    if marks:
+        buttons.append([InlineKeyboardButton(
+            text="• есть записи   × выходной",
+            callback_data="cal_noop",
+        )])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

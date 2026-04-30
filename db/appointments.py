@@ -283,6 +283,48 @@ async def get_upcoming_appointments() -> list[dict[str, Any]]:
     )
 
 
+async def get_calendar_marks(date_from: str, date_to: str) -> dict[str, str]:
+    """
+    Маркеры для админ-календаря на диапазон дат [from..to] включительно.
+
+    Возвращает {YYYY-MM-DD: prefix}, где prefix:
+      "× " — глобальный выходной (blocked_slots.master_id IS NULL, is_day_off=1)
+              перебивает счётчик записей; день закрыт целиком.
+      "• " — есть ≥1 scheduled запись, не выходной.
+      ""   — нет ни записей, ни глобального выходного (день не в результате).
+
+    Per-master выходные не учитываем — у solo-салона релевантен только
+    master_id IS NULL, у мульти-мастера админ видит per-master графики
+    в отдельных экранах. Календарь даёт «обзор салона», не графики каждого.
+    """
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT date, COUNT(*) FROM appointments
+           WHERE status = 'scheduled' AND date BETWEEN ? AND ?
+           GROUP BY date""",
+        (date_from, date_to),
+    )
+    rows = await cursor.fetchall()
+    marks: dict[str, str] = {}
+    for date_str, _count in rows:
+        marks[date_str] = "• "
+
+    cursor = await db.execute(
+        """SELECT date FROM blocked_slots
+           WHERE is_day_off = 1 AND master_id IS NULL
+             AND date BETWEEN ? AND ?""",
+        (date_from, date_to),
+    )
+    rows = await cursor.fetchall()
+    for (date_str,) in rows:
+        # Выходной перебивает счётчик: день закрыт даже если в нём
+        # технически есть scheduled (не должно быть — add_day_off запрещает,
+        # но защищаемся от грязных миграций).
+        marks[date_str] = "× "
+
+    return marks
+
+
 async def get_client_appointments(user_id: int) -> list[dict[str, Any]]:
     """Все записи клиента (будущие + прошлые)."""
     return await _dict_rows(

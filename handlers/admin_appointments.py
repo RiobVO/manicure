@@ -37,7 +37,9 @@ from db import (
     log_admin_action, _price_fmt, get_day_schedule,
     get_review_by_appointment, get_master,
     get_day_schedule_for_master, get_time_blocks_for_master,
+    get_calendar_marks,
 )
+import calendar as _stdlib_calendar
 from keyboards.inline import (
     admin_keyboard, day_view_keyboard, appointment_actions_keyboard,
     cancel_confirm_keyboard, reschedule_dates_keyboard, reschedule_times_keyboard,
@@ -131,6 +133,15 @@ async def cb_tomorrow(callback: CallbackQuery):
 
 # ─── КАЛЕНДАРЬ ───────────────────────────────────────────────────────────────
 
+async def _calendar_marks_for(year: int, month: int) -> dict[str, str]:
+    """Маркеры (× выходной / • есть записи) на весь визуализируемый месяц."""
+    last_day = _stdlib_calendar.monthrange(year, month)[1]
+    return await get_calendar_marks(
+        f"{year}-{month:02d}-01",
+        f"{year}-{month:02d}-{last_day:02d}",
+    )
+
+
 @router.callback_query(F.data == "admin_cal")
 async def cb_admin_cal(callback: CallbackQuery):
     if not is_admin_callback(callback):
@@ -138,10 +149,11 @@ async def cb_admin_cal(callback: CallbackQuery):
         return
     await callback.answer()  # ранний ack
     now = now_local()
+    marks = await _calendar_marks_for(now.year, now.month)
     await edit_panel(
         callback.bot, callback.message.chat.id,
         "🗓 Выберите дату:",
-        calendar_keyboard(now.year, now.month),
+        calendar_keyboard(now.year, now.month, marks=marks),
     )
 
 
@@ -155,9 +167,10 @@ async def cb_cal_prev(callback: CallbackQuery):
         logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
         return
-    year, month = parts
+    year, month = int(parts[0]), int(parts[1])
     text = callback.message.text or "🗓 Выберите дату:"
-    await edit_panel(callback.bot, callback.message.chat.id, text, calendar_keyboard(int(year), int(month)))
+    marks = await _calendar_marks_for(year, month)
+    await edit_panel(callback.bot, callback.message.chat.id, text, calendar_keyboard(year, month, marks=marks))
     await callback.answer()
 
 
@@ -171,9 +184,10 @@ async def cb_cal_next(callback: CallbackQuery):
         logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
         return
-    year, month = parts
+    year, month = int(parts[0]), int(parts[1])
     text = callback.message.text or "🗓 Выберите дату:"
-    await edit_panel(callback.bot, callback.message.chat.id, text, calendar_keyboard(int(year), int(month)))
+    marks = await _calendar_marks_for(year, month)
+    await edit_panel(callback.bot, callback.message.chat.id, text, calendar_keyboard(year, month, marks=marks))
     await callback.answer()
 
 
