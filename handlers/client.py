@@ -86,6 +86,24 @@ async def _cleanup_services_msg(bot, chat_id: int) -> None:
         pass
 
 
+# ─── Кэш языка клиента в FSM на сессию букинга ──────────────────────────────
+# Booking-flow проходит 5-7 шагов (категория → услуга → аддоны → мастер →
+# дата → время → ...), на каждом раньше читался get_user_lang() из БД.
+# Это ~5 SELECT'ов за один букинг — лишняя нагрузка и микро-задержки.
+# _lang_cached кладёт язык в state при первом обращении и читает из state
+# на последующих. Инвалидация автоматическая: state.clear() в cmd_start /
+# cmd_change_lang / по завершении букинга обнуляет кэш.
+async def _lang_cached(state: FSMContext, user_id: int) -> str:
+    data = await state.get_data()
+    cached = data.get("_lang")
+    if cached:
+        return cached
+    from db import get_user_lang
+    lang = await get_user_lang(user_id)
+    await state.update_data(_lang=lang)
+    return lang
+
+
 # ─── Выбор категории (ручки/ножки) и список услуг в ней ──────────────────────
 
 
@@ -199,8 +217,7 @@ async def _show_master_step(
     """
     await callback.answer()  # ранний ack — спиннер уходит мгновенно
     from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await _lang_cached(state, callback.from_user.id)
     masters = await get_active_masters()
     date_prompt = t("book_date_prompt", lang)
     if not masters:
@@ -341,8 +358,7 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
     # только первый ack), поэтому показываем сообщение в чате.
     await callback.answer()
     from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await _lang_cached(state, callback.from_user.id)
     service_id = int(parts[0])
     service = await get_service_by_id(service_id)
 
@@ -395,8 +411,7 @@ async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
     """Переключить выбор доп. опции (toggle)."""
     await callback.answer()  # ранний ack — спиннер уходит сразу
     from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await _lang_cached(state, callback.from_user.id)
     parts = parse_callback(callback.data, "addon", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -439,8 +454,7 @@ async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
     # ack безопасен (Telegram игнорирует второй вызов).
     await callback.answer()
     from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await _lang_cached(state, callback.from_user.id)
     data = await state.get_data()
     selected: list[int] = data.get("selected_addons", [])
 
@@ -476,8 +490,7 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
     # Ранний ack: спиннер уходит сразу, до 3 DB-запросов ниже.
     await callback.answer()
     from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await _lang_cached(state, callback.from_user.id)
     master_id = int(parts[0])
     master = await get_master(master_id)
     if not master or not master["is_active"]:
@@ -514,15 +527,13 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
     await state.set_state(BookingStates.choose_date)
-    await callback.answer()
 
 
 @router.callback_query(BookingStates.choose_date, F.data.startswith("date_"))
 async def choose_date(callback: CallbackQuery, state: FSMContext):
     await callback.answer()  # ранний ack
     from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await _lang_cached(state, callback.from_user.id)
     parts = parse_callback(callback.data, "date", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -567,8 +578,7 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
 async def choose_time(callback: CallbackQuery, state: FSMContext):
     await callback.answer()  # ранний ack
     from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await _lang_cached(state, callback.from_user.id)
     parts = parse_callback(callback.data, "time", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -1221,26 +1231,31 @@ async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
     # без ack спиннер бы висел до конца цепочки (~700ms+).
     await callback.answer()
     from db import set_user_lang
-    from utils.i18n import t, Lang
+    from utils.i18n import Lang
     lang = Lang.UZ if callback.data == "lang_set_uz" else Lang.RU
     await set_user_lang(callback.from_user.id, lang)
 
-    # Подтверждение + reply-клава на выбранном языке.
+    # Старое сообщение «выбери язык» убираем фоном — не блокируем флоу
+    # на сетевом ответе TG. Раньше делали edit_text("Язык изменён"),
+    # потом ещё 3 сообщения с sleep'ами — итого 4 API-вызова. Сейчас
+    # подтверждение «сменилось» подразумевается тем, что весь UI ниже
+    # уже на новом языке.
+    delete_in_bg(callback.message)
+
+    # Приветствие + reply-клава одним сообщением — раньше было два
+    # (невидимое сообщение для клавы + greeting), сейчас слиты.
     try:
-        await callback.message.edit_text(t("lang_changed", lang), parse_mode="HTML")
+        await callback.message.answer(
+            greeting_new(lang),
+            reply_markup=client_reply_keyboard(lang),
+            parse_mode="HTML",
+        )
     except TelegramBadRequest:
         pass
 
-    await callback.message.answer(
-        "\u2063", reply_markup=client_reply_keyboard(lang)
-    )
-    await asyncio.sleep(0.3)
-
-    # Единый онбординг — hero + категории. Возвращающийся клиент тоже
-    # сюда попадает (через /language) и должен видеть полный экран,
-    # а не пустое подтверждение смены языка.
-    await callback.message.answer(greeting_new(lang), parse_mode="HTML")
-    await asyncio.sleep(0.4)
+    # Меню категорий — единый онбординг даже для возвращающегося клиента
+    # (через /language). Без этого после смены языка клиент остался бы
+    # на пустом экране без призыва к действию.
     await _send_category_picker(callback.message, state, user_id=callback.from_user.id)
 
 
