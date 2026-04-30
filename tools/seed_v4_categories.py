@@ -37,9 +37,10 @@ sys.path.insert(0, str(ROOT))
 from db.connection import get_db, init_db, close_db, get_write_lock
 from db.seed import SERVICES
 
-# Категории, добавленные в v.5. Старые (hands/feet) трогать не надо — у салона
-# уже есть свой набор маникюрных/педикюрных услуг с реальными ценами.
-NEW_CATEGORIES = {"face", "depil", "skincare", "dental"}
+# Категории, добавленные в v.5+ (после реструктуризации заказчицы).
+# Старые (hands/feet) трогать не надо — у салона уже есть свой набор
+# маникюрных/педикюрных услуг с реальными ценами.
+NEW_CATEGORIES = {"face", "wax", "sugar", "care"}
 
 
 async def main() -> int:
