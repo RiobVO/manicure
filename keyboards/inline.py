@@ -627,6 +627,10 @@ def day_view_keyboard(scheduled: list[dict], date_str: str) -> InlineKeyboardMar
     Клавиатура дневного вида: список активных записей + ➕ «Записать клиента»
     в шапке. Кнопка ➕ есть всегда — даже на пустом дне, чтобы владелица
     могла записать клиента на любой день одним тапом.
+
+    Внизу — «🚫 Сделать выходным» (только для today/future): тап = блокировка
+    дня без захода в «📵 Блокировки → добавить → выбор даты из 14 дней».
+    Прошлые дни не показывают кнопку — закрывать вчера бессмысленно.
     """
     buttons: list[list[InlineKeyboardButton]] = []
     buttons.append([InlineKeyboardButton(
@@ -639,6 +643,38 @@ def day_view_keyboard(scheduled: list[dict], date_str: str) -> InlineKeyboardMar
             text=f"🕐 {appt['time']} — {name_trunc}",
             callback_data=f"appt_detail_{appt['id']}",
         )])
+
+    today_str = now_local().strftime("%Y-%m-%d")
+    if date_str >= today_str:
+        buttons.append([InlineKeyboardButton(
+            text="🚫 Сделать выходным",
+            callback_data=f"caldayoff_{date_str}",
+        )])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def caldayoff_master_picker_keyboard(date_str: str, masters: list[dict]) -> InlineKeyboardMarkup:
+    """Выбор мастера для блокировки дня прямо из календаря.
+
+    Не переиспользую block_master_select_keyboard — у него callback'и
+    `block_master_*`, которые ловит FSM-хендлер cb_block_master (требует
+    state). Тут нужен прямой блок без FSM, поэтому свои callback'и
+    с датой внутри: `caldayoff_pick_<date>_<id|all>`.
+    """
+    buttons = [[InlineKeyboardButton(
+        text="🌐 Все мастера",
+        callback_data=f"caldayoff_pick_{date_str}_all",
+    )]]
+    for m in masters:
+        buttons.append([InlineKeyboardButton(
+            text=m["name"],
+            callback_data=f"caldayoff_pick_{date_str}_{m['id']}",
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="↩️ Отмена",
+        callback_data=f"cal_day_back_{date_str}",
+    )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

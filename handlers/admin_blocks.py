@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -8,12 +9,13 @@ from db import get_future_blocks, add_day_off, add_time_block, delete_blocked_sl
 from keyboards.inline import (
     blocks_list_keyboard, block_date_keyboard, block_type_keyboard,
     block_delete_confirm_keyboard, admin_cancel_keyboard,
-    block_master_select_keyboard,
+    block_master_select_keyboard, caldayoff_master_picker_keyboard,
 )
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
 from utils.panel import edit_panel, edit_panel_with_callback
 from utils.validators import validate_time
+from handlers.admin_appointments import show_day_view
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -33,6 +35,79 @@ async def cb_admin_blocks(callback: CallbackQuery):
         await deny_access(callback)
         return
     await _show_blocks(callback)
+
+
+# ─── ВЫХОДНОЙ ИЗ КАЛЕНДАРЯ (day-view) ────────────────────────────────────────
+# Шорткат: тап на «🚫 Сделать выходным» в day-view → блок без захода в
+# «📵 Блокировки → добавить → выбор даты из 14 дней». Дата кодируется в
+# callback'е, FSM не нужен.
+
+async def _do_caldayoff(callback: CallbackQuery, date_str: str, master_id: int | None) -> None:
+    """Поставить выходной и вернуть админа в day-view (или показать alert)."""
+    try:
+        await add_day_off(date_str, master_id=master_id)
+    except ValueError as exc:
+        # Конфликт: на дату есть scheduled записи или блокировка уже стоит.
+        # Alert + возврат в day-view, чтобы админ сразу увидел список и
+        # мог перенести/отменить мешающие записи.
+        await callback.answer(str(exc), show_alert=True)
+        await show_day_view(callback, date_str)
+        return
+
+    try:
+        label = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except ValueError:
+        label = date_str
+    await callback.answer(f"✅ {label} — выходной", show_alert=False)
+    await show_day_view(callback, date_str)
+
+
+@router.callback_query(
+    F.data.startswith("caldayoff_") & ~F.data.startswith("caldayoff_pick_")
+)
+async def cb_caldayoff_start(callback: CallbackQuery):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "caldayoff", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    date_str = parts[0]
+
+    masters = await get_active_masters()
+    # ≥2 активных мастеров — спрашиваем для кого. 0 или 1 — блокируем сразу
+    # для всех (master_id=None): для соло-салона это и есть «закрыто».
+    if len(masters) >= 2:
+        try:
+            label = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+        except ValueError:
+            label = date_str
+        await edit_panel_with_callback(
+            callback,
+            f"📵 Сделать выходным {label}\nДля кого?",
+            caldayoff_master_picker_keyboard(date_str, masters),
+        )
+        await callback.answer()
+        return
+
+    await _do_caldayoff(callback, date_str, master_id=None)
+
+
+@router.callback_query(F.data.startswith("caldayoff_pick_"))
+async def cb_caldayoff_pick(callback: CallbackQuery):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "caldayoff_pick", 2)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    date_str, raw = parts
+    master_id = None if raw == "all" else int(raw)
+    await _do_caldayoff(callback, date_str, master_id)
 
 
 # ─── УДАЛЕНИЕ: сначала подтверждение ─────────────────────────────────────────
