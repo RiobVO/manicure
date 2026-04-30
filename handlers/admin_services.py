@@ -12,7 +12,7 @@ from db import (
     service_has_future_appointments, log_admin_action, _price_fmt,
     get_addons_for_service, get_addon_by_id, add_addon,
     delete_addon, toggle_addon_active,
-    get_categories_config,
+    get_categories_config, get_active_addon_counts,
 )
 from keyboards.inline import (
     services_list_keyboard, service_detail_keyboard, admin_cancel_keyboard,
@@ -45,10 +45,11 @@ def _service_text(service: dict) -> str:
 
 async def _show_services(callback: CallbackQuery, page: int = 0):
     services = await get_services(active_only=False)
+    addon_counts = await get_active_addon_counts()
     await edit_panel_with_callback(
         callback,
         "💅 Управление услугами:",
-        services_list_keyboard(services, page=page),
+        services_list_keyboard(services, page=page, addon_counts=addon_counts),
     )
 
 
@@ -612,10 +613,11 @@ async def msg_svc_add_dur(message: Message, state: FSMContext):
         )
         await state.clear()
         services = await get_services(active_only=False)
+        addon_counts = await get_active_addon_counts()
         await edit_panel(
             message.bot, message.chat.id,
             f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
-            services_list_keyboard(services),
+            services_list_keyboard(services, addon_counts=addon_counts),
         )
         return
 
@@ -663,10 +665,11 @@ async def cb_svc_add_category(callback: CallbackQuery, state: FSMContext):
     await state.clear()
 
     services = await get_services(active_only=False)
+    addon_counts = await get_active_addon_counts()
     await edit_panel_with_callback(
         callback,
         f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
-        services_list_keyboard(services),
+        services_list_keyboard(services, addon_counts=addon_counts),
     )
     await callback.answer()
 
