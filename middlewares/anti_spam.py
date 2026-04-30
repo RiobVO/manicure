@@ -35,14 +35,23 @@ from aiogram.types import CallbackQuery, TelegramObject
 
 logger = logging.getLogger(__name__)
 
-# Минимальный интервал между одинаковыми кликами от одного user'а.
-# 1500 мс — после первой выкатки оказалось, что 600 пропускает все клики
-# на тапах с интервалом 700-800мс (типичный нервный темп). Тогда даже с
-# ранним ack клиент видел залипание UI: каждый клик дёргал API → у TG-клиента
-# собиралась очередь обновлений → визуально — «заевшая кнопка». 1500мс
-# режут весь нервный спам, на осознанный повторный клик пользователь обычно
-# тратит больше секунды (паузу на «передумал»).
+# Два слоя anti-spam:
+#
+# 1) MIN_INTERVAL_MS = 1500 мс — между ОДИНАКОВЫМИ кликами от одного user'а
+#    на ту же кнопку. Защита от нервного двойного-тройного тапа на одну
+#    и ту же кнопку (повторный клик «не нажалось ли?»).
+#
+# 2) MIN_USER_INTERVAL_MS = 400 мс — между ЛЮБЫМИ кликами от одного user'а,
+#    независимо от data. Это критично потому что у Telegram Bot API лимит
+#    «1 edit_message/сек на чат». Когда клиент быстро проходит букинг
+#    (категория → услуга → мастер → дата → время — 5+ кликов за 3-5 сек),
+#    каждый клик делает edit_text. На 8-9 кликах TG возвращает
+#    429 Too Many Requests с retry_after=3. aiogram ждёт 3 секунды и
+#    ретраит — клиент видит «залипание на 3 секунды». 400мс ограничивает
+#    частоту edit_text до ~2.5/сек в худшем случае, что ниже опасной зоны.
+#    Осознанный flow букинга редко идёт быстрее 600мс между шагами.
 MIN_INTERVAL_MS = 1500
+MIN_USER_INTERVAL_MS = 400
 
 # Раз в сколько событий чистим устаревшие записи (старше MIN_INTERVAL_MS * 10).
 # 1000 — компромисс: не часто, но достаточно чтобы dict не пух при долгом аптайме.
@@ -51,8 +60,11 @@ GC_EVERY_N = 1000
 
 class AntiSpamCallbackMiddleware(BaseMiddleware):
     def __init__(self) -> None:
-        # (user_id, callback.data) → timestamp последнего тапа в монотонных мс.
-        self._last: dict[tuple[int, str], float] = {}
+        # (user_id, callback.data) → timestamp последнего тапа на ту же кнопку.
+        self._last_same: dict[tuple[int, str], float] = {}
+        # user_id → timestamp ЛЮБОГО последнего callback'а (защита от Telegram
+        # rate-limit «1 edit_message/сек на чат» при быстрой навигации).
+        self._last_any: dict[int, float] = {}
         self._tick = 0
 
     async def __call__(
@@ -64,30 +76,48 @@ class AntiSpamCallbackMiddleware(BaseMiddleware):
         if not isinstance(event, CallbackQuery) or not event.data or not event.from_user:
             return await handler(event, data)
 
-        key = (event.from_user.id, event.data)
+        user_id = event.from_user.id
+        key = (user_id, event.data)
         now_ms = time.monotonic() * 1000
 
-        last = self._last.get(key)
-        self._last[key] = now_ms
+        last_same = self._last_same.get(key)
+        last_any = self._last_any.get(user_id)
+        self._last_same[key] = now_ms
+        self._last_any[user_id] = now_ms
 
         # Периодический GC чтобы dict не разрастался при долгом аптайме.
         self._tick += 1
         if self._tick >= GC_EVERY_N:
             self._tick = 0
-            cutoff = now_ms - MIN_INTERVAL_MS * 10
-            self._last = {k: v for k, v in self._last.items() if v >= cutoff}
+            cutoff_same = now_ms - MIN_INTERVAL_MS * 10
+            cutoff_any = now_ms - MIN_USER_INTERVAL_MS * 25
+            self._last_same = {k: v for k, v in self._last_same.items() if v >= cutoff_same}
+            self._last_any = {k: v for k, v in self._last_any.items() if v >= cutoff_any}
 
-        if last is not None and (now_ms - last) < MIN_INTERVAL_MS:
-            # Дребезг: глушим спиннер и не пускаем хендлер.
+        # Слой 1: повторный тап на ту же кнопку — нервный спам.
+        if last_same is not None and (now_ms - last_same) < MIN_INTERVAL_MS:
             try:
                 await event.answer()
             except Exception:
-                # Старый callback (>15 мин) — Telegram отказывает, это норм.
                 pass
             logger.debug(
-                "anti-spam: дропнут повторный callback user=%s data=%r delta=%dms",
-                event.from_user.id, event.data, int(now_ms - last),
+                "anti-spam[same]: дропнут повтор user=%s data=%r delta=%dms",
+                user_id, event.data, int(now_ms - last_same),
             )
-            return None  # хендлер не вызывается
+            return None
+
+        # Слой 2: слишком частые любые клики — защита от Telegram rate-limit.
+        # Без него бот делал >1 edit_text/сек на чат, TG возвращал 429, aiogram
+        # ждал 3 секунды и ретраил → клиент видел «залипание на каждом 8-9 тапе».
+        if last_any is not None and (now_ms - last_any) < MIN_USER_INTERVAL_MS:
+            try:
+                await event.answer()
+            except Exception:
+                pass
+            logger.debug(
+                "anti-spam[rate]: дропнут частый клик user=%s data=%r delta=%dms",
+                user_id, event.data, int(now_ms - last_any),
+            )
+            return None
 
         return await handler(event, data)
