@@ -283,6 +283,45 @@ async def get_upcoming_appointments() -> list[dict[str, Any]]:
     )
 
 
+async def cancel_all_scheduled_on_date(date_str: str) -> list[dict[str, Any]]:
+    """
+    Массовая отмена всех scheduled записей на дату. Возвращает список
+    отменённых записей (с полями, нужными для уведомлений клиента/мастера).
+
+    Под write_lock + BEGIN IMMEDIATE: иначе параллельный booking мог бы
+    вписаться между SELECT и UPDATE и получить «scheduled» статус, а потом
+    висеть без отмены. SELECT и UPDATE атомарно — гарантируем что то что
+    отменили = то что уведомляем.
+    """
+    db = await get_db()
+    lock = await get_write_lock()
+    async with lock:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            rows = await _dict_rows(
+                """SELECT id, user_id, name, phone, service_id, service_name,
+                          service_price, date, time, master_id,
+                          paid_at, payment_provider, payment_invoice_id
+                   FROM appointments
+                   WHERE date = ? AND status = 'scheduled'
+                   ORDER BY time""",
+                (date_str,),
+            )
+            if not rows:
+                await db.execute("ROLLBACK")
+                return []
+            await db.execute(
+                "UPDATE appointments SET status = 'cancelled', confirmed = 0 "
+                "WHERE date = ? AND status = 'scheduled'",
+                (date_str,),
+            )
+            await db.execute("COMMIT")
+            return rows
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
+
+
 async def get_calendar_marks(date_from: str, date_to: str) -> dict[str, str]:
     """
     Маркеры для админ-календаря на диапазон дат [from..to] включительно.
