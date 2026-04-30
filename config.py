@@ -181,3 +181,31 @@ _require_https("HEARTBEAT_URL", HEARTBEAT_URL)
 
 # Контакт для сообщения «лицензия истекла, обратитесь к X». Например: @sabina_nails_author.
 LICENSE_CONTACT: Final[str] = os.getenv("LICENSE_CONTACT", "поставщика бота")
+
+# ─── Webhook для Telegram updates (опционально) ─────────────────────
+# Если WEBHOOK_URL пустой — бот работает в polling-режиме (как было).
+# Если задан — стартует aiohttp-сервер на WEBHOOK_PORT, регистрирует
+# webhook у Telegram и polling выключается.
+#
+# Зачем: убирает 100-500мс polling round-trip на каждый callback.
+# Реальный отклик клиента — стабильнее, особенно на медленной сети.
+#
+# Что нужно для активации:
+#   1. WEBHOOK_URL=https://your-domain/tg/webhook  (полный публичный URL)
+#   2. WEBHOOK_PORT=8081  (внутренний порт; за reverse-proxy/Caddy)
+#   3. WEBHOOK_SECRET=<random-token>  (опционально, но рекомендуется —
+#      Telegram добавит этот токен в заголовок X-Telegram-Bot-Api-Secret-Token,
+#      чужие POST-запросы будут отбрасываться)
+#   4. Caddy/nginx должен проксировать на WEBHOOK_PORT:
+#        reverse_proxy /tg/webhook bot:8081
+#
+# При переходе с polling: drop_pending_updates=True очищает накопленные
+# апдейты, чтобы старые клики не выстрелили дважды.
+WEBHOOK_URL: Final[str] = os.getenv("WEBHOOK_URL", "").strip().rstrip("/")
+WEBHOOK_PORT: Final[int] = int(os.getenv("WEBHOOK_PORT", "8081"))
+WEBHOOK_SECRET: Final[str] = os.getenv("WEBHOOK_SECRET", "").strip()
+# WEBHOOK_PATH — внутренний путь aiohttp. Должен совпадать с тем, что
+# фигурирует в WEBHOOK_URL (после домена). Например URL=…/tg/webhook → PATH=/tg/webhook.
+# Можно переопределить через .env, но обычно достаточно дефолта.
+WEBHOOK_PATH: Final[str] = os.getenv("WEBHOOK_PATH", "/tg/webhook")
+_require_https("WEBHOOK_URL", WEBHOOK_URL)
