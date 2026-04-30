@@ -43,13 +43,12 @@ def _service_text(service: dict) -> str:
     )
 
 
-async def _show_services(callback: CallbackQuery):
+async def _show_services(callback: CallbackQuery, page: int = 0):
     services = await get_services(active_only=False)
-    cfg = await get_categories_config()
     await edit_panel_with_callback(
         callback,
         "💅 Управление услугами:",
-        services_list_keyboard(services, labels=cfg["labels"]),
+        services_list_keyboard(services, page=page),
     )
 
 
@@ -78,6 +77,25 @@ async def cb_admin_services(callback: CallbackQuery):
         return
     await callback.answer()  # ранний ack — иначе TG крутит спиннер до 30с
     await _show_services(callback)
+
+
+@router.callback_query(F.data.startswith("svc_page_"))
+async def cb_svc_page(callback: CallbackQuery):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "svc_page", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    try:
+        page = int(parts[0])
+    except ValueError:
+        await callback.answer()
+        return
+    await callback.answer()
+    await _show_services(callback, page=page)
 
 
 @router.callback_query(F.data.startswith("svc_detail_"))
@@ -594,11 +612,10 @@ async def msg_svc_add_dur(message: Message, state: FSMContext):
         )
         await state.clear()
         services = await get_services(active_only=False)
-        cfg2 = await get_categories_config()
         await edit_panel(
             message.bot, message.chat.id,
             f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
-            services_list_keyboard(services, labels=cfg2["labels"]),
+            services_list_keyboard(services),
         )
         return
 
@@ -646,11 +663,10 @@ async def cb_svc_add_category(callback: CallbackQuery, state: FSMContext):
     await state.clear()
 
     services = await get_services(active_only=False)
-    cfg3 = await get_categories_config()
     await edit_panel_with_callback(
         callback,
         f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
-        services_list_keyboard(services, labels=cfg3["labels"]),
+        services_list_keyboard(services),
     )
     await callback.answer()
 

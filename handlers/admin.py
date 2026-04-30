@@ -6,19 +6,19 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 from aiogram.exceptions import TelegramBadRequest
 
-from constants import format_date_short_ru
 from utils.timezone import now_local
 from db import (
     get_appointments_by_date_full,
     get_services, get_future_blocks, get_all_settings,
     get_all_future_appointments, get_recent_clients, _price_fmt,
-    get_all_masters, get_categories_config,
+    get_all_masters,
 )
 from keyboards.inline import (
     day_view_keyboard, calendar_keyboard,
     services_list_keyboard, settings_keyboard,
     blocks_list_keyboard, all_appointments_keyboard, clients_menu_keyboard,
     admin_masters_keyboard, admin_reply_keyboard,
+    APPTS_PER_PAGE,
 )
 from utils.admin import is_admin, is_admin_callback, deny_access, IsAdminFilter
 from utils.panel import (
@@ -149,6 +149,20 @@ async def cb_notif_dismiss(callback: CallbackQuery):
         pass  # query протух после рестарта бота — это нормально
 
 
+def _all_appts_text(appointments: list[dict], page: int) -> str:
+    """Текст экрана «Все записи». Поденная разбивка убрана: каждая кнопка
+    ниже уже несёт дату+время+имя, дублировать в тексте бессмысленно."""
+    if not appointments:
+        return "📒 Предстоящих записей нет."
+    total = len(appointments)
+    per_page = APPTS_PER_PAGE
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(0, min(page, total_pages - 1))
+    if total_pages == 1:
+        return f"📒 Предстоящие записи: {total}"
+    return f"📒 Предстоящие записи: {total} · стр. {page + 1}/{total_pages}"
+
+
 @router.callback_query(F.data == "notif_all_appointments")
 async def cb_notif_all_appointments(callback: CallbackQuery, state: FSMContext):
     """«📒 Все записи» из уведомления — удаляет уведомление, открывает список в панели."""
@@ -160,23 +174,11 @@ async def cb_notif_all_appointments(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
     appointments = await get_all_future_appointments()
-    if not appointments:
-        from utils.panel import edit_panel
-        await edit_panel(callback.bot, callback.message.chat.id, "📒 Предстоящих записей нет.", None)
-        await callback.answer()
-        return
-    lines = [f"📒 Предстоящие записи: {len(appointments)}"]
-    current_date = None
-    for a in appointments:
-        if a["date"] != current_date:
-            current_date = a["date"]
-            date_label = format_date_short_ru(a["date"])
-            lines.append(f"\n📅 {date_label}")
-        lines.append(f"  🕐 {a['time']} — {a['name']}")
     from utils.panel import edit_panel
     await edit_panel(
         callback.bot, callback.message.chat.id,
-        "\n".join(lines), all_appointments_keyboard(appointments),
+        _all_appts_text(appointments, page=0),
+        all_appointments_keyboard(appointments, page=0),
     )
     try:
         await callback.answer()
@@ -190,19 +192,8 @@ async def cb_admin_all_appointments(callback: CallbackQuery, state: FSMContext):
         await deny_access(callback)
         return
     appointments = await get_all_future_appointments()
-
-    if not appointments:
-        text, markup = "📒 Предстоящих записей нет.", None
-    else:
-        lines = [f"📒 Предстоящие записи: {len(appointments)}"]
-        current_date = None
-        for a in appointments:
-            if a["date"] != current_date:
-                current_date = a["date"]
-                date_label = format_date_short_ru(a["date"])
-                lines.append(f"\n📅 {date_label}")
-            lines.append(f"  🕐 {a['time']} — {a['name']}")
-        text, markup = "\n".join(lines), all_appointments_keyboard(appointments)
+    text = _all_appts_text(appointments, page=0)
+    markup = all_appointments_keyboard(appointments, page=0)
 
     chat_id = callback.message.chat.id
     panel_id = get_panel_msg_id(chat_id)
@@ -220,6 +211,32 @@ async def cb_admin_all_appointments(callback: CallbackQuery, state: FSMContext):
         except TelegramBadRequest:
             pass
         set_panel_msg_id(chat_id, callback.message.message_id)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("apptlist_page_"))
+async def cb_admin_apptlist_page(callback: CallbackQuery):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    from utils.callbacks import parse_callback
+    parts = parse_callback(callback.data, "apptlist_page", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    try:
+        page = int(parts[0])
+    except ValueError:
+        await callback.answer()
+        return
+    appointments = await get_all_future_appointments()
+    from utils.panel import edit_panel
+    await edit_panel(
+        callback.bot, callback.message.chat.id,
+        _all_appts_text(appointments, page=page),
+        all_appointments_keyboard(appointments, page=page),
+    )
     await callback.answer()
 
 
@@ -297,8 +314,7 @@ async def msg_services(message: Message, state: FSMContext):
         return
     await state.clear()
     services = await get_services(active_only=False)
-    cfg = await get_categories_config()
-    await _nav(message, "💅 Управление услугами:", services_list_keyboard(services, labels=cfg["labels"]))
+    await _nav(message, "💅 Управление услугами:", services_list_keyboard(services))
 
 
 @router.message(StateFilter("*"), F.text == "📊 Статистика")
@@ -321,20 +337,11 @@ async def msg_all_appointments(message: Message, state: FSMContext):
         return
     await state.clear()
     appointments = await get_all_future_appointments()
-    if not appointments:
-        await _nav(message, "📒 Предстоящих записей нет.")
-        return
-
-    lines = [f"📒 Предстоящие записи: {len(appointments)}"]
-    current_date = None
-    for a in appointments:
-        if a["date"] != current_date:
-            current_date = a["date"]
-            date_label = format_date_short_ru(a["date"])
-            lines.append(f"\n📅 {date_label}")
-        lines.append(f"  🕐 {a['time']} — {a['name']}")
-
-    await _nav(message, "\n".join(lines), all_appointments_keyboard(appointments))
+    await _nav(
+        message,
+        _all_appts_text(appointments, page=0),
+        all_appointments_keyboard(appointments, page=0),
+    )
 
 
 @router.message(StateFilter("*"), F.text == "👥 Клиенты")
