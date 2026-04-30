@@ -339,8 +339,9 @@ async def cmd_start(message: Message, state: FSMContext):
     # Returning-ветку с персональным «рад снова видеть, в прошлый раз —
     # ...» убрали по UX-решению: единый онбординг для всех. Быстрый rebook
     # остаётся через reply-кнопку «📋 Мои записи» (там есть «Повторить»).
+    # asyncio.sleep(0.5) был между greeting и меню «для красоты появления»,
+    # но создавал реальную задержку на /start — убран после жалоб клиента.
     await message.answer(greeting_new(lang), parse_mode="HTML")
-    await asyncio.sleep(0.5)
     await _send_category_picker(message, state)
 
 
@@ -786,6 +787,15 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 
 
 async def _do_confirm(callback: CallbackQuery, state: FSMContext):
+    # Ранний ack: спиннер на «✅ Подтверждаю» уходит мгновенно. Дальше идут
+    # 5+ DB-операций (validate master, create_appointment, save_profile,
+    # save_addons, broadcast). Без раннего ack клиент видел залипание
+    # 0.5-1с на самой важной кнопке букинга. Повторные ack ниже в edge-case
+    # ветках Telegram молча игнорирует (первый ack уже зафиксирован).
+    try:
+        await callback.answer()
+    except Exception:
+        pass
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
