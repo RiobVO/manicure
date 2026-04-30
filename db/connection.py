@@ -165,12 +165,21 @@ async def init_db() -> None:
             category TEXT NOT NULL DEFAULT 'hands'
         )
     """)
-    # Seed из services.py только если таблица пуста
+    # Seed из services.py только если таблица пуста.
+    # is_active по умолчанию 1, но новые категории (face/depil/skincare/dental)
+    # сидятся как is_active=0 — салон проставит цены и активирует через админку.
     cursor = await db.execute("SELECT COUNT(*) FROM services")
     if (await cursor.fetchone())[0] == 0:
         await db.executemany(
-            "INSERT INTO services (id, name, price, duration, is_active, sort_order, category) VALUES (?,?,?,?,1,?,?)",
-            [(s["id"], s["name"], s["price"], s["duration"], i, s.get("category", "hands")) for i, s in enumerate(SERVICES)]
+            "INSERT INTO services (id, name, price, duration, is_active, sort_order, category) VALUES (?,?,?,?,?,?,?)",
+            [
+                (
+                    s["id"], s["name"], s["price"], s["duration"],
+                    int(s.get("is_active", 1)), i,
+                    s.get("category", "hands"),
+                )
+                for i, s in enumerate(SERVICES)
+            ],
         )
 
     # --- settings ---
@@ -450,6 +459,22 @@ async def init_db() -> None:
             if "duplicate column" not in str(exc).lower():
                 logger.exception("Миграция v6→v7 упала на ALTER appointments")
         await db.execute("PRAGMA user_version = 7")
+
+    # v7 → v8: расширение каталога категорий с 2 до 6.
+    # services.category — TEXT без CHECK-констрейнта, любые значения уже
+    # принимаются, ALTER TABLE не нужен. Достаточно засеять дефолтные
+    # подписи для четырёх новых категорий в settings — иначе админка
+    # покажет пустые ярлыки до первого редактирования.
+    # INSERT OR IGNORE → существующие cat_a_label/cat_b_label сохраняются
+    # (Сабина могла переименовать), новые ключи добавляются.
+    if current_version < 8:
+        from constants import CATEGORY_DEFAULT_LABELS
+        for label_key, value in CATEGORY_DEFAULT_LABELS.items():
+            await db.execute(
+                "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                (label_key, value),
+            )
+        await db.execute("PRAGMA user_version = 8")
 
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.

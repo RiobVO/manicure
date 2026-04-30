@@ -43,6 +43,10 @@ class AdminStates(StatesGroup):
     settings_edit_name = State()     # название салона (для QR-плакатов)
     settings_edit_cat_a_label = State()  # подпись категории А ('hands' под капотом)
     settings_edit_cat_b_label = State()  # подпись категории Б ('feet' под капотом)
+    settings_edit_cat_c_label = State()  # подпись категории В ('face')
+    settings_edit_cat_d_label = State()  # подпись категории Г ('depil')
+    settings_edit_cat_e_label = State()  # подпись категории Д ('skincare')
+    settings_edit_cat_f_label = State()  # подпись категории Е ('dental')
 
     # Гибкий график (салонно-глобальный)
     schedule_edit_start = State()

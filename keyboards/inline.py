@@ -9,7 +9,13 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 
-from constants import BOOKING_DAYS_AVAILABLE, WEEKDAYS_SHORT_RU
+from constants import (
+    BOOKING_DAYS_AVAILABLE,
+    WEEKDAYS_SHORT_RU,
+    CATEGORY_KEYS,
+    CATEGORY_LABEL_KEYS,
+    CATEGORY_ALPHA,
+)
 from utils.timezone import now_local
 from utils.ui import (
     DIVIDER_SOFT, DIVIDER_WHISPER,
@@ -45,48 +51,88 @@ def _price_short(price: int) -> str:
 
 def category_keyboard(
     lang: str = "ru",
-    label_a: str | None = None,
-    label_b: str | None = None,
+    labels: dict[str, str] | None = None,
 ) -> InlineKeyboardMarkup:
-    """Первый экран записи: выбор категории А/Б.
+    """Первый экран записи: выбор категории.
 
-    Подписи берутся из settings (cat_a_label / cat_b_label) — параметры
-    label_a/label_b. Если не переданы — UZ-fallback на латинскую транслитерацию
-    дефолта, RU-fallback на «💅 Маникюр» / «🦶 Педикюр». UZ оставлен для
-    обратной совместимости со старыми вызовами без settings — реальный
-    клиентский flow всегда передаёт labels из get_categories_config().
+    labels — словарь {category_key → подпись}. Полный набор берётся из
+    get_categories_config()['labels']. Если не передан — fallback на дефолты.
+    UZ-локализация: если для ключа в labels пусто и язык 'uz', подставляется
+    латиничный плейсхолдер по фиксированному маппингу.
     """
-    if label_a is None or label_b is None:
-        if lang == "uz":
-            label_a = label_a or "💅 Manikyur"
-            label_b = label_b or "🦶 Pedikyur"
-        else:
-            label_a = label_a or "💅 Маникюр"
-            label_b = label_b or "🦶 Педикюр"
-    # По одной кнопке на ряд: длинные ярлыки не режутся на узких экранах,
-    # тап-зона крупнее, визуально просторнее.
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=label_a, callback_data="cat_hands")],
-        [InlineKeyboardButton(text=label_b, callback_data="cat_feet")],
-    ])
+    from constants import CATEGORY_DEFAULT_LABELS
+    uz_fallback = {
+        "hands": "💅 Manikyur",
+        "feet": "🦶 Pedikyur",
+        "face": "👁 Yuz",
+        "depil": "🪒 Depilyatsiya",
+        "skincare": "✨ Yuz parvarishi",
+        "dental": "🦷 Stomatologiya",
+    }
+    rows: list[list[InlineKeyboardButton]] = []
+    for cat_key, label_key in zip(CATEGORY_KEYS, CATEGORY_LABEL_KEYS):
+        text = ""
+        if labels:
+            text = (labels.get(cat_key) or "").strip()
+        if not text:
+            text = (
+                uz_fallback[cat_key]
+                if lang == "uz"
+                else CATEGORY_DEFAULT_LABELS[label_key]
+            )
+        rows.append([InlineKeyboardButton(
+            text=text, callback_data=f"cat_{cat_key}",
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def admin_category_picker(
-    label_a: str | None = None,
-    label_b: str | None = None,
+    labels: dict[str, str] | None = None,
 ) -> InlineKeyboardMarkup:
     """
     Админский выбор категории при создании услуги. Отдельный callback-неймспейс
-    (svc_cat_*), чтобы не пересекался с клиентским cat_hands/cat_feet.
-    Подписи симметричны клиентскому category_keyboard — admin видит свои же
-    подписи (которые он только что мог переименовать в Настройках).
+    (svc_cat_*), чтобы не пересекался с клиентским cat_*. Подписи симметричны
+    клиентскому category_keyboard — admin видит свои же подписи (которые он
+    только что мог переименовать в Настройках).
+
+    Шесть кнопок по две в ряд (3 ряда) — компактно и читаемо на мобильных.
     """
-    label_a = label_a or "💅 Маникюр"
-    label_b = label_b or "🦶 Педикюр"
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=label_a, callback_data="svc_cat_hands"),
-        InlineKeyboardButton(text=label_b, callback_data="svc_cat_feet"),
-    ]])
+    from constants import CATEGORY_DEFAULT_LABELS
+    buttons: list[InlineKeyboardButton] = []
+    for cat_key, label_key in zip(CATEGORY_KEYS, CATEGORY_LABEL_KEYS):
+        text = (labels.get(cat_key) if labels else "") or CATEGORY_DEFAULT_LABELS[label_key]
+        buttons.append(InlineKeyboardButton(
+            text=text, callback_data=f"svc_cat_{cat_key}",
+        ))
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_category_swap_picker(
+    service_id: int,
+    current_category: str | None,
+    labels: dict[str, str] | None = None,
+) -> InlineKeyboardMarkup:
+    """
+    Селектор смены категории у существующей услуги. Текущая категория
+    помечена «· сейчас», тап на неё ничего не меняет (можно нажать Назад).
+    Callback-формат: svc_setcat_<id>_<key>. Префикс отличный от svc_cat_*
+    чтобы не конфликтовать с FSM создания услуги.
+    """
+    from constants import CATEGORY_DEFAULT_LABELS
+    buttons: list[InlineKeyboardButton] = []
+    for cat_key, label_key in zip(CATEGORY_KEYS, CATEGORY_LABEL_KEYS):
+        text = (labels.get(cat_key) if labels else "") or CATEGORY_DEFAULT_LABELS[label_key]
+        if cat_key == current_category:
+            text = f"{text} · сейчас"
+        buttons.append(InlineKeyboardButton(
+            text=text, callback_data=f"svc_setcat_{service_id}_{cat_key}",
+        ))
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton(
+        text="↩ Назад", callback_data=f"svc_detail_{service_id}",
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def services_keyboard(
@@ -99,10 +145,17 @@ def services_keyboard(
     with_back=True добавляет «‹ назад» — возврат к выбору категории.
     """
     buttons = []
+    # Префиксы, которые срезаем из имени услуги в кнопке: категория уже
+    # выбрана пользователем, дублировать «Маникюр» в каждой кнопке не нужно.
+    # Для депиляции метод (Воск/Шугаринг) НЕ срезаем — это важная различающая
+    # информация: клиент должен видеть «Воск — руки» vs «Шугаринг — руки».
+    _prefixes = (
+        "маникюр с ", "маникюр ",
+        "педикюр с ", "педикюр ",
+    )
     for s in services:
         name = s["name"].lower()
-        # Срезаем префикс «маникюр/педикюр» — категория уже выбрана пользователем.
-        for prefix in ("маникюр с ", "маникюр ", "педикюр с ", "педикюр "):
+        for prefix in _prefixes:
             if name.startswith(prefix):
                 name = name[len(prefix):]
                 break
@@ -816,10 +869,11 @@ def service_detail_keyboard(
         ],
     ]
     if cat_label:
+        # С 6 категориями toggle бессмысленен — открываем полноценный селектор.
         rows.append([
             InlineKeyboardButton(
                 text=f"🏷 Категория: {cat_label}",
-                callback_data=f"svc_swapcat_{service['id']}",
+                callback_data=f"svc_setcat_open_{service['id']}",
             ),
         ])
     rows.extend([
@@ -848,13 +902,12 @@ def settings_keyboard(s: dict) -> InlineKeyboardMarkup:
 
     contact_label = _short(s.get("salon_contact") or "", placeholder="не задан")
     name_label = _short(s.get("salon_name") or "")
-    # Категории: показываем краткое состояние прямо в кнопке —
-    # «🏷 Категории: вкл · Маникюр / Педикюр» или «выкл · плоский список».
+    # Категории: 6 штук — выводим компактно «вкл · 6 кат.», в плоском режиме
+    # «выкл · плоский список». Полный список редактируется на отдельном
+    # экране (categories_menu_keyboard).
     use_cats = (s.get("use_categories") or "1").strip() != "0"
     if use_cats:
-        cat_a = _short(s.get("cat_a_label") or "💅 Маникюр", placeholder="—")
-        cat_b = _short(s.get("cat_b_label") or "🦶 Педикюр", placeholder="—")
-        cat_button = f"🏷 Категории: {cat_a} / {cat_b}"
+        cat_button = f"🏷 Категории: вкл · {len(CATEGORY_KEYS)} шт."
     else:
         cat_button = "🏷 Категории: выкл · плоский список"
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -879,29 +932,43 @@ def settings_keyboard(s: dict) -> InlineKeyboardMarkup:
     ])
 
 
-def categories_menu_keyboard(use_categories: bool) -> InlineKeyboardMarkup:
+def categories_menu_keyboard(
+    use_categories: bool,
+    labels: dict[str, str] | None = None,
+) -> InlineKeyboardMarkup:
     """Экран «🏷 Категории услуг»: переключатель режима + редактирование меток.
-    Кнопки редактирования меток скрыты в плоском режиме — там подписи
-    некуда применять."""
+    Кнопки редактирования меток скрыты в плоском режиме — там подписи некуда
+    применять. labels — словарь {key→текущая подпись} для отображения справа
+    от буквы категории; если не передан, выводим только букву."""
+    from constants import CATEGORY_DEFAULT_LABELS
     rows: list[list[InlineKeyboardButton]] = []
     toggle_label = (
         "🔄 Переключить на «плоский список»"
         if use_categories else
-        "🔄 Переключить на «две категории»"
+        "🔄 Переключить на «6 категорий»"
     )
     rows.append([InlineKeyboardButton(
         text=toggle_label,
         callback_data="settings_categories_toggle",
     )])
     if use_categories:
-        rows.append([InlineKeyboardButton(
-            text="✏ Изменить категорию А",
-            callback_data="settings_edit_cat_a",
-        )])
-        rows.append([InlineKeyboardButton(
-            text="✏ Изменить категорию Б",
-            callback_data="settings_edit_cat_b",
-        )])
+        # Кнопка на каждую категорию: «✏ А · 💅 Маникюр» — букву даём для
+        # консистентности с FSM-states (cat_a_label..cat_f_label), подпись
+        # рядом чтобы не нужно было лезть в каждую для проверки.
+        for cat_key, label_key, alpha in zip(
+            CATEGORY_KEYS, CATEGORY_LABEL_KEYS, CATEGORY_ALPHA
+        ):
+            current = ""
+            if labels:
+                current = (labels.get(cat_key) or "").strip()
+            if not current:
+                current = CATEGORY_DEFAULT_LABELS[label_key]
+            short = current if len(current) <= 24 else current[:23] + "…"
+            slot_letter = label_key.split("_")[1]  # 'a'..'f'
+            rows.append([InlineKeyboardButton(
+                text=f"✏ {alpha} · {short}",
+                callback_data=f"settings_edit_cat_{slot_letter}",
+            )])
     rows.append([InlineKeyboardButton(text="↩ К настройкам", callback_data="admin_settings")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

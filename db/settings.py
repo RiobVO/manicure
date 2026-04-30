@@ -3,6 +3,11 @@
 from datetime import datetime
 from typing import Any
 
+from constants import (
+    CATEGORY_KEYS,
+    CATEGORY_LABEL_KEYS,
+    CATEGORY_DEFAULT_LABELS,
+)
 from db.connection import get_db, _dict_rows, _dict_row, get_write_lock
 
 
@@ -27,36 +32,42 @@ async def get_all_settings() -> dict[str, str]:
 
 
 # ─── Категории услуг (универсальный режим) ─────────────────────────────────
-# get_categories_config — единая точка чтения трёх связанных ключей. Везде
-# где UI зависит от подписей или режима — зовём этот хелпер, не трогаем
-# таблицу services напрямую. Это позволит в будущем добавить кэш без
-# охоты по callsites.
-
-_DEFAULT_CAT_A = "💅 Маникюр"
-_DEFAULT_CAT_B = "🦶 Педикюр"
+# get_categories_config — единая точка чтения подписей и режима. Возвращает
+# словарь labels вида {key → label} плюс legacy-плоские поля label_a/label_b
+# для существующих callsites. Любое UI, зависящее от подписей или режима,
+# зовёт этот хелпер.
 
 
 async def get_categories_config() -> dict[str, Any]:
     """
-    Возвращает конфигурацию режима категорий:
-      use_categories: bool — двухуровневое меню vs плоский список услуг.
-      label_a: str         — подпись для категории А (под капотом 'hands').
-      label_b: str         — подпись для категории Б (под капотом 'feet').
+    Возвращает конфигурацию категорий:
+      use_categories: bool         — двухуровневое меню vs плоский список услуг.
+      labels: dict[str, str]       — {category_key → подпись}. Шесть ключей
+                                     по CATEGORY_KEYS. Гарантированно
+                                     непустые (fallback на дефолт).
+      label_a..label_f: str        — legacy-плоские поля для прямого доступа,
+                                     равны labels[CATEGORY_KEYS[i]].
 
     Защита от пустых/кривых значений: если в БД ключа нет (старая БД до
-    апдейта) или значение пустое — отдаём дефолт. Это обеспечивает
-    обратную совместимость без необходимости запускать миграцию: старый
-    бот после деплоя видит use_categories=true, «💅 Маникюр»/«🦶 Педикюр»
-    как раньше.
+    миграции v7→v8) или значение пустое — отдаём дефолт из CATEGORY_DEFAULT_LABELS.
+    Это даёт обратную совместимость без принудительного перезапуска seed-логики.
     """
     s = await get_all_settings()
     raw_use = (s.get("use_categories") or "1").strip()
-    label_a = (s.get("cat_a_label") or "").strip() or _DEFAULT_CAT_A
-    label_b = (s.get("cat_b_label") or "").strip() or _DEFAULT_CAT_B
+    labels: dict[str, str] = {}
+    flat: dict[str, str] = {}
+    legacy_keys = ("label_a", "label_b", "label_c", "label_d", "label_e", "label_f")
+    for cat_key, label_key, legacy_key in zip(
+        CATEGORY_KEYS, CATEGORY_LABEL_KEYS, legacy_keys
+    ):
+        raw = (s.get(label_key) or "").strip()
+        value = raw or CATEGORY_DEFAULT_LABELS[label_key]
+        labels[cat_key] = value
+        flat[legacy_key] = value
     return {
         "use_categories": raw_use != "0",
-        "label_a": label_a,
-        "label_b": label_b,
+        "labels": labels,
+        **flat,
     }
 
 
