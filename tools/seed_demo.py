@@ -75,24 +75,38 @@ SERVICES: list[tuple[str, int, int, str, int]] = [
     ("Педикюр + гель-лак",         220_000, 90,  "feet",  8),
     ("SPA-педикюр",                280_000, 120, "feet",  4),
 
-    # Лицо — депиляция лицевых зон, средняя популярность.
+    # Лицо — все 5 услуг.
+    ("Лицо полностью",             80_000,  30, "face",  2),
     ("Брови",                      50_000,  20, "face",  5),
     ("Усики",                      30_000,  15, "face",  3),
-    ("Лицо полностью",             80_000,  30, "face",  2),
+    ("Подбородок",                 40_000,  15, "face",  2),
+    ("Щёки",                       35_000,  20, "face",  2),
 
-    # Воск — топовые зоны (без подмышек, см. CLAUDE.md / архитектуру).
-    ("Руки до локтя",              60_000,  30, "wax",   3),
+    # Воск — все 8 зон (без подмышек, см. архитектуру заказчицы).
+    ("Руки полностью",             100_000, 30, "wax",   2),
+    ("Руки до локтя",              60_000,  20, "wax",   3),
+    ("Руки с захватом локтя",      80_000,  25, "wax",   1),
     ("Ноги полностью",             200_000, 60, "wax",   4),
-    ("Бикини классическое",        150_000, 45, "wax",   2),
+    ("Ноги до колена",             130_000, 40, "wax",   3),
+    ("Ноги с захватом колена",     160_000, 50, "wax",   1),
+    ("Бикини глубокое",            250_000, 45, "wax",   2),
+    ("Бикини классическое",        150_000, 30, "wax",   2),
 
-    # Шугаринг — те же зоны + подмышки.
-    ("Ноги полностью",             220_000, 60, "sugar", 5),
-    ("Подмышки",                   70_000,  20, "sugar", 4),
+    # Шугаринг — все 9 зон (включая подмышки).
+    ("Руки полностью",             120_000, 30, "sugar", 2),
+    ("Руки до локтя",              70_000,  20, "sugar", 3),
+    ("Руки с захватом локтя",      90_000,  25, "sugar", 1),
+    ("Ноги полностью",             230_000, 60, "sugar", 5),
+    ("Ноги до колена",             150_000, 40, "sugar", 3),
+    ("Ноги с захватом колена",     180_000, 50, "sugar", 1),
     ("Бикини глубокое",            280_000, 50, "sugar", 3),
+    ("Бикини классическое",        170_000, 35, "sugar", 2),
+    ("Подмышки",                   70_000,  20, "sugar", 4),
 
-    # Уходовые процедуры — низкая частота, высокий чек.
+    # Уходовые процедуры — все 3 услуги, низкая частота, высокий чек.
     ("Ультразвуковая чистка",      250_000, 60, "care",  3),
     ("Механическая чистка",        200_000, 75, "care",  2),
+    ("Отбеливание зубов",          800_000, 90, "care",  1),
 ]
 
 # Аддоны: (service_name, addon_name, addon_price). Цепляются к 2 хитам.
@@ -215,10 +229,16 @@ async def wipe() -> None:
     await db.commit()
 
 
-async def seed_services() -> dict[str, tuple[int, int, int]]:
-    """Засеять услуги и аддоны. Возвращает {name: (id, price, duration)}."""
+async def seed_services() -> dict[tuple[str, str], tuple[int, int, int]]:
+    """Засеять услуги и аддоны. Возвращает {(name, category): (id, price, duration)}.
+
+    Ключ — пара (name, category), потому что после реструктуризации каталога
+    одно и то же имя может встречаться в разных категориях («Руки полностью»
+    в wax и sugar). Старый ключ только по name терял услугу — последняя
+    с тем же именем затирала предыдущую в записях.
+    """
     db = await get_db()
-    name_to_meta: dict[str, tuple[int, int, int]] = {}
+    meta: dict[tuple[str, str], tuple[int, int, int]] = {}
     for i, (name, price, duration, category, _w) in enumerate(SERVICES):
         cur = await db.execute(
             "INSERT INTO services "
@@ -226,9 +246,15 @@ async def seed_services() -> dict[str, tuple[int, int, int]]:
             "VALUES (?, ?, ?, 1, ?, ?)",
             (name, price, duration, i, category),
         )
-        name_to_meta[name] = (cur.lastrowid, price, duration)
+        meta[(name, category)] = (cur.lastrowid, price, duration)
+    # Аддоны привязаны только к маникюрным/педикюрным услугам — для них
+    # имя уникально, делаем lookup только по категории hands/feet.
+    name_to_id_hands_feet = {
+        name: mid for (name, cat), (mid, _, _) in meta.items()
+        if cat in ("hands", "feet")
+    }
     for service_name, addon_name, addon_price in ADDONS:
-        sid, _, _ = name_to_meta[service_name]
+        sid = name_to_id_hands_feet[service_name]
         await db.execute(
             "INSERT INTO service_addons "
             "(service_id, name, price, is_active, sort_order) "
@@ -236,7 +262,7 @@ async def seed_services() -> dict[str, tuple[int, int, int]]:
             (sid, addon_name, addon_price),
         )
     await db.commit()
-    return name_to_meta
+    return meta
 
 
 async def seed_masters() -> list[int]:
@@ -325,8 +351,8 @@ async def seed_appointments(
         for _ in range(random.randint(3, 5)):
             master_id = random.choice(master_ids)
             client = random.choice(clients)
-            svc_name, price, duration, _cat, _w = _weighted_pick_service()
-            sid, _, _ = services_meta[svc_name]
+            svc_name, price, duration, cat, _w = _weighted_pick_service()
+            sid, _, _ = services_meta[(svc_name, cat)]
             placed = False
             for _try in range(8):
                 start = random.choice(slot_starts)
@@ -367,8 +393,8 @@ async def seed_appointments(
         for _ in range(n):
             master_id = random.choice(master_ids)
             client = random.choice(clients)
-            svc_name, price, duration, _cat, _w = _weighted_pick_service()
-            sid, _, _ = services_meta[svc_name]
+            svc_name, price, duration, cat, _w = _weighted_pick_service()
+            sid, _, _ = services_meta[(svc_name, cat)]
             placed = False
             for _try in range(8):
                 start = random.choice(slot_starts)
