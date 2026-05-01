@@ -80,6 +80,7 @@ async def cb_export_menu(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     try:
         await callback.message.edit_text(
             "📥 <b>Экспорт записей</b>\n\nВыберите период:",
@@ -88,7 +89,6 @@ async def cb_export_menu(callback: CallbackQuery):
         )
     except Exception:
         pass
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("export_"))

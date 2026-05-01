@@ -29,6 +29,7 @@ async def cb_admin_clients(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     await state.clear()
     clients = await get_recent_clients(limit=15)
     text = (
@@ -37,7 +38,6 @@ async def cb_admin_clients(callback: CallbackQuery, state: FSMContext):
         "👥 Клиенты\n\nЕщё никто не записывался."
     )
     await edit_panel_with_callback(callback, text, clients_menu_keyboard(clients))
-    await callback.answer()
 
 
 @router.callback_query(F.data == "admin_clients_search")
@@ -45,13 +45,13 @@ async def cb_admin_clients_search(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     await edit_panel_with_callback(
         callback,
         "🔍 Введите имя или номер телефона:",
         admin_cancel_keyboard(),
     )
     await state.set_state(AdminStates.client_search)
-    await callback.answer()
 
 
 @router.message(AdminStates.client_search)

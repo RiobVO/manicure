@@ -97,6 +97,7 @@ async def cb_settings_edit_step(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     await state.clear()
     settings = await get_all_settings()
     try:
@@ -114,7 +115,6 @@ async def cb_settings_edit_step(callback: CallbackQuery, state: FSMContext):
         _slot_step_keyboard(current),
         parse_mode="HTML",
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("slot_step_set_"))
@@ -158,6 +158,7 @@ async def cb_settings_edit_contact(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     current = (await get_all_settings()).get("salon_contact", "") or "не задан"
     await edit_panel_with_callback(
         callback,
@@ -175,7 +176,6 @@ async def cb_settings_edit_contact(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML",
     )
     await state.set_state(AdminStates.settings_edit_contact)
-    await callback.answer()
 
 
 @router.message(AdminStates.settings_edit_contact)
@@ -217,6 +217,7 @@ async def cb_settings_edit_name(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     current = (await get_all_settings()).get("salon_name", "") or "не задано"
     await edit_panel_with_callback(
         callback,
@@ -234,7 +235,6 @@ async def cb_settings_edit_name(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML",
     )
     await state.set_state(AdminStates.settings_edit_name)
-    await callback.answer()
 
 
 @router.message(AdminStates.settings_edit_name)

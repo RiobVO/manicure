@@ -125,6 +125,7 @@ async def msg_traffic_entry(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "traffic_list")
 async def cb_traffic_list(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.clear()
     stats = await aggregate_by_source()
     await edit_panel_with_callback(
@@ -133,7 +134,6 @@ async def cb_traffic_list(callback: CallbackQuery, state: FSMContext):
         _sources_keyboard(stats),
         parse_mode="HTML",
     )
-    await callback.answer()
 
 
 # ─── Детали источника ───────────────────────────────────────────────────────
@@ -233,9 +233,12 @@ async def cb_traffic_del(callback: CallbackQuery):
 
 @router.callback_query(F.data.regexp(r"^traffic_del_yes_(\d+)$"))
 async def cb_traffic_del_yes(callback: CallbackQuery, state: FSMContext):
+    # Ранний ack без текста: иначе часики висят пока DB delete + edit_panel.
+    # Toast «✅ Удалён» терять жалко, но обновлённый список без источника —
+    # достаточный feedback. Альтернативой было бы 2 answer'а, что запрещено.
+    await callback.answer()
     source_id = int(callback.data.split("_")[-1])
-    ok = await delete_source(source_id)
-    await callback.answer("✅ Удалён" if ok else "Не получилось удалить — попробуй ещё раз.", show_alert=False)
+    await delete_source(source_id)
     await cb_traffic_list(callback, state)
 
 
@@ -243,6 +246,7 @@ async def cb_traffic_del_yes(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "traffic_add")
 async def cb_traffic_add(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.set_state(AdminStates.traffic_source_add_code)
     await edit_panel_with_callback(
         callback,
@@ -253,7 +257,6 @@ async def cb_traffic_add(callback: CallbackQuery, state: FSMContext):
         admin_cancel_keyboard(),
         parse_mode="HTML",
     )
-    await callback.answer()
 
 
 @router.message(AdminStates.traffic_source_add_code)

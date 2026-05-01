@@ -124,13 +124,14 @@ async def cb_admin_home(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    # ack до TG-вызова: иначе у клиента крутятся часики весь RTT edit_reply_markup.
+    await callback.answer()
     await state.clear()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
         set_panel_msg_id(callback.message.chat.id, callback.message.message_id)
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
 
 @router.callback_query(F.data == "notif_dismiss")
@@ -140,13 +141,13 @@ async def cb_notif_dismiss(callback: CallbackQuery):
         await deny_access(callback)
         return
     try:
+        await callback.answer()  # ранний ack — часики уходят сразу
+    except TelegramBadRequest:
+        pass  # query протух после рестарта бота — это нормально
+    try:
         await callback.message.delete()
     except TelegramBadRequest:
         pass
-    try:
-        await callback.answer()
-    except TelegramBadRequest:
-        pass  # query протух после рестарта бота — это нормально
 
 
 def _all_appts_text(appointments: list[dict], page: int) -> str:
@@ -170,6 +171,10 @@ async def cb_notif_all_appointments(callback: CallbackQuery, state: FSMContext):
         await deny_access(callback)
         return
     try:
+        await callback.answer()
+    except TelegramBadRequest:
+        pass
+    try:
         await callback.message.delete()
     except TelegramBadRequest:
         pass
@@ -180,10 +185,6 @@ async def cb_notif_all_appointments(callback: CallbackQuery, state: FSMContext):
         _all_appts_text(appointments, page=0),
         all_appointments_keyboard(appointments, page=0),
     )
-    try:
-        await callback.answer()
-    except TelegramBadRequest:
-        pass
 
 
 @router.callback_query(F.data == "admin_all_appointments")
@@ -191,6 +192,7 @@ async def cb_admin_all_appointments(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     appointments = await get_all_future_appointments()
     text = _all_appts_text(appointments, page=0)
     markup = all_appointments_keyboard(appointments, page=0)
@@ -211,7 +213,6 @@ async def cb_admin_all_appointments(callback: CallbackQuery, state: FSMContext):
         except TelegramBadRequest:
             pass
         set_panel_msg_id(chat_id, callback.message.message_id)
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("apptlist_page_"))
@@ -245,13 +246,13 @@ async def cb_admin_cancel(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer("Отменено")
     await state.clear()
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
         set_panel_msg_id(callback.message.chat.id, callback.message.message_id)
     except TelegramBadRequest:
         pass
-    await callback.answer("Отменено")
 
 
 @router.message(StateFilter("*"), F.text.regexp(r"^/start(?:\s|$)"))

@@ -525,9 +525,9 @@ async def cb_svc_add(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     await edit_panel_with_callback(callback, "➕ Введите название новой услуги:", admin_cancel_keyboard())
     await state.set_state(AdminStates.service_add_name)
-    await callback.answer()
 
 
 @router.message(AdminStates.service_add_name)

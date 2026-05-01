@@ -430,6 +430,7 @@ async def _edit_to_schedule(callback: CallbackQuery, master_id: int) -> None:
 @router.callback_query(F.data == "mdo_add")
 async def cb_mdo_add(callback: CallbackQuery) -> None:
     """Открыть календарь выбора даты для постановки отгула."""
+    await callback.answer()
     try:
         await callback.message.edit_text(
             "🌙 Выбери день для отгула:",
@@ -438,7 +439,6 @@ async def cb_mdo_add(callback: CallbackQuery) -> None:
         )
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("mdo_pick_"))
@@ -969,10 +969,10 @@ async def cb_notif_dismiss(callback: CallbackQuery):
     (новая запись / отмена / перенос) из чата. Admin-router под IsAdminFilter
     не пропускает не-админов, поэтому мастеру нужен свой обработчик."""
     try:
-        await callback.message.delete()
-    except TelegramBadRequest:
-        pass
-    try:
         await callback.answer()
     except TelegramBadRequest:
         pass  # query протух — штатно
+    try:
+        await callback.message.delete()
+    except TelegramBadRequest:
+        pass
