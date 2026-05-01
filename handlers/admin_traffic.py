@@ -14,6 +14,7 @@ UX:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from aiogram import F, Router
@@ -178,7 +179,8 @@ async def cb_traffic_qr(callback: CallbackQuery):
     # Сверху мелко — название салона, если задано в настройках.
     salon_name = await get_salon_name()
     try:
-        png = generate_qr(
+        png = await asyncio.to_thread(
+            generate_qr,
             link,
             source_label=src["label"],
             salon_name=salon_name,
