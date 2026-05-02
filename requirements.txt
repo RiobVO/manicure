@@ -3,3 +3,4 @@ aiosqlite
 apscheduler
 python-dotenv
 openpyxl
+redis==5.2.1
