@@ -1,0 +1,6 @@
+# Shell-скрипты всегда LF — иначе на Ubuntu bash ломается на '\r'.
+*.sh text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+.env.template text eol=lf
+docker-compose.yml text eol=lf

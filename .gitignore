@@ -22,6 +22,11 @@ node_modules/
 # Env
 .env
 .env.local
+.env.bak*
+
+# Runtime data (bind-mounts в docker-compose)
+data/
+backups/
 
 # Claude local settings
 .claude/settings.local.json
