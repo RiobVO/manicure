@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Node (business_plan)
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+
+# Env
+.env
+.env.local
+
+# Claude local settings
+.claude/settings.local.json
+.claude/launch.json
