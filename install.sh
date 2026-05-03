@@ -62,13 +62,26 @@ if [[ "${answer,,}" == "y" ]]; then
         || { echo "Ошибка: ERROR_CHAT_ID должен быть числом"; exit 2; }
 fi
 
+LICENSE_KEY=""
+read -rp "Лицензионный ключ (от tools/issue_license.py; Enter — пропустить, бот будет в restricted): " LICENSE_KEY
+
+HEARTBEAT_URL=""
+read -rp "URL heartbeat-эндпоинта (Enter — не слать): " HEARTBEAT_URL
+
+LICENSE_CONTACT=""
+read -rp "Контакт поставщика для сообщения об истечении лицензии (@handle или email, Enter — дефолт): " LICENSE_CONTACT
+
 # Генерация .env из шаблона. sed с разделителем | чтобы не спотыкаться о / в токенах.
+# LICENSE_KEY экранируем отдельно: он содержит точку-разделитель payload/sig и base64.
 sed \
     -e "s|__BOT_TOKEN__|${BOT_TOKEN}|" \
     -e "s|__ADMIN_IDS__|${ADMIN_ID}|" \
     -e "s|__TENANT_SLUG__|${TENANT_SLUG}|" \
     -e "s|__BACKUP_CHAT_ID__|${BACKUP_CHAT_ID}|" \
     -e "s|__ERROR_CHAT_ID__|${ERROR_CHAT_ID}|" \
+    -e "s|__LICENSE_KEY__|${LICENSE_KEY}|" \
+    -e "s|__HEARTBEAT_URL__|${HEARTBEAT_URL}|" \
+    -e "s|__LICENSE_CONTACT__|${LICENSE_CONTACT}|" \
     .env.template > .env
 chmod 600 .env
 

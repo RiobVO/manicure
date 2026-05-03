@@ -28,6 +28,10 @@ node_modules/
 data/
 backups/
 
+# Лицензионный приватный ключ — никогда не коммитить.
+# Публичный ключ вмёрзнут в utils/license.py::PUBLIC_KEY_PEM.
+license_private_key.pem
+
 # Claude local settings
 .claude/settings.local.json
 .claude/launch.json
