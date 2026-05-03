@@ -54,12 +54,21 @@ if [[ "${answer,,}" == "y" ]]; then
         || { echo "Ошибка: BACKUP_CHAT_ID должен быть числом"; exit 2; }
 fi
 
+ERROR_CHAT_ID=""
+read -rp "Настроить алерты об ошибках в Telegram? [y/N] " answer
+if [[ "${answer,,}" == "y" ]]; then
+    read -rp "ERROR_CHAT_ID (можно тот же канал что для бэкапов): " ERROR_CHAT_ID
+    [[ "$ERROR_CHAT_ID" =~ ^-?[0-9]+$ ]] \
+        || { echo "Ошибка: ERROR_CHAT_ID должен быть числом"; exit 2; }
+fi
+
 # Генерация .env из шаблона. sed с разделителем | чтобы не спотыкаться о / в токенах.
 sed \
     -e "s|__BOT_TOKEN__|${BOT_TOKEN}|" \
     -e "s|__ADMIN_IDS__|${ADMIN_ID}|" \
     -e "s|__TENANT_SLUG__|${TENANT_SLUG}|" \
     -e "s|__BACKUP_CHAT_ID__|${BACKUP_CHAT_ID}|" \
+    -e "s|__ERROR_CHAT_ID__|${ERROR_CHAT_ID}|" \
     .env.template > .env
 chmod 600 .env
 
