@@ -39,7 +39,7 @@ from db import (
 )
 from db.appointments import save_appointment_addons
 from keyboards.inline import (
-    services_keyboard, dates_keyboard, times_keyboard,
+    services_keyboard, category_keyboard, dates_keyboard, times_keyboard,
     confirm_keyboard, admin_reply_keyboard, contact_keyboard,
     addons_keyboard, client_reply_keyboard, masters_keyboard,
 )
@@ -80,6 +80,49 @@ async def _cleanup_services_msg(bot, chat_id: int) -> None:
         await bot.delete_message(chat_id, old_id)
     except TelegramBadRequest:
         pass
+
+
+# ─── Выбор категории (ручки/ножки) и список услуг в ней ──────────────────────
+
+CATEGORY_PROMPT = "<i>ручки или ножки?</i>"
+SERVICES_BY_CATEGORY_PROMPT = "<i>что красим?</i>"
+NO_SERVICES_MSG = "<i>пока нет доступных услуг.</i>\n\n<i>скоро вернёмся.</i>"
+
+
+async def _send_category_picker(message: Message, state: FSMContext) -> None:
+    """Первый экран записи — выбор ручек/ножек. Отправляет новое сообщение."""
+    services = await get_services(active_only=True)
+    if not services:
+        await message.answer(NO_SERVICES_MSG, parse_mode="HTML")
+        return
+    sent = await message.answer(
+        CATEGORY_PROMPT,
+        reply_markup=category_keyboard(),
+        parse_mode="HTML",
+    )
+    _remember_services_msg(message.chat.id, sent.message_id)
+    await state.set_state(BookingStates.choose_category)
+
+
+async def _edit_to_category_picker(callback: CallbackQuery, state: FSMContext) -> None:
+    """То же, но через edit_text — не плодит новые сообщения при навигации."""
+    services = await get_services(active_only=True)
+    if not services:
+        try:
+            await callback.message.edit_text(NO_SERVICES_MSG, parse_mode="HTML")
+        except TelegramBadRequest:
+            pass
+        return
+    _remember_services_msg(callback.message.chat.id, callback.message.message_id)
+    try:
+        await callback.message.edit_text(
+            CATEGORY_PROMPT,
+            reply_markup=category_keyboard(),
+            parse_mode="HTML",
+        )
+    except TelegramBadRequest:
+        pass
+    await state.set_state(BookingStates.choose_category)
 
 
 def _date_human(date_str: str) -> str:
@@ -210,16 +253,10 @@ async def cmd_start(message: Message, state: FSMContext):
         await state.set_state(BookingStates.choose_service)
         return
 
-    # Новый клиент — hero-приветствие + список услуг
+    # Новый клиент — hero-приветствие + выбор категории (ручки/ножки)
     await message.answer(greeting_new(), parse_mode="HTML")
     await asyncio.sleep(0.5)
-    sent = await message.answer(
-        f"<i>выбери услугу.</i>",
-        reply_markup=services_keyboard(await get_services(active_only=True)),
-        parse_mode="HTML",
-    )
-    _remember_services_msg(message.chat.id, sent.message_id)
-    await state.set_state(BookingStates.choose_service)
+    await _send_category_picker(message, state)
 
 
 # ─── BOOKING FLOW ────────────────────────────────────────────────────────────
@@ -680,37 +717,31 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         except Exception:
             logger.error("Ошибка сохранения аддонов для appointment_id=%s", appt_id, exc_info=True)
 
-    # Кнопка оплаты (если настроен PAYMENT_URL)
-    from keyboards.inline import payment_keyboard
-    pay_kb = payment_keyboard(appt_id, data["service_price"])
-    if pay_kb:
-        await callback.message.answer(
-            "<i>ссылка на оплату:</i>",
-            reply_markup=pay_kb,
-            parse_mode="HTML",
-        )
+    # Уведомления админа и мастера — в фон. Клиенту неинтересно что они дошли;
+    # ему важно увидеть «ты записана» без секундной задержки на TG API.
+    appt_date = datetime.strptime(data['date'], "%Y-%m-%d")
+    date_str = f"{appt_date.day} {MONTHS_RU[appt_date.month - 1]}"
+    notif_kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Принято", callback_data="notif_dismiss"),
+        InlineKeyboardButton(text="📒 Все записи", callback_data="notif_all_appointments"),
+    ]])
 
-    # Уведомление админа
-    try:
-        appt_date = datetime.strptime(data['date'], "%Y-%m-%d")
-        date_str = f"{appt_date.day} {MONTHS_RU[appt_date.month - 1]}"
-        notif_kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="✅ Принято", callback_data="notif_dismiss"),
-            InlineKeyboardButton(text="📒 Все записи", callback_data="notif_all_appointments"),
-        ]])
-        await broadcast_to_admins(
-            callback.bot,
-            f"🔔 <b>Новая запись:</b> {date_str} в <b>{data['time']}</b>\n"
-            f"💅 {data['service_name']} — {data['name']}\n"
-            f"📞 {data['phone']}",
-            reply_markup=notif_kb,
-            log_context="new booking",
-        )
-    except Exception:
-        logger.exception("Failed to notify admin about new booking")
+    async def _bg_admin_broadcast() -> None:
+        try:
+            await broadcast_to_admins(
+                callback.bot,
+                f"🔔 <b>Новая запись:</b> {date_str} в <b>{data['time']}</b>\n"
+                f"💅 {data['service_name']} — {data['name']}\n"
+                f"📞 {data['phone']}",
+                reply_markup=notif_kb,
+                log_context="new booking",
+            )
+        except Exception:
+            logger.exception("Failed to notify admin about new booking")
 
-    # Уведомление мастеру о новой записи
-    if master_id:
+    async def _bg_master_notify() -> None:
+        if not master_id:
+            return
         try:
             await notify_master(
                 callback.bot, master_id, "new_booking",
@@ -720,10 +751,14 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         except Exception:
             logger.error("Ошибка уведомления мастера", exc_info=True)
 
+    asyncio.create_task(_bg_admin_broadcast())
+    asyncio.create_task(_bg_master_notify())
+
     addon_line_done = (f"\n<i>+ {', '.join(data.get('addon_names', [])).lower()}</i>") if data.get("addon_names") else ""
     master_line_done = (f"\n<i>мастер · {data['master_name'].title()}</i>") if data.get("master_name") else ""
 
-    # 1. Hero — акцент на успехе записи
+    # 1. Hero — акцент на успехе записи. Идёт СРАЗУ после create_appointment,
+    # без ожидания уведомлений админа/мастера.
     try:
         await callback.message.edit_text(
             booking_done_hero(data['name']),
@@ -751,12 +786,22 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 
     await asyncio.sleep(0.5)
 
-    # 3. Мягкое напоминание без inline-кнопок — «записаться» и «мои записи»
-    # уже есть в reply-клавиатуре внизу, дубль только плодит лишние сообщения.
+    # 3. Мягкое напоминание + «до встречи ✧».
     await callback.message.answer(
         booking_reminder_note(),
         parse_mode="HTML",
     )
+
+    # 4. Ссылка на оплату — в самом конце, как CTA после полного подтверждения.
+    from keyboards.inline import payment_keyboard
+    pay_kb = payment_keyboard(appt_id, data["service_price"])
+    if pay_kb:
+        await callback.message.answer(
+            "<i>ссылка на оплату:</i>",
+            reply_markup=pay_kb,
+            parse_mode="HTML",
+        )
+
     await state.clear()
     await callback.answer()
 
@@ -793,27 +838,36 @@ async def confirm_text_fallback(message: Message):
 
 @router.callback_query(F.data == "client_restart")
 async def cb_client_restart(callback: CallbackQuery, state: FSMContext):
+    """«выбрать другое» у возвращающегося клиента → обратно к выбору категории."""
     await state.clear()
-    services = await get_services(active_only=True)
+    await _edit_to_category_picker(callback, state)
+    await callback.answer()
+
+
+@router.callback_query(F.data.in_({"cat_hands", "cat_feet"}))
+async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
+    """Клиент выбрал категорию — показываем услуги в ней с ценами."""
+    category = "hands" if callback.data == "cat_hands" else "feet"
+    services = await get_services(active_only=True, category=category)
     if not services:
+        # В этой категории пусто — возвращаем клиента на выбор категории
+        # с короткой пометкой. Не даём ему тупика.
         try:
             await callback.message.edit_text(
-                f"<i>пока нет доступных услуг.</i>\n\n"
-                f"<i>скоро вернёмся.</i>",
+                f"<i>тут пока пусто. попробуй другую:</i>\n\n{CATEGORY_PROMPT}",
+                reply_markup=category_keyboard(),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
             pass
         await callback.answer()
         return
-    # Запоминаем ID актуального сообщения до попытки edit: если edit провалится
-    # (сообщение уже недоступно) — старый msg_id всё равно заменится на текущий.
     _remember_services_msg(callback.message.chat.id, callback.message.message_id)
     try:
         await callback.message.edit_text(
-            f"<i>выбери услугу.</i>",
+            SERVICES_BY_CATEGORY_PROMPT,
+            reply_markup=services_keyboard(services, with_back=True),
             parse_mode="HTML",
-            reply_markup=services_keyboard(services),
         )
     except TelegramBadRequest:
         pass
@@ -821,11 +875,17 @@ async def cb_client_restart(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(F.data == "cat_back")
+async def cb_category_back(callback: CallbackQuery, state: FSMContext):
+    """«‹ назад» из списка услуг — возвращаемся к выбору категории."""
+    await state.clear()
+    await _edit_to_category_picker(callback, state)
+    await callback.answer()
+
+
 @router.message(F.text == "записаться")
 async def btn_book(message: Message, state: FSMContext):
-    """Кнопка reply-клавиатуры — сбрасывает FSM и показывает список услуг.
-    Удаляет тап клиента и предыдущий открытый список услуг, чтобы не плодить дубликаты.
-    """
+    """Кнопка reply-клавиатуры — сбрасывает FSM и ведёт на выбор категории."""
     await state.clear()
 
     # Убрать само сообщение «записаться» и предыдущий список услуг, если он висит.
@@ -835,21 +895,7 @@ async def btn_book(message: Message, state: FSMContext):
         pass
     await _cleanup_services_msg(message.bot, message.chat.id)
 
-    services = await get_services(active_only=True)
-    if not services:
-        await message.answer(
-            f"<i>пока нет доступных услуг.</i>\n\n"
-            f"<i>скоро вернёмся.</i>",
-            parse_mode="HTML",
-        )
-        return
-    sent = await message.answer(
-        f"<i>выбери услугу.</i>",
-        reply_markup=services_keyboard(services),
-        parse_mode="HTML",
-    )
-    _remember_services_msg(message.chat.id, sent.message_id)
-    await state.set_state(BookingStates.choose_service)
+    await _send_category_picker(message, state)
 
 
 @router.callback_query(F.data.regexp(r"^quick_rebook_(\d+)$"))
@@ -901,17 +947,4 @@ async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
 @router.message()
 async def fallback_message(message: Message, state: FSMContext):
     if await state.get_state() is None:
-        services = await get_services(active_only=True)
-        if not services:
-            await message.answer(
-                f"<i>пока нет доступных услуг.</i>\n\n"
-                f"<i>скоро вернёмся.</i>",
-                parse_mode="HTML",
-            )
-            return
-        await message.answer(
-            f"<i>выбери услугу.</i>",
-            reply_markup=services_keyboard(services),
-            parse_mode="HTML",
-        )
-        await state.set_state(BookingStates.choose_service)
+        await _send_category_picker(message, state)

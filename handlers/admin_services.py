@@ -16,6 +16,7 @@ from db import (
 from keyboards.inline import (
     services_list_keyboard, service_detail_keyboard, admin_cancel_keyboard,
     addon_manage_keyboard, addon_detail_keyboard,
+    admin_category_picker,
 )
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
@@ -404,25 +405,53 @@ async def msg_svc_add_dur(message: Message, state: FSMContext):
         await edit_panel(message.bot, message.chat.id, "⚠️ Введите длительность от 5 до 480 минут:", admin_cancel_keyboard())
         return
 
+    await state.update_data(new_service_duration=duration)
+    await edit_panel(
+        message.bot, message.chat.id,
+        "🗂 К какой категории относится услуга?",
+        admin_category_picker(),
+    )
+    await state.set_state(AdminStates.service_add_category)
+
+
+@router.callback_query(
+    AdminStates.service_add_category,
+    F.data.in_({"svc_cat_hands", "svc_cat_feet"}),
+)
+async def cb_svc_add_category(callback: CallbackQuery, state: FSMContext):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    category = "hands" if callback.data == "svc_cat_hands" else "feet"
     data = await state.get_data()
-    service_id = await add_service(data["new_service_name"], data["new_service_price"], duration)
+
+    service_id = await add_service(
+        data["new_service_name"],
+        data["new_service_price"],
+        data["new_service_duration"],
+        category=category,
+    )
 
     await log_admin_action(
-        admin_id=message.from_user.id,
+        admin_id=callback.from_user.id,
         action="add_service",
         target_type="service",
         target_id=service_id,
-        details=f"{data['new_service_name']} — {data['new_service_price']} сум, {duration} мин",
+        details=(
+            f"{data['new_service_name']} — {data['new_service_price']} сум, "
+            f"{data['new_service_duration']} мин, {category}"
+        ),
     )
 
     await state.clear()
 
     services = await get_services(active_only=False)
-    await edit_panel(
-        message.bot, message.chat.id,
+    await edit_panel_with_callback(
+        callback,
         f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
         services_list_keyboard(services),
     )
+    await callback.answer()
 
 
 # ─── УПРАВЛЕНИЕ ДОП. ОПЦИЯМИ (АДДОНЫ) ──────────────────────────────────────

@@ -44,6 +44,7 @@ from db.services import (
     toggle_service_active,
     delete_service,
     add_service,
+    update_service_category,
     get_addons_for_service,
     get_addon_by_id,
     add_addon,

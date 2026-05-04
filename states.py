@@ -2,7 +2,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class BookingStates(StatesGroup):
-    choose_service = State()
+    choose_category = State()  # 1-й шаг: ручки/ножки
+    choose_service = State()   # 2-й шаг: конкретная услуга с ценой
     choose_addons = State()   # выбор доп. опций (если есть)
     choose_master = State()   # выбор мастера
     choose_date = State()
@@ -29,6 +30,7 @@ class AdminStates(StatesGroup):
 
     # Добавление услуги
     service_add_name = State()
+    service_add_category = State()  # ручки/ножки
     service_add_price = State()
     service_add_duration = State()
 
