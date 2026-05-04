@@ -192,6 +192,45 @@
   без видимых ошибок в логах.
 
 - **Модульный state → Redis.** `_client_services_msg`, `_bg_tasks`,
-  `_db_admins_cache`, `_panel_msg_ids`, `_rate_log`, `_last_error` — всё
-  в памяти процесса. Триггер: миграция на 2+ worker (вероятно — никогда
-  в рамках one-tenant-one-VPS).
+  `_db_admins_cache`, `_panel_msg_ids`, `_rate_log`, `_last_error`,
+  `_last_same`/`_last_any` (anti-spam) — всё в памяти процесса. Триггер:
+  миграция на 2+ worker (вероятно — никогда в рамках one-tenant-one-VPS).
+
+## Из аудита 2026-05-05
+
+- **Healthcheck endpoint для webhook режима.** `bot.py::_start_webhook` поднимает
+  aiohttp только под `WEBHOOK_PATH` (default `/tg/webhook`). Если Caddy/nginx
+  делает health-check на `/`, GET вернёт 404 и proxy будет считать апстрим
+  мёртвым. Фикс: добавить роут `app.router.add_get("/health", lambda r: web.Response(text="ok"))`
+  до `setup_application`. Триггер: первый деплой салона на webhook режиме.
+
+- **Anti-spam memory без TTL bound.** `middlewares/anti_spam.py`: GC чистит
+  раз в `GC_EVERY_N=1000` событий, но если бот уйдёт в idle на сутки —
+  записи останутся. На текущей нагрузке (десятки клиентов на салон) пик
+  ~500 записей, не страшно. Триггер: память контейнера выросла без причины
+  или подключили 2+ салона на один процесс.
+
+- **Версия aiogram 3.7 → актуальная (3.13+).** Между 3.7 и 3.13 закрыли
+  CVE-2024 в parsing webhook payload + добавили support для новых
+  Telegram features (reply.quote, business_connection). Сейчас не триггер,
+  но при первом security advisory или при добавлении business-account
+  features — апгрейд. Тесты гонятся в CI, регрессии поймаем.
+
+- **`WEBHOOK_PORT` (8081) vs `PAYMENT_WEBHOOK_PORT` (8443).** Два aiohttp-сервера
+  в одном процессе — оба нужны при включённых платежах + webhook. Это нормально,
+  но для документации Caddy/nginx-конфига salon owner'у непривычно. Триггер:
+  первая жалоба «не понял какой порт куда».
+
+- **Пустые `except: pass` в anti_spam middleware.** `event.answer()` на дроп —
+  если упадёт (TG лёг, чат закрыт), мы молча игнорим. Это правильный выбор для
+  middleware, но CLAUDE.md «Code rules → bare except запрещены». Сделать
+  `except TelegramAPIError: logger.debug(...)`. Триггер: следующий проход
+  pre-commit-check скилла.
+
+- **Quick-add: `user_id = id админа`.** `handlers/admin_quick_add.py:21-22` —
+  для NOT NULL. Семантически некорректно: `appointments.user_id` теперь означает
+  «кто бронировал», что бывает админом. Влияние: клиент НЕ получит напоминаний
+  (телеграм-id не его), `notify_master` всё ок. Документировано в самом файле,
+  но семантика неконсистентна — в будущем может укусить при отчётах «сколько
+  раз клиент X бронировал». Триггер: аналитика по клиентам или жалоба
+  «не пришло напоминание после quick-add».
