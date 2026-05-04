@@ -24,6 +24,23 @@ async def get_user_lang(user_id: int) -> str:
     return (row.get("lang") or "ru")
 
 
+async def get_user_langs(user_ids: list[int]) -> dict[int, str]:
+    """
+    Батч-вариант get_user_lang: один SELECT IN вместо N круглых рейсов.
+    Используется при массовых уведомлениях (отмена дня), где иначе на 30
+    клиентов получается 30 запросов в БД внутри fire-and-forget цикла.
+    Отсутствующие user_id возвращать не нужно — вызывающий делает .get(uid, "ru").
+    """
+    if not user_ids:
+        return {}
+    placeholders = ",".join("?" * len(user_ids))
+    rows = await _dict_rows(
+        f"SELECT user_id, lang FROM client_profiles WHERE user_id IN ({placeholders})",
+        tuple(user_ids),
+    )
+    return {r["user_id"]: (r.get("lang") or "ru") for r in rows}
+
+
 async def set_user_lang(user_id: int, lang: str) -> None:
     """
     Сохранить язык клиента. Если профиля нет — создаём заглушку

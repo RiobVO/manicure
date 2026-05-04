@@ -38,6 +38,7 @@ from db import (
     get_review_by_appointment, get_master,
     get_day_schedule_for_master, get_time_blocks_for_master,
     get_calendar_marks, cancel_all_scheduled_on_date,
+    get_user_lang, get_user_langs,
 )
 import calendar as _stdlib_calendar
 from keyboards.inline import (
@@ -48,9 +49,11 @@ from keyboards.inline import (
 from utils.slots import generate_free_slots
 from utils.admin import STATUS_LABEL, is_admin_callback, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
-from utils.notifications import notify_master, notify_client
+from utils.notifications import notify_master, notify_client, admin_dismiss_kb, broadcast_to_admins
 from utils.panel import edit_panel_with_callback, edit_panel, get_panel_msg_id, clear_panel_msg_id
 from utils.ui import h
+from utils.i18n import t
+from utils.salon_info import refund_contact_line
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -61,8 +64,85 @@ _STATUS_ICON = {"completed": "✅", "no_show": "🚫", "cancelled": "❌"}
 # Whitelist статусов для cb_appt_status — callback-data извне, валидируем.
 _ALLOWED_STATUSES = frozenset({"scheduled", "completed", "no_show", "cancelled"})
 
+# Bound параллелизма уведомлений при массовых операциях. Telegram global
+# rate-limit ~30 msg/s — без ограничения 50 одновременных send_message
+# уйдут в FloodWait и часть клиентов не получит уведомление.
+_NOTIFY_SEM = asyncio.Semaphore(8)
+
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+
+def _human_date(date_str: str) -> str:
+    """ISO-дата → 'dd.mm.yyyy' с фоллбэком на исходную строку."""
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except ValueError:
+        return date_str
+
+
+def _build_cancel_text(appt: dict, lang: str) -> str:
+    """Текст уведомления клиенту об отмене записи мастером (RU/UZ + опц. блок возврата)."""
+    if lang == "uz":
+        msg = (
+            f"❌ Yozilishingiz usta tomonidan bekor qilindi.\n\n"
+            f"📅 {appt['date']} · {appt['time']}\n"
+            f"💅 {appt['service_name']}\n\n"
+            f"Boshqa vaqtga yozilish uchun usta bilan bog'laning."
+        )
+    else:
+        msg = (
+            f"❌ Ваша запись отменена мастером.\n\n"
+            f"📅 {appt['date']} в {appt['time']}\n"
+            f"💅 {appt['service_name']}\n\n"
+            f"Пожалуйста, свяжитесь с мастером для записи на другое время."
+        )
+    return msg
+
+
+async def _send_client_cancel_notice(bot, appt: dict, lang: str) -> None:
+    """Шлёт клиенту уведомление об отмене + блок refund если запись была оплачена."""
+    msg = _build_cancel_text(appt, lang)
+    if appt.get("paid_at"):
+        msg += "\n\n" + t("refund_needed_intro", lang)
+        msg += "\n" + await refund_contact_line(lang)
+    try:
+        await bot.send_message(appt["user_id"], msg)
+    except Exception:
+        logger.warning(
+            "Could not notify user_id=%s about cancellation",
+            appt["user_id"],
+        )
+
+
+def _build_refund_alert_text(appt: dict, suffix: str) -> str:
+    """Текст алерта админам о необходимости ручного возврата.
+
+    suffix — короткая фраза-причина ('отменена после оплаты' /
+    'отменена в массовой отмене дня'), вставляется во вторую строку.
+    """
+    price = appt.get("service_price", 0)
+    return (
+        f"🔴 <b>Нужен возврат</b>\n"
+        f"Запись #{appt['id']} {suffix}.\n"
+        f"Клиент: {h(appt['name'])}\n"
+        f"Сумма: {price:,} UZS\n".replace(",", " ") +
+        f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
+        f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>\n\n"
+        f"<i>Возврат денег нужно сделать вручную в кабинете провайдера — у бота нет API для refund.</i>"
+    )
+
+
+def _fire_refund_alert(bot, appt: dict, suffix: str, *, log_context: str) -> None:
+    """broadcast_to_admins(refund-text) в фоне, единая клавиатура «возврат сделан»."""
+    _fire(
+        broadcast_to_admins(
+            bot, _build_refund_alert_text(appt, suffix),
+            reply_markup=admin_dismiss_kb("✅ Возврат сделан"),
+            log_context=log_context,
+        ),
+        context=log_context,
+    )
 
 async def _build_day_view(date_str: str) -> tuple[str, object]:
     """Возвращает (text, markup) для дневного вида.
@@ -244,11 +324,7 @@ async def cb_daycancel_ask(callback: CallbackQuery):
         await show_day_view(callback, date_str)
         return
 
-    try:
-        label = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
-    except ValueError:
-        label = date_str
-
+    label = _human_date(date_str)
     text = (
         f"❌ <b>Отменить все записи на {label}?</b>\n\n"
         f"Будет отменено: <b>{len(scheduled)}</b> запис.\n"
@@ -284,7 +360,6 @@ async def cb_daycancel_confirm(callback: CallbackQuery):
         )
         return
 
-    # Audit-log одной строкой — не N штук.
     _fire(
         log_admin_action(
             admin_id=callback.from_user.id,
@@ -297,68 +372,26 @@ async def cb_daycancel_confirm(callback: CallbackQuery):
         context="log mass cancel",
     )
 
-    # Уведомления клиентам — fire-and-forget по каждой записи.
-    # Ловим TG-ошибки внутри: если клиент заблокировал бота, пропускаем.
-    async def _notify_one(appt: dict) -> None:
-        from db import get_user_lang
-        client_lang = await get_user_lang(appt["user_id"])
-        if client_lang == "uz":
-            msg = (
-                f"❌ Yozilishingiz usta tomonidan bekor qilindi.\n\n"
-                f"📅 {appt['date']} · {appt['time']}\n"
-                f"💅 {appt['service_name']}\n\n"
-                f"Boshqa vaqtga yozilish uchun usta bilan bog'laning."
-            )
-        else:
-            msg = (
-                f"❌ Ваша запись отменена мастером.\n\n"
-                f"📅 {appt['date']} в {appt['time']}\n"
-                f"💅 {appt['service_name']}\n\n"
-                f"Пожалуйста, свяжитесь с мастером для записи на другое время."
-            )
-        if appt.get("paid_at"):
-            from utils.salon_info import refund_contact_line
-            from utils.i18n import t
-            msg += "\n\n" + t("refund_needed_intro", client_lang)
-            msg += "\n" + await refund_contact_line(client_lang)
-        try:
-            await callback.bot.send_message(appt["user_id"], msg)
-        except Exception:
-            logger.warning(
-                "Could not notify user_id=%s about mass cancel",
-                appt["user_id"],
+    # Один SELECT IN на все языки — иначе на 30 клиентах было 30 круглых рейсов.
+    langs = await get_user_langs([a["user_id"] for a in cancelled])
+
+    async def _bounded_notify(appt: dict) -> None:
+        async with _NOTIFY_SEM:
+            await _send_client_cancel_notice(
+                callback.bot, appt, langs.get(appt["user_id"], "ru"),
             )
 
     for appt in cancelled:
-        _fire(_notify_one(appt), context=f"notify mass cancel #{appt['id']}")
+        _fire(_bounded_notify(appt), context=f"notify mass cancel #{appt['id']}")
 
-    # Refund-алерты админам — по каждой оплаченной записи.
-    paid = [a for a in cancelled if a.get("paid_at")]
-    if paid:
-        from utils.notifications import admin_dismiss_kb, broadcast_to_admins
-        for appt in paid:
-            price = appt.get("service_price", 0)
-            text = (
-                f"🔴 <b>Нужен возврат</b>\n"
-                f"Запись #{appt['id']} отменена в массовой отмене дня.\n"
-                f"Клиент: {h(appt['name'])}\n"
-                f"Сумма: {price:,} UZS\n".replace(",", " ") +
-                f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
-                f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>"
-            )
-            _fire(
-                broadcast_to_admins(
-                    callback.bot, text,
-                    reply_markup=admin_dismiss_kb("✅ Возврат сделан"),
-                    log_context="mass refund needed",
-                ),
-                context="mass refund alert",
-            )
+    for appt in (a for a in cancelled if a.get("paid_at")):
+        _fire_refund_alert(
+            callback.bot, appt,
+            "отменена в массовой отмене дня",
+            log_context="mass refund alert",
+        )
 
-    try:
-        label = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
-    except ValueError:
-        label = date_str
+    label = _human_date(date_str)
     await edit_panel_with_callback(
         callback,
         f"✅ Отменено записей: <b>{len(cancelled)}</b> на {label}.\n"
@@ -572,62 +605,16 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
         context="log cancel",
     )
 
-    # Refund-алерт админам — в фон.
     if appt.get("paid_at"):
-        from utils.notifications import admin_dismiss_kb, broadcast_to_admins
-        price = appt.get("service_price", 0)
-        refund_text = (
-            f"🔴 <b>Нужен возврат</b>\n"
-            f"Запись #{appt_id} отменена после оплаты.\n"
-            f"Клиент: {h(appt['name'])}\n"
-            f"Сумма: {price:,} UZS\n".replace(",", " ") +
-            f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
-            f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>\n\n"
-            f"<i>Возврат денег нужно сделать вручную в кабинете провайдера — у бота нет API для refund.</i>"
-        )
-        _fire(
-            broadcast_to_admins(
-                callback.bot, refund_text,
-                reply_markup=admin_dismiss_kb("✅ Возврат сделан"),
-                log_context="refund needed",
-            ),
-            context="refund alert",
+        _fire_refund_alert(
+            callback.bot, appt,
+            "отменена после оплаты",
+            log_context="refund alert",
         )
 
-    # Уведомление клиенту — в фон (собираем сообщение здесь, чтобы
-    # не тянуть get_user_lang / refund_contact_line в синхронный путь).
     async def _notify_client_cancelled() -> None:
-        from db import get_user_lang
-        from utils.i18n import t
         client_lang = await get_user_lang(appt["user_id"])
-        refund_block = ""
-        if appt.get("paid_at"):
-            from utils.salon_info import refund_contact_line
-            refund_block = (
-                "\n\n" + t("refund_needed_intro", client_lang)
-                + "\n" + await refund_contact_line(client_lang)
-            )
-        if client_lang == "uz":
-            cancel_msg = (
-                f"❌ Yozilishingiz usta tomonidan bekor qilindi.\n\n"
-                f"📅 {appt['date']} · {appt['time']}\n"
-                f"💅 {appt['service_name']}\n\n"
-                f"Boshqa vaqtga yozilish uchun usta bilan bog'laning."
-            )
-        else:
-            cancel_msg = (
-                f"❌ Ваша запись отменена мастером.\n\n"
-                f"📅 {appt['date']} в {appt['time']}\n"
-                f"💅 {appt['service_name']}\n\n"
-                f"Пожалуйста, свяжитесь с мастером для записи на другое время."
-            )
-        try:
-            await callback.bot.send_message(appt["user_id"], cancel_msg + refund_block)
-        except Exception:
-            logger.warning(
-                "Could not notify user_id=%s about cancellation",
-                appt["user_id"],
-            )
+        await _send_client_cancel_notice(callback.bot, appt, client_lang)
 
     _fire(_notify_client_cancelled(), context="notify client cancelled")
 
