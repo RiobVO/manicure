@@ -23,7 +23,6 @@ from constants import (
     REMINDER_24H_MAX,
     REMINDER_24H_MIN,
     REMINDER_POLL_INTERVAL_MIN,
-    format_date_ru,
 )
 from utils.timezone import now_local, get_tz
 from utils.error_reporter import report_error
@@ -50,7 +49,6 @@ async def send_reminders(bot: Bot) -> None:
     for appt in appointments:
         appt_id: int = appt["id"]
         user_id: int = appt["user_id"]
-        name: str = appt["name"]
         service_name: str = appt["service_name"]
         date: str = appt["date"]
         time: str = appt["time"]
@@ -68,10 +66,10 @@ async def send_reminders(bot: Bot) -> None:
 
         if REMINDER_24H_MIN <= minutes_left <= REMINDER_24H_MAX:
             if not await was_reminder_sent(appt_id, "reminder_24h"):
-                await _send_24h_reminder(bot, user_id, name, service_name, date, time, appt_id)
+                await _send_24h_reminder(bot, user_id, service_name, time, appt_id)
         elif REMINDER_2H_MIN <= minutes_left <= REMINDER_2H_MAX:
             if not await was_reminder_sent(appt_id, "reminder_2h"):
-                await _send_2h_reminder(bot, user_id, name, service_name, date, time, appt_id)
+                await _send_2h_reminder(bot, user_id, service_name, time, appt_id)
         elif 0 < minutes_left < REMINDER_2H_MIN:
             # Окно прошло, но визит ещё впереди — бот был оффлайн в нужный момент.
             # Маркируем как «отправленное», чтобы не проверять эту запись каждую итерацию.
@@ -86,18 +84,10 @@ async def send_reminders(bot: Bot) -> None:
 async def _send_24h_reminder(
     bot: Bot,
     user_id: int,
-    name: str,
     service_name: str,
-    date: str,
     time: str,
     appt_id: int,
 ) -> None:
-    try:
-        dt = datetime.strptime(date, "%Y-%m-%d")
-        date_str = format_date_ru(dt.day, dt.month)
-    except ValueError:
-        date_str = date
-
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Подтверждаю", callback_data=f"client_confirm_{appt_id}"),
@@ -108,11 +98,10 @@ async def _send_24h_reminder(
     try:
         await bot.send_message(
             user_id,
-            f"📅 <b>Напоминание: завтра визит!</b>\n\n"
-            f"Привет, {name}! Завтра в <b>{time}</b> у вас запись:\n"
-            f"💅 {service_name}\n"
-            f"📍 Ждём вас {date_str} в {time}!\n\n"
-            f"Подтвердите или отмените запись:",
+            f"<i>доброе утро ☼</i>\n\n"
+            f"завтра в <b>{time}</b> жду тебя ✧\n"
+            f"{service_name.lower()}\n\n"
+            f"<i>всё в силе?</i>",
             reply_markup=kb,
             parse_mode="HTML",
         )
@@ -131,19 +120,15 @@ async def _send_24h_reminder(
 async def _send_2h_reminder(
     bot: Bot,
     user_id: int,
-    name: str,
     service_name: str,
-    date: str,
     time: str,
     appt_id: int,
 ) -> None:
     try:
         await bot.send_message(
             user_id,
-            f"⏰ <b>Напоминание: скоро визит!</b>\n\n"
-            f"Привет, {name}! Сегодня в <b>{time}</b> у вас запись:\n"
-            f"💅 {service_name}\n\n"
-            f"Ждём вас! 🙂",
+            f"<i>через час-два приходи ✦</i>\n\n"
+            f"{service_name.lower()} · <b>{time}</b>",
             parse_mode="HTML",
         )
     except TelegramAPIError:
