@@ -97,4 +97,4 @@ Software and supersedes any prior representations.
 ---
 
 For a customised agreement (multi-salon discount, perpetual license,
-escrow, etc.) contact [@RiobVO](https://t.me/RiobVO).
+escrow, etc.) contact [@plssog](https://t.me/RiobVO).

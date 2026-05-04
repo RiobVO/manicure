@@ -86,5 +86,5 @@ cd /opt/manicure && ./scripts/uninstall.sh
 
 ## Контакт
 
-- Продажа / установка / поддержка: [@RiobVO](https://t.me/RiobVO)
+- Продажа / установка / поддержка: [@plssog](https://t.me/RiobVO)
 - Вопросы по счетам / лицензиям: тот же контакт
