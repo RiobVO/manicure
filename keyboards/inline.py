@@ -273,11 +273,13 @@ def admin_keyboard() -> InlineKeyboardMarkup:
 
 
 def review_rating_keyboard(appointment_id: int) -> InlineKeyboardMarkup:
-    """Клавиатура выбора рейтинга (1–5 звёзд)."""
-    ratings = ["1 ⭐", "2 ⭐", "3 ⭐", "4 ⭐", "5 ⭐"]
+    """
+    Клавиатура рейтинга 1-5 без звёздочек — в тон lowercase-эстетики бота.
+    Смысл шкалы понятен из контекста вопроса «ну как?».
+    """
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=r, callback_data=f"rev_rate_{appointment_id}_{i + 1}")
-        for i, r in enumerate(ratings)
+        InlineKeyboardButton(text=str(n), callback_data=f"rev_rate_{appointment_id}_{n}")
+        for n in range(1, 6)
     ]])
 
 
