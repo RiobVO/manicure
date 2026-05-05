@@ -41,9 +41,13 @@ class AdminStates(StatesGroup):
     # Настройки
     settings_edit_slot_step = State()
 
-    # Гибкий график
+    # Гибкий график (салонно-глобальный)
     schedule_edit_start = State()
     schedule_edit_end = State()
+
+    # Гибкий график per-master (админ редактирует расписание конкретного мастера)
+    master_schedule_edit_start = State()
+    master_schedule_edit_end = State()
 
     # Блокировка времени
     block_pick_date = State()
