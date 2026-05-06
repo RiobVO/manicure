@@ -36,9 +36,15 @@ DB_PATH: Final[str] = os.getenv("DB_PATH", "manicure.db")
 
 TIMEZONE: Final[str] = os.getenv("TIMEZONE", "Asia/Tashkent")
 
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-TZ: Final[ZoneInfo] = ZoneInfo(TIMEZONE)
+try:
+    TZ: Final[ZoneInfo] = ZoneInfo(TIMEZONE)
+except ZoneInfoNotFoundError as exc:
+    # Fail-fast с человеческим сообщением, чтобы оператор сразу понял куда смотреть.
+    raise EnvironmentError(
+        f"TIMEZONE='{TIMEZONE}' не найден. Укажи IANA-имя, например Asia/Tashkent, Europe/Moscow."
+    ) from exc
 
 # Deeplink для оплаты (опционально). Если не задано — кнопка оплаты не показывается.
 # Пример: https://my.click.uz/services/pay?service_id=XXX&amount={amount}&transaction_param={appt_id}
