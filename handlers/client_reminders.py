@@ -17,7 +17,7 @@ from db import (
 )
 from utils.callbacks import parse_callback
 from utils.notifications import notify_master, broadcast_to_admins
-from utils.ui import FLOWER, ARROW_DO, date_soft
+from utils.ui import FLOWER, ARROW_DO, date_soft, h
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -43,7 +43,7 @@ async def cb_client_confirm(callback: CallbackQuery):
             f"{FLOWER}\n\n"
             f"<b><i>ждём тебя.</i></b>\n\n"
             f"<blockquote>"
-            f"<b>{appt['service_name'].lower()}</b>\n"
+            f"<b>{h(appt['service_name'].lower())}</b>\n"
             f"<i>когда</i>  <code>{date_soft(appt['date'])} · {appt['time']}</code>"
             f"</blockquote>",
             parse_mode="HTML",
@@ -77,9 +77,9 @@ async def cb_client_cancel_reminder(callback: CallbackQuery):
     await broadcast_to_admins(
         callback.bot,
         f"⚠️ <b>Клиент отменил запись</b> (из напоминания)\n\n"
-        f"👤 {appt['name']} ({appt['phone']})\n"
+        f"👤 {h(appt['name'])} ({h(appt['phone'])})\n"
         f"📅 {appt['date']} в {appt['time']}\n"
-        f"💅 {appt['service_name']}",
+        f"💅 {h(appt['service_name'])}",
         log_context="client cancellation (reminder)",
     )
 

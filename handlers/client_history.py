@@ -42,6 +42,7 @@ from utils.ui import (
     price as fmt_price,
     date_soft, date_tiny,
     STATUS_MARK, STATUS_WORD,
+    h,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ def _render_history_page(
 
         lines.append(
             f"<i>{mark}</i>  <b>{date_label}</b>  ·  <code>{appt['time']}</code>\n"
-            f"     {svc_short.lower()}  ·  <i>{word}</i>"
+            f"     {h(svc_short.lower())}  ·  <i>{word}</i>"
         )
 
         if appt["status"] == "completed" and last_completed is None:
@@ -192,13 +193,13 @@ async def cb_my_appt_detail(callback: CallbackQuery):
     if appt.get("master_id"):
         m = await get_master(appt["master_id"])
         if m:
-            master_line = f"<i>мастер · {m['name'].title()}</i>\n"
+            master_line = f"<i>мастер · {h(m['name'].title())}</i>\n"
 
     text = (
         f"<blockquote>"
         f"<b><i>твой визит</i></b>\n\n"
         f"{DIVIDER_SOFT}\n\n"
-        f"<b>{appt['service_name'].lower()}</b>\n"
+        f"<b>{h(appt['service_name'].lower())}</b>\n"
         f"{master_line}"
         f"\n"
         f"<i>когда</i>       <code>{date_soft(appt['date'])} · {appt['time']}</code>\n"
@@ -247,7 +248,7 @@ async def cb_my_appt_cancel(callback: CallbackQuery):
     try:
         await callback.message.edit_text(
             f"<i>точно отменить?</i>\n\n"
-            f"<blockquote><b>{appt['service_name'].lower()}</b>\n"
+            f"<blockquote><b>{h(appt['service_name'].lower())}</b>\n"
             f"<i>{date_soft(appt['date'])} · {appt['time']}</i></blockquote>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [
@@ -280,7 +281,7 @@ async def cb_my_appt_cancel_yes(callback: CallbackQuery):
     try:
         await callback.message.edit_text(
             f"<i>что случилось?</i>\n\n"
-            f"<blockquote><b>{appt['service_name'].lower()}</b>\n"
+            f"<blockquote><b>{h(appt['service_name'].lower())}</b>\n"
             f"<i>{date_soft(appt['date'])} · {appt['time']}</i></blockquote>",
             reply_markup=cancel_reason_keyboard(appt_id),
             parse_mode="HTML",
@@ -299,10 +300,17 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
         await callback.answer()
         return
     reason_key = parts[0]
+    # Whitelist: подделанный callback (cr_foo_123) не должен тащить пустую
+    # reason в admin_logs и broadcast. Клавиатура генерит только ключи из
+    # CANCEL_REASONS — всё остальное подлог.
+    if reason_key not in CANCEL_REASONS:
+        logger.warning("Unknown cancel reason_key=%s from user_id=%s", reason_key, callback.from_user.id)
+        await callback.answer()
+        return
     appt_id = int(parts[1])
     user_id = callback.from_user.id
 
-    reason_label = CANCEL_REASONS.get(reason_key, "")
+    reason_label = CANCEL_REASONS[reason_key]
     success = await cancel_appointment_by_client(appt_id, user_id, reason=reason_label)
     if not success:
         await callback.answer("Не удалось отменить запись.", show_alert=True)
@@ -311,13 +319,13 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
     appt = await get_appointment_by_id(appt_id)
 
     # Уведомить админа с причиной
-    reason_line = f"\n💬 Причина: {reason_label}" if reason_label else ""
+    reason_line = f"\n💬 Причина: {h(reason_label)}" if reason_label else ""
     await broadcast_to_admins(
         callback.bot,
         f"⚠️ <b>Клиент отменил запись</b>\n\n"
-        f"👤 {appt['name']} ({appt['phone']})\n"
+        f"👤 {h(appt['name'])} ({h(appt['phone'])})\n"
         f"📅 {_date_human(appt['date'])}  ·  {appt['time']}\n"
-        f"💅 {appt['service_name']}"
+        f"💅 {h(appt['service_name'])}"
         f"{reason_line}",
         log_context="client cancellation",
     )
