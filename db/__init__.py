@@ -71,6 +71,10 @@ from db.masters import (
     get_day_off_weekdays_for_master,
     update_master_weekday,
     get_time_blocks_for_master,
+    add_master_day_off,
+    delete_master_day_off,
+    get_future_master_day_offs,
+    count_master_scheduled_on_date,
 )
 
 # --- clients ---

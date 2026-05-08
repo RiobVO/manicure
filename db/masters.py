@@ -222,3 +222,60 @@ async def get_master_appointments_upcoming(
            LIMIT ?""",
         (master_id, from_date, limit),
     )
+
+
+# ─── Self-serve day-off для мастера (v.3 Phase 1) ──────────────────────────
+# Отгул хранится как строка в blocked_slots с is_day_off=1 и master_id.
+# Это переиспользует существующий механизм — get_day_schedule_for_master уже
+# читает blocked_slots и возвращает None. Отдельной таблицы не делаем.
+
+
+async def add_master_day_off(master_id: int, date_str: str) -> int:
+    """Поставить отгул мастеру на дату. Возвращает id созданной строки
+    blocked_slots. Caller сам проверяет конфликты (count_master_scheduled_on_date)
+    и идемпотентность (нет ли уже отгула на эту дату)."""
+    db = await get_db()
+    cursor = await db.execute(
+        """INSERT INTO blocked_slots (date, is_day_off, reason, master_id)
+           VALUES (?, 1, 'отгул мастера', ?)""",
+        (date_str, master_id),
+    )
+    await db.commit()
+    return cursor.lastrowid
+
+
+async def delete_master_day_off(block_id: int, master_id: int) -> bool:
+    """Удалить отгул. master_id — guard: чужие строки не трогаем,
+    даже если block_id существует. True если удалено."""
+    db = await get_db()
+    cursor = await db.execute(
+        """DELETE FROM blocked_slots
+           WHERE id = ? AND master_id = ? AND is_day_off = 1""",
+        (block_id, master_id),
+    )
+    await db.commit()
+    return cursor.rowcount > 0
+
+
+async def get_future_master_day_offs(master_id: int) -> list[dict[str, Any]]:
+    """Будущие отгулы конкретного мастера, отсортированные по дате.
+    Глобальные блокировки (master_id IS NULL) не включаем — мастер не может
+    их ни поставить, ни убрать."""
+    return await _dict_rows(
+        """SELECT id, date FROM blocked_slots
+           WHERE master_id = ? AND is_day_off = 1 AND date >= date('now')
+           ORDER BY date""",
+        (master_id,),
+    )
+
+
+async def count_master_scheduled_on_date(master_id: int, date_str: str) -> int:
+    """Сколько scheduled записей у мастера на дату. Для conflict-guard
+    перед постановкой отгула."""
+    db = await get_db()
+    cursor = await db.execute(
+        """SELECT COUNT(*) FROM appointments
+           WHERE master_id = ? AND date = ? AND status = 'scheduled'""",
+        (master_id, date_str),
+    )
+    return (await cursor.fetchone())[0]
