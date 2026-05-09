@@ -657,6 +657,110 @@ def master_weekly_schedule_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def master_today_list_keyboard(appointments: list[dict]) -> InlineKeyboardMarkup | None:
+    """«📋 Сегодня» для мастера: каждая запись — кликабельная кнопка.
+    Callback `mappt_<id>`. None если записей нет (тогда показываем только текст)."""
+    if not appointments:
+        return None
+    buttons = []
+    _icon = {"scheduled": "🕐", "completed": "✅", "no_show": "🚫"}
+    for a in appointments:
+        name_trunc = a["name"][:22] + ("…" if len(a["name"]) > 22 else "")
+        icon = _icon.get(a["status"], "·")
+        buttons.append([InlineKeyboardButton(
+            text=f"{icon} {a['time']} — {name_trunc}",
+            callback_data=f"mappt_{a['id']}",
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_upcoming_list_keyboard(appointments: list[dict]) -> InlineKeyboardMarkup | None:
+    """«📅 Мои записи» для мастера: кнопки с датой и именем.
+    Только scheduled (get_master_appointments_upcoming это гарантирует)."""
+    if not appointments:
+        return None
+    buttons = []
+    for a in appointments:
+        try:
+            dt = datetime.strptime(a["date"], "%Y-%m-%d")
+            date_label = f"{dt.day:02d}.{dt.month:02d}"
+        except ValueError:
+            date_label = a["date"]
+        name_trunc = a["name"][:18] + ("…" if len(a["name"]) > 18 else "")
+        buttons.append([InlineKeyboardButton(
+            text=f"📅 {date_label} {a['time']} — {name_trunc}",
+            callback_data=f"mappt_{a['id']}",
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_appt_actions_keyboard(appt_id: int, status: str) -> InlineKeyboardMarkup:
+    """Действия мастера над своей записью. Логика та же что в
+    admin_appointments::appointment_actions_keyboard — зеркалим, но
+    с мастер-namespace'ом callbacks (mappt_status_*, mappt_rs_*, mappt_back_*).
+    Финальные статусы (completed/cancelled) — только «🔙 Назад к записям»."""
+    buttons = []
+    if status == "scheduled":
+        buttons.append([
+            InlineKeyboardButton(text="✅ Выполнено", callback_data=f"mappt_status_{appt_id}_completed"),
+            InlineKeyboardButton(text="🚫 Не пришёл", callback_data=f"mappt_status_{appt_id}_no_show"),
+        ])
+        buttons.append([
+            InlineKeyboardButton(text="❌ Отменить", callback_data=f"mappt_status_{appt_id}_cancelled"),
+            InlineKeyboardButton(text="↔ Перенести", callback_data=f"mappt_rs_{appt_id}"),
+        ])
+    elif status == "no_show":
+        # Клиент не пришёл — можно всё ещё перенести или окончательно отменить.
+        buttons.append([
+            InlineKeyboardButton(text="↔ Перенести", callback_data=f"mappt_rs_{appt_id}"),
+            InlineKeyboardButton(text="❌ Отменить", callback_data=f"mappt_status_{appt_id}_cancelled"),
+        ])
+    # completed / cancelled → действий нет, только назад.
+    buttons.append([InlineKeyboardButton(text="🔙 К записям", callback_data="mappt_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_rs_dates_keyboard(appt_id: int) -> InlineKeyboardMarkup:
+    """7 дат вперёд для переноса. Callback `mappt_rsd_<id>_<YYYY-MM-DD>`."""
+    buttons = []
+    today = now_local()
+    for i in range(7):
+        day = today + timedelta(days=i)
+        weekday_ru = RUSSIAN_WEEKDAYS[day.weekday()]
+        label = day.strftime("%d.%m") + f" ({weekday_ru})"
+        date_str = day.strftime("%Y-%m-%d")
+        buttons.append([InlineKeyboardButton(
+            text=label, callback_data=f"mappt_rsd_{appt_id}_{date_str}",
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="↩ Отмена", callback_data=f"mappt_{appt_id}",
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def master_rs_times_keyboard(
+    appt_id: int, date_str: str, free_slots: list[str],
+) -> InlineKeyboardMarkup:
+    """Свободные слоты мастера на выбранной дате, 3 в ряд.
+    Callback `mappt_rst_<id>_<YYYY-MM-DD>_<HH:MM>`."""
+    buttons = []
+    row = []
+    for slot in free_slots:
+        row.append(InlineKeyboardButton(
+            text=slot,
+            callback_data=f"mappt_rst_{appt_id}_{date_str}_{slot}",
+        ))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(
+        text="↩ Отмена", callback_data=f"mappt_{appt_id}",
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def master_schedule_menu_keyboard(has_day_offs: bool) -> InlineKeyboardMarkup:
     """Кнопки действий под текстом «📆 Моё расписание» в кабинете мастера.
     «☀ Убрать отгул» показываем только если есть что убирать."""

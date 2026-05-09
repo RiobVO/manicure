@@ -69,3 +69,10 @@ class AdminStates(StatesGroup):
 
     # Выбор мастера при создании блокировки
     block_pick_master = State()
+
+
+class MasterStates(StatesGroup):
+    """FSM кабинета мастера — v.3 Phase 2 (self-serve записи)."""
+    # Перенос своей записи: сначала дата, потом время
+    reschedule_pick_date = State()
+    reschedule_pick_time = State()
