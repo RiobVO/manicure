@@ -85,6 +85,32 @@ aiogram. Listens on port 8443 behind Caddy/nginx for TLS. **Don't
 spin up a separate service** — same process, fewer moving parts,
 easier for a solo dev to own.
 
+**Security — signature verification is NON-NEGOTIABLE.**
+This is the biggest risk in the whole phase. Click and Payme both
+sign their webhooks; if we skip or half-ass verification, anyone with
+`curl` marks any appointment as «paid» and walks out without paying.
+Requirements:
+
+- Verify the signature on raw request body (not parsed JSON — Click's
+  spec is explicit about canonical bytes). Constant-time comparison
+  (`hmac.compare_digest`), never `==`.
+- Reject with HTTP 401 if signature is missing, wrong algorithm, or
+  doesn't match. Log the attempt with source IP to the error channel.
+- Idempotency: the provider's `invoice_id` / `transaction_id` is
+  UNIQUE in `appointments.payment_invoice_id`. A replayed webhook
+  (provider retries on 5xx) must NOT double-mark. Use INSERT …
+  ON CONFLICT DO NOTHING or an explicit pre-check.
+- Rate-limit the endpoint: 60 req/min per IP. Anything higher —
+  either Click is broken or someone's trying to brute-force.
+- `PAYMENT_PROVIDER_SECRET` (the webhook signing key) is stored ONLY
+  in `.env`, never logged. If it leaks — rotate via provider dashboard,
+  redeploy.
+- **Fail closed.** If signature verification library throws anything
+  unexpected, treat as unauthorized, not authorized. Don't catch-all
+  `except: mark_paid`.
+- Write a test that sends a forged webhook with a wrong signature
+  and asserts 401. This is the single test we CANNOT ship without.
+
 **DB migration.** `appointments`: new columns `paid_at TEXT`,
 `payment_provider TEXT`, `payment_invoice_id TEXT`. Manual migration
 via `PRAGMA user_version` (same pattern as today) — not Alembic.
@@ -126,6 +152,13 @@ t.me/sabina_nails_bot?start=story_april20" — and later see that
 47 clients came from that story. Right now they can't see source;
 every booking appears "out of nowhere".
 
+**The QR wow-effect is the headline feature of this phase.**
+When a salon manager sees that one printout on the reception desk
+lets any walk-in client book themselves in 15 seconds — and the bot
+KNOWS that client came "from the desk" — that's when they buy. This
+is not a side-feature; it's the demo-closer. Prioritize QR polish
+over aggregate analytics.
+
 **What we build.**
 
 - Client opens `t.me/<bot>?start=<payload>` → Telegram passes `payload`
@@ -133,15 +166,23 @@ every booking appears "out of nowhere".
   via `CommandObject.args`.
 - Save to `client_profiles.source` (new column) on the client's FIRST
   `/start`. Never overwrite — this is their acquisition attribution.
-- Optional table `referral_sources`:
+- Table `referral_sources`:
   `code TEXT PRIMARY KEY, label TEXT, created_at`. Admin creates
   "Instagram story 20 april" with code `story_april20` and gets a
   short link.
+- **QR generator is a first-class admin feature, not an afterthought.**
+  Admin taps "📱 QR for offline" on any source → bot renders a PNG
+  with:
+  - the QR itself (clean, high-contrast, scannable from ~1 meter)
+  - salon name under the code
+  - short instruction ("отсканируй — запишись") below
+  Size: printable on A5 without pixelation. Uses the `qrcode[pil]`
+  lib (pure Python + Pillow, ~10k stars). One extra dep, justified.
+  Pre-built sources for typical use: `desk` (ресепшн), `mirror`
+  (зеркало), `door` (дверь) — created automatically on first install
+  so the manager has something to print day one.
 - New admin section «📈 Откуда клиенты»: aggregate by `source` —
-  client count, booking count, total revenue, refund count.
-- QR generator: admin taps "QR for offline use" → bot renders a
-  `t.me/<bot>?start=<code>` PNG → sends it back. Requires the
-  `qrcode` pure-Python lib (one dep, ~10k stars, OK).
+  client count, booking count, total revenue.
 
 **What we DON'T build.**
 
@@ -153,13 +194,19 @@ every booking appears "out of nowhere".
 
 **Verification.**
 
-> 1. Admin creates source «Instagram bio» with code `ig_bio`.
-> 2. Receives link `t.me/<bot>?start=ig_bio` and a PNG QR code.
-> 3. Opens the link from a second account → bot sees the payload
+> 1. Fresh install — the 3 default sources (`desk`, `mirror`, `door`)
+>    exist; admin can print a QR for each without any setup.
+> 2. Admin creates source «Instagram bio» with code `ig_bio`.
+> 3. Receives link `t.me/<bot>?start=ig_bio` and a PNG QR that actually
+>    scans from a phone held ~1 meter away.
+> 4. Opens the link from a second account → bot sees the payload
 >    and writes `source='ig_bio'` into `client_profiles`.
-> 4. That client makes a booking.
-> 5. In admin «📈 Откуда клиенты», the «Instagram bio» row shows
+> 5. That client makes a booking.
+> 6. In admin «📈 Откуда клиенты», the «Instagram bio» row shows
 >    1 client, 1 booking, 250 000 UZS expected.
+> 7. Print the `desk` QR on A5 paper, scan with 3 different phones
+>    (iPhone, Android Huawei, old Samsung) — all must resolve to
+>    `/start?start=desk` without cropping the code.
 
 **Commit:** `feat(analytics): deep-link source tracking + QR generator`.
 
