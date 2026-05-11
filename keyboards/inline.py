@@ -900,14 +900,18 @@ def block_date_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def payment_keyboard(appt_id: int, amount: int) -> InlineKeyboardMarkup | None:
-    """Клавиатура с deeplink на оплату. None если PAYMENT_URL не настроен."""
-    from config import PAYMENT_URL, PAYMENT_LABEL
-    if not PAYMENT_URL:
+def payment_keyboard(pay_url: str | None, label: str | None = None) -> InlineKeyboardMarkup | None:
+    """
+    Клавиатура с url-кнопкой на оплату. None если pay_url пустой.
+    pay_url формируется в handlers/client.py: либо из PaymentProvider.create_invoice,
+    либо (legacy) из PAYMENT_URL-подстановки.
+    """
+    if not pay_url:
         return None
-    url = PAYMENT_URL.replace("{amount}", str(amount)).replace("{appt_id}", str(appt_id))
+    from config import PAYMENT_LABEL
+    text = f"💳 {label or PAYMENT_LABEL}"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"💳 {PAYMENT_LABEL}", url=url)],
+        [InlineKeyboardButton(text=text, url=pay_url)],
         [InlineKeyboardButton(text="📋 Мои записи", callback_data="client_my_appointments")],
     ])
 

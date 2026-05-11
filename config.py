@@ -46,10 +46,70 @@ except ZoneInfoNotFoundError as exc:
         f"TIMEZONE='{TIMEZONE}' не найден. Укажи IANA-имя, например Asia/Tashkent, Europe/Moscow."
     ) from exc
 
-# Deeplink для оплаты (опционально). Если не задано — кнопка оплаты не показывается.
-# Пример: https://my.click.uz/services/pay?service_id=XXX&amount={amount}&transaction_param={appt_id}
+# ─── Платежи (v.4 Phase 1) ──────────────────────────────────────────
+# Legacy: чистый deeplink. Работает рядом с PAYMENT_PROVIDER=none.
+# Используется только если PAYMENT_PROVIDER=none — для салонов, кто не хочет
+# полную интеграцию (мерчант не оформлен) и готов проставлять оплату руками.
 PAYMENT_URL: Final[str | None] = os.getenv("PAYMENT_URL") or None
 PAYMENT_LABEL: Final[str] = os.getenv("PAYMENT_LABEL", "Оплатить")
+
+# Провайдер: click | payme | none. "none" → показываем legacy PAYMENT_URL если задан.
+PAYMENT_PROVIDER: Final[str] = os.getenv("PAYMENT_PROVIDER", "none").strip().lower()
+if PAYMENT_PROVIDER not in {"click", "payme", "none"}:
+    raise EnvironmentError(
+        f"PAYMENT_PROVIDER='{PAYMENT_PROVIDER}' недопустим. Допустимые: click | payme | none."
+    )
+
+# Click — https://docs.click.uz/click-api-request/
+CLICK_SERVICE_ID: Final[str] = os.getenv("CLICK_SERVICE_ID", "").strip()
+CLICK_MERCHANT_ID: Final[str] = os.getenv("CLICK_MERCHANT_ID", "").strip()
+CLICK_MERCHANT_USER_ID: Final[str] = os.getenv("CLICK_MERCHANT_USER_ID", "").strip()
+CLICK_SECRET_KEY: Final[str] = os.getenv("CLICK_SECRET_KEY", "").strip()
+# Для локального теста: направляем invoice-create на mock (tools/mock_click_server.py).
+# Дефолт — прод. Пример для dev: http://localhost:8444/mock-click/v2/merchant
+CLICK_API_BASE: Final[str] = os.getenv(
+    "CLICK_API_BASE", "https://api.click.uz/v2/merchant"
+).rstrip("/")
+# База для pay_url, которую клиент откроет в браузере. Пусто → прод my.click.uz.
+CLICK_PAY_URL_BASE: Final[str] = os.getenv(
+    "CLICK_PAY_URL_BASE", "https://my.click.uz/services/pay"
+).rstrip("?")
+
+# Payme — https://developer.help.paycom.uz/merchant-api/
+PAYME_MERCHANT_ID: Final[str] = os.getenv("PAYME_MERCHANT_ID", "").strip()
+PAYME_SECRET_KEY: Final[str] = os.getenv("PAYME_SECRET_KEY", "").strip()
+
+# Публичный HTTPS-URL, куда Caddy/nginx проксирует webhook'и. Пусто → сервер не стартует.
+PAYMENT_PUBLIC_URL: Final[str] = os.getenv("PAYMENT_PUBLIC_URL", "").rstrip("/")
+PAYMENT_WEBHOOK_PORT: Final[int] = int(os.getenv("PAYMENT_WEBHOOK_PORT", "8443"))
+
+# Fail-fast: если провайдер включён — все его креды обязаны быть заданы.
+if PAYMENT_PROVIDER == "click":
+    _missing = [
+        k for k, v in {
+            "CLICK_SERVICE_ID": CLICK_SERVICE_ID,
+            "CLICK_MERCHANT_ID": CLICK_MERCHANT_ID,
+            "CLICK_MERCHANT_USER_ID": CLICK_MERCHANT_USER_ID,
+            "CLICK_SECRET_KEY": CLICK_SECRET_KEY,
+            "PAYMENT_PUBLIC_URL": PAYMENT_PUBLIC_URL,
+        }.items() if not v
+    ]
+    if _missing:
+        raise EnvironmentError(
+            f"PAYMENT_PROVIDER=click, но не заданы: {', '.join(_missing)}"
+        )
+elif PAYMENT_PROVIDER == "payme":
+    _missing = [
+        k for k, v in {
+            "PAYME_MERCHANT_ID": PAYME_MERCHANT_ID,
+            "PAYME_SECRET_KEY": PAYME_SECRET_KEY,
+            "PAYMENT_PUBLIC_URL": PAYMENT_PUBLIC_URL,
+        }.items() if not v
+    ]
+    if _missing:
+        raise EnvironmentError(
+            f"PAYMENT_PROVIDER=payme, но не заданы: {', '.join(_missing)}"
+        )
 
 # Redis для персистентного FSM-storage. Пусто → MemoryStorage (FSM теряется при рестарте).
 # Формат: redis://[:password@]host:port/db, например redis://redis:6379/0.

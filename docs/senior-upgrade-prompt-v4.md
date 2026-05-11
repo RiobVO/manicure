@@ -72,6 +72,12 @@ hand. Semi-automation that adds more friction than it removes.
   `appointments.paid_at` + `appointments.payment_provider`.
 - Admin panel: new column in appointment card — «💰 Оплачено» /
   «⏳ Ждёт оплаты» / «—» (if payment not required).
+- **Refund on cancel = admin alert only (MVP).** If a paid appointment
+  is cancelled, the bot posts «🔴 нужен возврат: <appt_id>, <sum>»
+  to the admin chat. Automatic refund via provider API is deferred
+  to Phase 5+ — manual refund via Click/Payme dashboard is fine for
+  the first 20 clients, and it forces the manager to double-check
+  the cancellation reason before touching money.
 - New env vars: `PAYMENT_PROVIDER=click|payme|none`,
   `CLICK_MERCHANT_ID` / `PAYME_MERCHANT_ID` plus secrets.
 - Master sees payment status in their appointment card — no more

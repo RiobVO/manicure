@@ -168,6 +168,18 @@ async def main() -> None:
     scheduler = setup_scheduler(bot, license_state)
     scheduler.start()
 
+    # Payment webhook-server (Phase 1 v.4). Стартует в том же event loop
+    # параллельно polling, только если PAYMENT_PROVIDER задан. В finally
+    # аккуратно останавливаем runner.
+    payment_runner = None
+    from config import PAYMENT_PROVIDER
+    if PAYMENT_PROVIDER != "none":
+        try:
+            from utils.payments.server import start_webhook_server
+            payment_runner = await start_webhook_server(bot)
+        except Exception:
+            logger.exception("Payment webhook server не стартанул — платежи недоступны")
+
     mark_started()
     if license_state.mode == LicenseMode.GRACE:
         await _warn_grace(bot, license_state)
@@ -180,6 +192,11 @@ async def main() -> None:
     finally:
         logger.info("Бот останавливается.")
         scheduler.shutdown()
+        if payment_runner is not None:
+            try:
+                await payment_runner.cleanup()
+            except Exception:
+                logger.warning("payment_runner cleanup: игнор")
         await close_db()
         await bot.session.close()
         logger.info("Бот остановлен")
