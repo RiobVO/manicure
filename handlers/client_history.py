@@ -210,6 +210,21 @@ async def cb_my_appt_detail(callback: CallbackQuery):
     )
 
     kb_buttons = []
+
+    # Кнопка оплаты для неоплаченной scheduled-записи. Нужна как «запасной
+    # выход»: клиент случайно ушёл с первоначального сообщения-оплаты и
+    # теперь возвращается к ней отсюда. invoice не пересоздаём — URL
+    # реконструируется по сохранённым payment_invoice_id + сумме.
+    if appt["status"] == "scheduled" and not appt.get("paid_at"):
+        from utils.payment_ui import reconstruct_pay_url
+        pay_url = reconstruct_pay_url(appt)
+        if pay_url:
+            from config import PAYMENT_LABEL
+            kb_buttons.append([InlineKeyboardButton(
+                text=f"💳 {PAYMENT_LABEL}",
+                url=pay_url,
+            )])
+
     if appt["status"] == "scheduled":
         kb_buttons.append([
             InlineKeyboardButton(text=f"{CLOSE} отменить запись", callback_data=f"my_appt_cancel_{appt_id}"),

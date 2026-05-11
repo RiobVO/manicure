@@ -905,6 +905,10 @@ def payment_keyboard(pay_url: str | None, label: str | None = None) -> InlineKey
     Клавиатура с url-кнопкой на оплату. None если pay_url пустой.
     pay_url формируется в handlers/client.py: либо из PaymentProvider.create_invoice,
     либо (legacy) из PAYMENT_URL-подстановки.
+
+    Намеренно ОДНА кнопка: «Мои записи» внизу в reply-клавиатуре, дублировать
+    её инлайном рядом с «Оплатить» плохо — клиент случайно тапал соседнюю
+    кнопку, терял доступ к оплате и возврата не было.
     """
     if not pay_url:
         return None
@@ -912,7 +916,6 @@ def payment_keyboard(pay_url: str | None, label: str | None = None) -> InlineKey
     text = f"💳 {label or PAYMENT_LABEL}"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=text, url=pay_url)],
-        [InlineKeyboardButton(text="📋 Мои записи", callback_data="client_my_appointments")],
     ])
 
 
