@@ -361,6 +361,21 @@ async def init_db() -> None:
         )
         await db.execute("PRAGMA user_version = 3")
 
+    # v3 → v4: колонка payment_pay_url. Храним готовый pay_url чтобы при
+    # возврате клиента через «мои записи» не звать create_invoice повторно
+    # (Click начислил бы второй invoice) и не реверс-инжинирить URL из
+    # полей — у Click pay_url содержит его внутренний invoice_id, который
+    # в БД теперь не хранится (см. utils/payments/click.py).
+    if current_version < 4:
+        try:
+            await db.execute(
+                "ALTER TABLE appointments ADD COLUMN payment_pay_url TEXT"
+            )
+        except aiosqlite.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                logger.exception("Миграция v3→v4 упала на ALTER appointments")
+        await db.execute("PRAGMA user_version = 4")
+
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
     cursor_m = await db.execute("SELECT COUNT(*) FROM masters")

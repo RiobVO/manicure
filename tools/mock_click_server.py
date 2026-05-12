@@ -43,12 +43,19 @@ BOT_PUBLIC = os.getenv("PAYMENT_PUBLIC_URL", "http://localhost:8443").rstrip("/"
 BOT_WEBHOOK = f"{BOT_PUBLIC}/payment/click"
 PORT = int(os.getenv("MOCK_CLICK_PORT", "8444"))
 
+# Эмулируем хранилище Click'а: invoice_id → merchant_trans_id (наш appt_id).
+# Реальный Click при оплате шлёт в webhook merchant_trans_id (наш appt_id),
+# а не свой invoice_id — мок обязан делать то же самое, иначе mark_paid не найдёт.
+_INVOICE_TO_MERCHANT: dict[str, str] = {}
+
 
 async def invoice_create(request: web.Request) -> web.Response:
     """POST /mock-click/v2/merchant/invoice/create — имитация Click API."""
     body = await request.json()
     invoice_id = str(uuid.uuid4().int)[:10]
-    print(f"[mock-click] invoice/create appt={body.get('merchant_trans_id')} "
+    merchant_trans_id = str(body.get("merchant_trans_id", ""))
+    _INVOICE_TO_MERCHANT[invoice_id] = merchant_trans_id
+    print(f"[mock-click] invoice/create appt={merchant_trans_id} "
           f"amount={body.get('amount')} -> invoice_id={invoice_id}")
     return web.json_response({
         "error_code": 0,
@@ -105,7 +112,9 @@ async def do_pay(request: web.Request) -> web.Response:
     Шлёт боту два webhook'а подряд: prepare (action=0) + complete (action=1).
     """
     form = await request.post()
-    merchant_trans_id = str(form["invoice_id"])
+    click_invoice_id = str(form["invoice_id"])
+    # Реальный Click шлёт merchant_trans_id (наш appt_id), не свой invoice_id.
+    merchant_trans_id = _INVOICE_TO_MERCHANT.get(click_invoice_id, click_invoice_id)
     amount = str(form["amount"])
     click_trans_id = str(int(time.time()))
     sign_time = time.strftime("%Y-%m-%d %H:%M:%S")

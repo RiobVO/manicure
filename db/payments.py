@@ -17,13 +17,21 @@ from db.connection import get_db, get_write_lock
 logger = logging.getLogger(__name__)
 
 
-async def attach_invoice(appt_id: int, provider: str, invoice_id: str) -> bool:
+async def attach_invoice(
+    appt_id: int, provider: str, invoice_id: str, pay_url: str
+) -> bool:
     """
-    Привязать invoice_id к записи ПЕРЕД редиректом клиента на оплату.
+    Привязать invoice к записи ПЕРЕД редиректом клиента на оплату.
+
+    invoice_id — ключ, по которому mark_paid() найдёт запись из webhook.
+      • Click: наш appt_id (Click шлёт его как merchant_trans_id).
+      • Payme: наш appt_id (invoice_id в Payme = appointment_id).
+
+    pay_url — готовая ссылка для кнопки «Оплатить». Храним чтобы back-door
+    в «мои записи» отдал ту же ссылку без повторного create_invoice.
 
     Возвращает True если привязка прошла, False если у записи уже есть
-    invoice — повторный клик по кнопке «Оплатить» отдаёт тот же URL,
-    новый invoice не создаём.
+    invoice — повторный клик по кнопке «Оплатить» отдаёт тот же URL.
     """
     lock = await get_write_lock()
     async with lock:
@@ -43,8 +51,9 @@ async def attach_invoice(appt_id: int, provider: str, invoice_id: str) -> bool:
                 await db.execute("ROLLBACK")
                 return False
             await db.execute(
-                "UPDATE appointments SET payment_provider = ?, payment_invoice_id = ? WHERE id = ?",
-                (provider, invoice_id, appt_id),
+                "UPDATE appointments SET payment_provider = ?, "
+                "payment_invoice_id = ?, payment_pay_url = ? WHERE id = ?",
+                (provider, invoice_id, pay_url, appt_id),
             )
             await db.execute("COMMIT")
             return True
@@ -108,7 +117,7 @@ async def get_payment_state(appt_id: int) -> dict[str, Any] | None:
     """Прочитать платёжные поля + сумму. None если записи нет."""
     db = await get_db()
     cursor = await db.execute(
-        "SELECT paid_at, payment_provider, payment_invoice_id, "
+        "SELECT paid_at, payment_provider, payment_invoice_id, payment_pay_url, "
         "       service_price, user_id, name, service_name, date, time "
         "FROM appointments WHERE id = ?",
         (appt_id,),

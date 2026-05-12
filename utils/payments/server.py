@@ -112,7 +112,7 @@ async def _click_handler(request: web.Request) -> web.Response:
         return web.Response(status=401, text="unauthorized")
 
     # Complete: помечаем paid. Идемпотентно — повторный webhook не переписывает.
-    # В mock-Click invoice_id = appt_id (str), поэтому mark_paid по этому же ключу.
+    # В БД payment_invoice_id = str(appt_id) = то, что Click шлёт как merchant_trans_id.
     paid_appt = await mark_paid("click", invoice_id=appt_id_str)
     if paid_appt is not None:
         bot: Bot = request.app["bot"]
