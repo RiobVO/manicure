@@ -71,6 +71,10 @@ class AdminStates(StatesGroup):
     # Выбор мастера при создании блокировки
     block_pick_master = State()
 
+    # Источники трафика (Phase 2 v.4)
+    traffic_source_add_code = State()
+    traffic_source_add_label = State()
+
 
 class MasterStates(StatesGroup):
     """FSM кабинета мастера — v.3 Phase 2 (self-serve записи)."""
