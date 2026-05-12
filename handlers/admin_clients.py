@@ -207,6 +207,9 @@ async def cb_appt_detail(callback: CallbackQuery):
     await edit_panel_with_callback(
         callback,
         text,
-        appointment_actions_keyboard(appt_id, appt["date"], appt["status"]),
+        appointment_actions_keyboard(
+            appt_id, appt["date"], appt["status"],
+            paid=bool(appt.get("paid_at")),
+        ),
     )
     await callback.answer()

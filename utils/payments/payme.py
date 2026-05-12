@@ -5,10 +5,17 @@ Docs: https://developer.help.paycom.uz/
 Auth: Authorization: Basic base64("Paycom:" + SECRET_KEY).
 В JSON-RPC body нет подписи — Basic auth единственная защита.
 
-MVP: помечаем paid только на PerformTransaction. Остальные методы
-(CheckPerformTransaction / CreateTransaction / Cancel / CheckTransaction)
-обрабатываются в server.py шаблонным ack — этого хватает для принятия
-денег. Полная семантика (проверка дублей, частичный рефанд) — FUTURE.
+MVP: помечаем paid только на PerformTransaction. CheckPerformTransaction
+и CreateTransaction валидируют appointment_id и сумму перед allow'ом —
+без этого Payme принимает оплату за несуществующий appt_id (клиент
+заплатил бы в никуда). Остальные методы (Cancel/CheckTransaction/
+GetStatement) отвечают шаблонным ack. Полная семантика (частичный
+рефанд, trans state-machine) — FUTURE.
+
+Payme error codes (из docs):
+  -31050  «Неверный код заказа»   — appt_id не найден
+  -31001  «Неверная сумма»        — amount ≠ service_price × 100
+  -31008  «Невозможно выполнить»  — запись отменена или уже оплачена
 """
 from __future__ import annotations
 
@@ -29,6 +36,18 @@ class _PaymeNonPerform(Exception):
     def __init__(self, method: str, params: dict[str, Any], rpc_id: Any):
         self.method = method
         self.params = params
+        self.rpc_id = rpc_id
+
+
+class _PaymeError(Exception):
+    """
+    JSON-RPC ошибка, которую сервер должен вернуть Payme. Payme при такой
+    ошибке откажется принять/провести платёж — это защищает нас от оплаты
+    в никуда.
+    """
+    def __init__(self, code: int, message: str, rpc_id: Any):
+        self.code = code
+        self.message = message
         self.rpc_id = rpc_id
 
 
@@ -56,8 +75,13 @@ class PaymeProvider(PaymentProvider):
 
     async def verify_and_parse(self, headers: dict, raw_body: bytes) -> str:
         """
-        Проверка Basic auth + извлечение appointment_id из params.account.
-        Не-Perform методы вылетают через _PaymeNonPerform для server.py.
+        Basic auth → парсинг JSON-RPC → валидация appointment_id и суммы
+        (для Check/CreateTransaction/PerformTransaction). Если запись
+        не существует или сумма не совпадает — raise _PaymeError, сервер
+        вернёт JSON-RPC error и Payme откажется провести платёж.
+
+        Возвращает appt_id строкой — только для PerformTransaction.
+        Для остальных методов raise _PaymeNonPerform (allow-path).
         """
         auth = headers.get("Authorization") or headers.get("authorization") or ""
         expected = "Basic " + base64.b64encode(
@@ -72,14 +96,40 @@ class PaymeProvider(PaymentProvider):
             raise ValueError(f"payme: bad json: {exc}") from exc
 
         method = body.get("method")
-        params = body.get("params", {})
-        if method != "PerformTransaction":
-            raise _PaymeNonPerform(
-                method=method or "", params=params, rpc_id=body.get("id"),
-            )
+        params = body.get("params") or {}
+        rpc_id = body.get("id")
 
-        account = params.get("account", {}) if isinstance(params, dict) else {}
-        appt_id = str(account.get("appointment_id", ""))
-        if not appt_id:
-            raise ValueError("payme: params.account.appointment_id missing")
-        return appt_id
+        # Методы, для которых Payme шлёт account.appointment_id — мы должны
+        # его провалидировать. Check/Create/Perform — три стадии одного
+        # платёжного ивента. Cancel/CheckTransaction/GetStatement — работают
+        # по Payme's transaction id, не по нашему appt_id; их валидация в
+        # FUTURE (см. докстринг модуля).
+        if method in ("CheckPerformTransaction", "CreateTransaction", "PerformTransaction"):
+            account = params.get("account", {}) if isinstance(params, dict) else {}
+            appt_id_raw = str(account.get("appointment_id", ""))
+            if not appt_id_raw or not appt_id_raw.isdigit():
+                raise _PaymeError(-31050, "appointment_id invalid", rpc_id)
+            appt_id_int = int(appt_id_raw)
+
+            # Ленивая загрузка — избегаем циркулярных импортов и трогаем БД
+            # только когда пришёл реальный платёжный запрос.
+            from db.payments import get_payment_state
+            state = await get_payment_state(appt_id_int)
+            if state is None:
+                raise _PaymeError(-31050, "appointment not found", rpc_id)
+
+            # Сумма из Payme — в тийинах, service_price — в сумах.
+            amount_tiyin = params.get("amount")
+            expected_tiyin = int(state["service_price"]) * 100
+            if amount_tiyin != expected_tiyin:
+                raise _PaymeError(-31001, "amount mismatch", rpc_id)
+
+            if method == "PerformTransaction":
+                return appt_id_raw
+            # Check/Create — валидация прошла, отдаём allow-path.
+            raise _PaymeNonPerform(method=method, params=params, rpc_id=rpc_id)
+
+        # Прочие методы (Cancel/CheckTransaction/GetStatement) — шаблонный ack.
+        raise _PaymeNonPerform(
+            method=method or "", params=params, rpc_id=rpc_id,
+        )

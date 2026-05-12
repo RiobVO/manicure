@@ -28,7 +28,7 @@ from db.payments import get_payment_state, mark_paid
 from utils.notifications import broadcast_to_admins
 from utils.payments import get_provider
 from utils.payments.click import _ClickPrepare
-from utils.payments.payme import _PaymeNonPerform
+from utils.payments.payme import _PaymeError, _PaymeNonPerform
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +142,17 @@ async def _payme_handler(request: web.Request) -> web.Response:
     try:
         appt_id_str = await provider.verify_and_parse(dict(request.headers), raw)
     except _PaymeNonPerform as non:
-        # Все методы кроме Perform — шаблонный ack. На MVP хватает: Payme
-        # не блокирует платёж при упрощённом CheckPerform/Create.
+        # Check/Create после валидации, либо неизвестные методы — ack.
         return web.json_response(_payme_ack(non))
+    except _PaymeError as err:
+        # Валидация appt_id/amount провалилась — Payme откажется принять
+        # платёж. Это защита от оплаты в никуда (см. payme.py docstring).
+        logger.warning("payme webhook error %s from %s: %s", err.code, ip, err.message)
+        return web.json_response({
+            "jsonrpc": "2.0",
+            "id": err.rpc_id,
+            "error": {"code": err.code, "message": err.message},
+        })
     except PermissionError as exc:
         logger.warning("payme webhook 401 from %s: %s", ip, exc)
         return web.Response(status=401, text="unauthorized")
