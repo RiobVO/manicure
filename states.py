@@ -40,6 +40,7 @@ class AdminStates(StatesGroup):
 
     # Настройки
     settings_edit_slot_step = State()
+    settings_edit_contact = State()  # @handle / телефон / ссылка для клиентов
 
     # Гибкий график (салонно-глобальный)
     schedule_edit_start = State()
