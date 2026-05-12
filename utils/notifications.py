@@ -19,6 +19,15 @@ def _master_dismiss_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="✅ Принято", callback_data="notif_dismiss"),
     ]])
 
+
+def admin_dismiss_kb(label: str = "✅ Ок") -> InlineKeyboardMarkup:
+    """Стандартная кнопка закрытия для admin-broadcast'ов — оплата, отмена,
+    refund-алерт. Без неё сообщения накапливаются в чате и мешают работать
+    с живой панелью. callback=notif_dismiss обрабатывается в admin.py."""
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=label, callback_data="notif_dismiss"),
+    ]])
+
 # Шаблоны сообщений мастеру
 _MASTER_TEMPLATES: dict[str, str] = {
     "new_booking": "📋 Новая запись!\n{date} в {time}\nКлиент: {client_name}\nУслуга: {service_name}",
