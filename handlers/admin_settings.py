@@ -116,6 +116,7 @@ async def msg_settings_slot_step(message: Message, state: FSMContext):
 # Пусто → бот пишет нейтральное «свяжись с салоном», чтобы не дать ложных
 # обещаний (например, «пиши сюда», когда реального приёма нет).
 _CONTACT_MAX_LEN = 64
+_SALON_NAME_MAX_LEN = 40  # помещается в одну строку на QR-плакате при 22pt
 
 
 @router.callback_query(F.data == "settings_edit_contact")
@@ -167,6 +168,63 @@ async def msg_settings_contact(message: Message, state: FSMContext):
         return
 
     await set_setting("salon_contact", text)
+    await state.clear()
+    settings = await get_all_settings()
+    await edit_panel(
+        message.bot, message.chat.id,
+        "⚙️ Настройки графика работы:",
+        settings_keyboard(settings),
+    )
+
+
+# ─── НАЗВАНИЕ САЛОНА (для QR-плакатов) ──────────────────────────────────────
+
+@router.callback_query(F.data == "settings_edit_name")
+async def cb_settings_edit_name(callback: CallbackQuery, state: FSMContext):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    current = (await get_all_settings()).get("salon_name", "") or "не задано"
+    await edit_panel_with_callback(
+        callback,
+        (
+            "🏷 <b>Название салона</b>\n\n"
+            f"Сейчас: <code>{current}</code>\n\n"
+            "Используется как мелкая строка сверху на QR-плакатах "
+            "(«📈 Откуда клиенты» → «📱 QR для печати»).\n\n"
+            "Пришли новое значение одним сообщением. Пример:\n"
+            "<code>Nail Studio Sabina</code>\n\n"
+            "Чтобы <b>очистить</b>, пришли <code>-</code> или <code>нет</code>.\n"
+            f"Макс. длина — {_SALON_NAME_MAX_LEN} символов."
+        ),
+        admin_cancel_keyboard(),
+    )
+    await state.set_state(AdminStates.settings_edit_name)
+    await callback.answer()
+
+
+@router.message(AdminStates.settings_edit_name)
+async def msg_settings_name(message: Message, state: FSMContext):
+    if not is_admin_message(message):
+        await state.clear()
+        return
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    text = (message.text or "").strip()
+    if text.lower() in {"-", "нет", "no", "off", "clear"}:
+        text = ""
+    elif len(text) > _SALON_NAME_MAX_LEN:
+        await edit_panel(
+            message.bot, message.chat.id,
+            f"⚠️ Слишком длинно (макс. {_SALON_NAME_MAX_LEN} символов). Пришли короче:",
+            admin_cancel_keyboard(),
+        )
+        return
+
+    await set_setting("salon_name", text)
     await state.clear()
     settings = await get_all_settings()
     await edit_panel(

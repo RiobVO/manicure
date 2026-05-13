@@ -7,6 +7,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# fonts-dejavu-core нужен для рендеринга кириллицы на QR-плакатах (utils/qrgen.py).
+# Без него Pillow падает на ImageFont.load_default() — только латиница,
+# русский текст превращается в квадратики (tofu).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
 

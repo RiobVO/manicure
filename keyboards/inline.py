@@ -620,18 +620,24 @@ def service_detail_keyboard(service: dict) -> InlineKeyboardMarkup:
 # ─── SETTINGS ─────────────────────────────────────────────────────────────────
 
 def settings_keyboard(s: dict) -> InlineKeyboardMarkup:
-    # Контакт: показываем текущее значение или «не задан», обрезаем если длинный.
-    contact_raw = (s.get('salon_contact') or '').strip()
-    if contact_raw:
-        contact_label = contact_raw if len(contact_raw) <= 28 else contact_raw[:27] + "…"
-    else:
-        contact_label = "не задан"
+    def _short(raw: str, placeholder: str = "не задано") -> str:
+        raw = (raw or "").strip()
+        if not raw:
+            return placeholder
+        return raw if len(raw) <= 28 else raw[:27] + "…"
+
+    contact_label = _short(s.get("salon_contact") or "", placeholder="не задан")
+    name_label = _short(s.get("salon_name") or "")
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"⏱ Шаг слотов: {s.get('slot_step', 30)} мин",
             callback_data="settings_edit_step"
         )],
         [InlineKeyboardButton(text="📅 График по дням", callback_data="sched_weekly")],
+        [InlineKeyboardButton(
+            text=f"🏷 Название салона: {name_label}",
+            callback_data="settings_edit_name"
+        )],
         [InlineKeyboardButton(
             text=f"📞 Контакт для клиентов: {contact_label}",
             callback_data="settings_edit_contact"
