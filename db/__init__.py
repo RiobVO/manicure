@@ -85,6 +85,8 @@ from db.clients import (
     search_clients,
     get_dormant_clients,
     get_client_card,
+    get_user_lang,
+    set_user_lang,
 )
 
 # --- settings ---

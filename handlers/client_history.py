@@ -380,7 +380,7 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
     await callback.answer("Запись отменена")
 
 
-@router.message(F.text == "мои записи")
+@router.message(F.text.in_({"мои записи", "mening yozilishlarim"}))
 async def btn_my_appointments(message: Message, state: FSMContext):
     """Кнопка reply-клавиатуры — сбрасывает FSM и показывает записи клиента (стр. 1)."""
     await state.clear()
