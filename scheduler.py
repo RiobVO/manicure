@@ -123,29 +123,37 @@ async def _send_24h_reminder(
     time: str,
     appt_id: int,
 ) -> None:
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Подтверждаю", callback_data=f"client_confirm_{appt_id}"),
-            InlineKeyboardButton(text="❌ Отменить", callback_data=f"client_cancel_{appt_id}"),
-        ]
-    ])
+    from db import get_user_lang
+    lang = await get_user_lang(user_id)
 
-    try:
-        await bot.send_message(
-            user_id,
+    if lang == "uz":
+        confirm_btn = "✅ Tasdiqlayman"
+        cancel_btn = "❌ Bekor qilish"
+        text = (
+            f"<i>xayrli tong ☼</i>\n\n"
+            f"ertaga soat <b>{time}</b> da kutamiz ✧\n"
+            f"{h(service_name.lower())}\n\n"
+            f"<i>hamma narsa rejalashtirilgandek?</i>"
+        )
+    else:
+        confirm_btn = "✅ Подтверждаю"
+        cancel_btn = "❌ Отменить"
+        text = (
             f"<i>доброе утро ☼</i>\n\n"
             f"завтра в <b>{time}</b> жду тебя ✧\n"
             f"{h(service_name.lower())}\n\n"
-            f"<i>всё в силе?</i>",
-            reply_markup=kb,
-            parse_mode="HTML",
+            f"<i>всё в силе?</i>"
         )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=confirm_btn, callback_data=f"client_confirm_{appt_id}"),
+        InlineKeyboardButton(text=cancel_btn, callback_data=f"client_cancel_{appt_id}"),
+    ]])
+
+    try:
+        await bot.send_message(user_id, text, reply_markup=kb, parse_mode="HTML")
     except TelegramAPIError:
-        # Заблокирован/не существует чат — полный стек в DEBUG, одну строку в WARNING.
-        logger.warning(
-            "Failed to send 24h reminder to user_id=%s (appt=%s)",
-            user_id, appt_id,
-        )
+        logger.warning("Failed to send 24h reminder to user_id=%s (appt=%s)", user_id, appt_id)
         logger.debug("24h reminder error", exc_info=True)
         return
 
@@ -159,18 +167,16 @@ async def _send_2h_reminder(
     time: str,
     appt_id: int,
 ) -> None:
+    from db import get_user_lang
+    lang = await get_user_lang(user_id)
+    if lang == "uz":
+        text = f"<i>bir-ikki soatdan keyin kelishingizni kutamiz ✦</i>\n\n{h(service_name.lower())} · <b>{time}</b>"
+    else:
+        text = f"<i>через час-два приходи ✦</i>\n\n{h(service_name.lower())} · <b>{time}</b>"
     try:
-        await bot.send_message(
-            user_id,
-            f"<i>через час-два приходи ✦</i>\n\n"
-            f"{h(service_name.lower())} · <b>{time}</b>",
-            parse_mode="HTML",
-        )
+        await bot.send_message(user_id, text, parse_mode="HTML")
     except TelegramAPIError:
-        logger.warning(
-            "Failed to send 2h reminder to user_id=%s (appt=%s)",
-            user_id, appt_id,
-        )
+        logger.warning("Failed to send 2h reminder to user_id=%s (appt=%s)", user_id, appt_id)
         logger.debug("2h reminder error", exc_info=True)
         return
 
