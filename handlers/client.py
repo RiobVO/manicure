@@ -89,20 +89,26 @@ async def _cleanup_services_msg(bot, chat_id: int) -> None:
 
 # ─── Выбор категории (ручки/ножки) и список услуг в ней ──────────────────────
 
-CATEGORY_PROMPT = "<i>ручки или ножки?</i>"
-SERVICES_BY_CATEGORY_PROMPT = "<i>что красим?</i>"
-NO_SERVICES_MSG = "<i>пока нет доступных услуг.</i>\n\n<i>скоро вернёмся.</i>"
 
-
-async def _send_category_picker(message: Message, state: FSMContext) -> None:
-    """Первый экран записи — выбор ручек/ножек. Отправляет новое сообщение."""
+async def _send_category_picker(
+    message: Message,
+    state: FSMContext,
+    user_id: int | None = None,
+) -> None:
+    """Первый экран записи — выбор ручек/ножек. Отправляет новое сообщение.
+    user_id явно — если message это callback.message (from_user = бот),
+    вызывающий обязан передать реальный user_id клиента."""
+    from utils.i18n import t
+    from db import get_user_lang
+    uid = user_id if user_id is not None else message.from_user.id
+    lang = await get_user_lang(uid)
     services = await get_services(active_only=True)
     if not services:
-        await message.answer(NO_SERVICES_MSG, parse_mode="HTML")
+        await message.answer(t("book_no_services", lang), parse_mode="HTML")
         return
     sent = await message.answer(
-        CATEGORY_PROMPT,
-        reply_markup=category_keyboard(),
+        t("book_category_prompt", lang),
+        reply_markup=category_keyboard(lang),
         parse_mode="HTML",
     )
     _remember_services_msg(message.chat.id, sent.message_id)
@@ -111,18 +117,21 @@ async def _send_category_picker(message: Message, state: FSMContext) -> None:
 
 async def _edit_to_category_picker(callback: CallbackQuery, state: FSMContext) -> None:
     """То же, но через edit_text — не плодит новые сообщения при навигации."""
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     services = await get_services(active_only=True)
     if not services:
         try:
-            await callback.message.edit_text(NO_SERVICES_MSG, parse_mode="HTML")
+            await callback.message.edit_text(t("book_no_services", lang), parse_mode="HTML")
         except TelegramBadRequest:
             pass
         return
     _remember_services_msg(callback.message.chat.id, callback.message.message_id)
     try:
         await callback.message.edit_text(
-            CATEGORY_PROMPT,
-            reply_markup=category_keyboard(),
+            t("book_category_prompt", lang),
+            reply_markup=category_keyboard(lang),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
@@ -154,13 +163,17 @@ async def _show_master_step(
     Показывает выбор мастера. Если мастер один — пропускает шаг и сразу переходит к датам.
     service_header — уже сформированная строка с названием/ценой услуги.
     """
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     masters = await get_active_masters()
+    date_prompt = t("book_date_prompt", lang)
     if not masters:
         # мастера не заведены — пропускаем шаг, идём к датам без привязки к мастеру
         day_off_weekdays = await _day_off_weekdays()
         try:
             await callback.message.edit_text(
-                f"{service_header}\n\n<i>выбери дату.</i>",
+                f"{service_header}\n\n{date_prompt}",
                 reply_markup=dates_keyboard(day_off_weekdays),
                 parse_mode="HTML",
             )
@@ -176,7 +189,7 @@ async def _show_master_step(
         day_off_weekdays = await get_day_off_weekdays_for_master(master["id"])
         try:
             await callback.message.edit_text(
-                f"{service_header}\n\n<i>выбери дату.</i>",
+                f"{service_header}\n\n{date_prompt}",
                 reply_markup=dates_keyboard(day_off_weekdays),
                 parse_mode="HTML",
             )
@@ -189,7 +202,7 @@ async def _show_master_step(
     ratings = await get_all_masters_ratings()
     try:
         await callback.message.edit_text(
-            f"{service_header}\n\n<i>кто тебя принимает?</i>",
+            f"{service_header}\n\n{t('book_master_prompt', lang)}",
             reply_markup=masters_keyboard(masters, ratings),
             parse_mode="HTML",
         )
@@ -285,6 +298,7 @@ async def cmd_start(message: Message, state: FSMContext):
             days_ago=days_since,
             service=last_completed["service_name"],
             master=master_name,
+            lang=lang,
         )
         await message.answer(greet, parse_mode="HTML")
 
@@ -292,15 +306,15 @@ async def cmd_start(message: Message, state: FSMContext):
         await asyncio.sleep(0.6)
 
         svc_name_short = last_completed["service_name"][:45]
+        repeat_text = f"{REPEAT}  takrorlash · {svc_name_short}" if lang == "uz" else f"{REPEAT}  повторить · {svc_name_short}"
+        another_text = f"{ARROW_SOFT} boshqasini tanlash" if lang == "uz" else f"{ARROW_SOFT} выбрать другое"
+        what_today_text = "<i>bugun nima?</i>" if lang == "uz" else "<i>что сегодня?</i>"
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(
-                text=f"{REPEAT}  повторить · {svc_name_short}",
-                callback_data=f"quick_rebook_{last_completed['id']}",
-            )],
-            [InlineKeyboardButton(text=f"{ARROW_SOFT} выбрать другое", callback_data="client_restart")],
+            [InlineKeyboardButton(text=repeat_text, callback_data=f"quick_rebook_{last_completed['id']}")],
+            [InlineKeyboardButton(text=another_text, callback_data="client_restart")],
         ])
         await message.answer(
-            f"<i>что сегодня?</i>\n{DIVIDER_WHISPER}",
+            f"{what_today_text}\n{DIVIDER_WHISPER}",
             reply_markup=kb,
             parse_mode="HTML",
         )
@@ -308,7 +322,7 @@ async def cmd_start(message: Message, state: FSMContext):
         return
 
     # Новый клиент — hero-приветствие + выбор категории (ручки/ножки)
-    await message.answer(greeting_new(), parse_mode="HTML")
+    await message.answer(greeting_new(lang), parse_mode="HTML")
     await asyncio.sleep(0.5)
     await _send_category_picker(message, state)
 
@@ -317,6 +331,9 @@ async def cmd_start(message: Message, state: FSMContext):
 
 @router.callback_query(BookingStates.choose_service, F.data.startswith("service_"))
 async def choose_service(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "service", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -327,7 +344,7 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
 
     if service is None or not service["is_active"]:
         logger.warning("Unknown/inactive service_id=%s from user_id=%s", service_id, callback.from_user.id)
-        await callback.answer("Услуга недоступна. Начните заново: /start", show_alert=True)
+        await callback.answer(t("book_service_unavailable", lang), show_alert=True)
         await state.clear()
         return
 
@@ -339,7 +356,8 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
         selected_addons=[],
     )
 
-    # Карточка услуги в blockquote — описание идёт в текст, фото не отправляем
+    dur_label = t("book_confirm_duration", lang)
+    price_label = t("book_confirm_price", lang)
     desc = service.get("description")
     desc_line = f"\n\n<i>{h(desc)}</i>" if desc else ""
     service_card = (
@@ -347,18 +365,17 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
         f"<b><i>{h(service['name'].lower())}</i></b>"
         f"{desc_line}\n\n"
         f"{DIVIDER_SOFT}\n\n"
-        f"<i>длительность</i>   <code>{fmt_dur(service['duration'])}</code>\n"
-        f"<i>стоимость</i>      <code>{fmt_price(service['price'])}</code>"
+        f"<i>{dur_label}</i>   <code>{fmt_dur(service['duration'], lang)}</code>\n"
+        f"<i>{price_label}</i>      <code>{fmt_price(service['price'], lang)}</code>"
         f"</blockquote>"
     )
 
-    # Проверяем доп. опции для этой услуги
     addons = await get_addons_for_service(service_id)
     if addons:
         try:
             await callback.message.edit_text(
-                f"{service_card}\n\n<i>можно добавить:</i>",
-                reply_markup=addons_keyboard(addons),
+                f"{service_card}\n\n{t('book_addons_prompt', lang)}",
+                reply_markup=addons_keyboard(addons, lang=lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -373,6 +390,9 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(BookingStates.choose_addons, F.data.startswith("addon_"))
 async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
     """Переключить выбор доп. опции (toggle)."""
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "addon", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -389,19 +409,21 @@ async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
     await state.update_data(selected_addons=selected)
 
     addons = await get_addons_for_service(data["service_id"])
+    dur_label = t("book_confirm_duration", lang)
+    price_label = t("book_confirm_price", lang)
     try:
         total = calculate_total_price(data["service_price"], selected, addons)
         service_card = (
             f"<blockquote>"
             f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
             f"{DIVIDER_SOFT}\n\n"
-            f"<i>длительность</i>   <code>{fmt_dur(data['service_duration'])}</code>\n"
-            f"<i>стоимость</i>      <code>{fmt_price(total)}</code>"
+            f"<i>{dur_label}</i>   <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
+            f"<i>{price_label}</i>      <code>{fmt_price(total, lang)}</code>"
             f"</blockquote>"
         )
         await callback.message.edit_text(
-            f"{service_card}\n\n<i>можно добавить:</i>",
-            reply_markup=addons_keyboard(addons, set(selected)),
+            f"{service_card}\n\n{t('book_addons_prompt', lang)}",
+            reply_markup=addons_keyboard(addons, set(selected), lang=lang),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
@@ -412,10 +434,12 @@ async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(BookingStates.choose_addons, F.data == "addons_done")
 async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
     """Завершить выбор доп. опций — перейти к дате."""
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     data = await state.get_data()
     selected: list[int] = data.get("selected_addons", [])
 
-    # Подсчитать итоговую цену и сформировать список названий
     addons = await get_addons_for_service(data["service_id"])
     final_price = calculate_total_price(data["service_price"], selected, addons)
     addon_names = addon_names_for(selected, addons)
@@ -425,14 +449,16 @@ async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
         addon_names=addon_names,
     )
 
+    dur_label = t("book_confirm_duration", lang)
+    price_label = t("book_confirm_price", lang)
     addon_line = (f"<i>+ {h(', '.join(addon_names).lower())}</i>\n\n") if addon_names else ""
     header = (
         f"<blockquote>"
         f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
         f"{addon_line}"
         f"{DIVIDER_SOFT}\n\n"
-        f"<i>длительность</i>   <code>{fmt_dur(data['service_duration'])}</code>\n"
-        f"<i>стоимость</i>      <code>{fmt_price(final_price)}</code>"
+        f"<i>{dur_label}</i>   <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
+        f"<i>{price_label}</i>      <code>{fmt_price(final_price, lang)}</code>"
         f"</blockquote>"
     )
     await _show_master_step(callback, state, header)
@@ -440,6 +466,9 @@ async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.choose_master, F.data.startswith("master_"))
 async def choose_master(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "master", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -448,21 +477,22 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
     master_id = int(parts[0])
     master = await get_master(master_id)
     if not master or not master["is_active"]:
-        await callback.answer("Мастер недоступен. Выберите другого.", show_alert=True)
+        await callback.answer(t("book_master_unavailable", lang), show_alert=True)
         return
 
     await state.update_data(master_id=master_id, master_name=master["name"])
     data = await state.get_data()
 
-    # Собираем полный текст: blockquote услуги + blockquote мастера + подсказка
+    dur_label = t("book_confirm_duration", lang)
+    price_label = t("book_confirm_price", lang)
     addon_line = (f"<i>+ {h(', '.join(data['addon_names']).lower())}</i>\n\n") if data.get("addon_names") else ""
     service_card = (
         f"<blockquote>"
         f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
         f"{addon_line}"
         f"{DIVIDER_SOFT}\n\n"
-        f"<i>длительность</i>   <code>{fmt_dur(data['service_duration'])}</code>\n"
-        f"<i>стоимость</i>      <code>{fmt_price(data['service_price'])}</code>"
+        f"<i>{dur_label}</i>   <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
+        f"<i>{price_label}</i>      <code>{fmt_price(data['service_price'], lang)}</code>"
         f"</blockquote>"
     )
     bio_line = f"\n\n<i>{h(master['bio'])}</i>" if master.get("bio") else ""
@@ -478,7 +508,7 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             f"{service_card}\n\n"
             f"{master_card}\n\n"
-            f"<i>выбери дату.</i>",
+            f"{t('book_date_prompt', lang)}",
             reply_markup=dates_keyboard(day_off_weekdays),
             parse_mode="HTML",
         )
@@ -490,6 +520,9 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.choose_date, F.data.startswith("date_"))
 async def choose_date(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "date", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -500,8 +533,6 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
     duration = data["service_duration"]
     master_id: int | None = data.get("master_id")
 
-    # day_off_weekdays нужен для перерисовки календаря на ошибках — получаем отдельно,
-    # т.к. compute_free_slots возвращает контекст только на одну дату.
     if master_id is not None:
         day_off_weekdays = await get_day_off_weekdays_for_master(master_id)
     else:
@@ -509,24 +540,10 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
 
     ctx, free_slots = await compute_free_slots(master_id, date_str, duration)
 
-    if ctx.is_day_off:
+    if ctx.is_day_off or not free_slots:
         try:
             await callback.message.edit_text(
-                f"<i>в этот день не работаем.</i>\n\n"
-                f"<i>выбери другую дату.</i>",
-                reply_markup=dates_keyboard(day_off_weekdays),
-                parse_mode="HTML",
-            )
-        except TelegramBadRequest:
-            pass
-        await callback.answer()
-        return
-
-    if not free_slots:
-        try:
-            await callback.message.edit_text(
-                f"<i>на этот день всё занято.</i>\n\n"
-                f"<i>попробуй другую дату.</i>",
+                t("book_no_free_slots", lang),
                 reply_markup=dates_keyboard(day_off_weekdays),
                 parse_mode="HTML",
             )
@@ -538,8 +555,8 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
     await state.update_data(date=date_str)
     try:
         await callback.message.edit_text(
-            f"<b><i>{date_soft(date_str)}</i></b>\n\n"
-            f"<i>выбери время.</i>",
+            f"<b><i>{date_soft(date_str, lang)}</i></b>\n\n"
+            f"{t('book_time_prompt', lang)}",
             reply_markup=times_keyboard(free_slots),
             parse_mode="HTML",
         )
@@ -551,6 +568,9 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.choose_time, F.data.startswith("time_"))
 async def choose_time(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "time", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -560,15 +580,16 @@ async def choose_time(callback: CallbackQuery, state: FSMContext):
     await state.update_data(time=time_str)
 
     profile = await get_client_profile(callback.from_user.id)
-    if profile:
+    has_filled_profile = profile and (profile.get("name") or profile.get("phone"))
+    if has_filled_profile:
         try:
             await callback.message.edit_text(
-                f"<i>подтвердите данные</i>\n"
+                f"{t('book_profile_saved_question', lang)}\n"
                 f"{DIVIDER_WHISPER}\n\n"
                 f"<b>{profile['name']}</b>  ·  <code>{profile['phone']}</code>",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=f"{ARROW_DO} всё верно", callback_data="use_saved_profile")],
-                    [InlineKeyboardButton(text=f"{ARROW_SOFT} изменить", callback_data="change_profile")],
+                    [InlineKeyboardButton(text=t("book_profile_use_saved", lang), callback_data="use_saved_profile")],
+                    [InlineKeyboardButton(text=t("book_profile_new", lang), callback_data="change_profile")],
                 ]),
                 parse_mode="HTML",
             )
@@ -578,7 +599,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext):
     else:
         try:
             await callback.message.edit_text(
-                f"<i>как тебя зовут?</i>",
+                t("book_ask_name", lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -587,15 +608,39 @@ async def choose_time(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+def _render_summary(data: dict, lang: str) -> str:
+    """Сводка записи перед confirm_yes. Используется и при use_saved_profile,
+    и при get_phone — чтобы одна и та же версия текста была в обоих местах."""
+    from utils.i18n import t
+    when_label = t("book_confirm_when", lang)
+    price_label = t("book_confirm_price", lang)
+    master_label = t("book_confirm_master", lang)
+    header = t("book_confirm_header", lang)
+    addon_line = (f"\n<i>+ {h(', '.join(data['addon_names']).lower())}</i>") if data.get("addon_names") else ""
+    master_line = (f"\n<i>{master_label} · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
+    return (
+        f"<blockquote>"
+        f"{header}\n\n"
+        f"{DIVIDER_SOFT}\n\n"
+        f"<b>{h(data['service_name'].lower())}</b>"
+        f"{addon_line}"
+        f"{master_line}\n\n"
+        f"<i>{when_label}</i>       <code>{date_soft(data['date'], lang)} · {data['time']}</code>\n"
+        f"<i>{price_label}</i>   <code>{fmt_price(data['service_price'], lang)}</code>\n\n"
+        f"<i>{h(data['name'])} · {h(data['phone'])}</i>"
+        f"</blockquote>"
+    )
+
+
 @router.callback_query(BookingStates.confirm_profile, F.data == "use_saved_profile")
 async def use_saved_profile(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     profile = await get_client_profile(callback.from_user.id)
     if not profile:
         try:
-            await callback.message.edit_text(
-                f"<i>как тебя зовут?</i>",
-                parse_mode="HTML",
-            )
+            await callback.message.edit_text(t("book_ask_name", lang), parse_mode="HTML")
         except TelegramBadRequest:
             pass
         await state.set_state(BookingStates.get_name)
@@ -604,24 +649,10 @@ async def use_saved_profile(callback: CallbackQuery, state: FSMContext):
 
     await state.update_data(name=profile["name"], phone=profile["phone"])
     data = await state.get_data()
-    addon_line = (f"\n<i>+ {h(', '.join(data['addon_names']).lower())}</i>") if data.get("addon_names") else ""
-    master_line = (f"\n<i>мастер · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
-    summary = (
-        f"<blockquote>"
-        f"<b><i>всё так?</i></b>\n\n"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<b>{h(data['service_name'].lower())}</b>"
-        f"{addon_line}"
-        f"{master_line}\n\n"
-        f"<i>когда</i>       <code>{date_soft(data['date'])} · {data['time']}</code>\n"
-        f"<i>стоимость</i>   <code>{fmt_price(data['service_price'])}</code>\n\n"
-        f"<i>{h(data['name'])} · {h(data['phone'])}</i>"
-        f"</blockquote>"
-    )
     try:
         await callback.message.edit_text(
-            summary,
-            reply_markup=confirm_keyboard(),
+            _render_summary(data, lang),
+            reply_markup=confirm_keyboard(lang),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
@@ -632,11 +663,11 @@ async def use_saved_profile(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.confirm_profile, F.data == "change_profile")
 async def change_profile(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     try:
-        await callback.message.edit_text(
-            f"<i>как тебя зовут?</i>",
-            parse_mode="HTML",
-        )
+        await callback.message.edit_text(t("book_ask_name", lang), parse_mode="HTML")
     except TelegramBadRequest:
         pass
     await state.set_state(BookingStates.get_name)
@@ -646,17 +677,19 @@ async def change_profile(callback: CallbackQuery, state: FSMContext):
 _RESERVED_NAMES = frozenset({"записаться", "мои записи"})
 
 
+_RESERVED_NAMES_UZ = frozenset({"yozilish", "mening yozilishlarim"})
+
+
 @router.message(BookingStates.get_name)
 async def get_name(message: Message, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(message.from_user.id)
     name = message.text.strip() if message.text else ""
-    if not name or len(name) < 2 or len(name) > 64 or name.lower() in _RESERVED_NAMES or name.startswith("/"):
-        # Reserved: лейблы reply-клавиатуры — если клиент тыкнул их вместо
-        # того чтобы ввести имя, не сохраняем «записаться» как имя в профиль.
-        await message.answer(
-            f"<i>имя нужно от 2 до 64 букв.</i>\n"
-            f"<i>попробуй ещё раз:</i>",
-            parse_mode="HTML",
-        )
+    if (not name or len(name) < 2 or len(name) > 64
+            or name.lower() in _RESERVED_NAMES or name.lower() in _RESERVED_NAMES_UZ
+            or name.startswith("/")):
+        await message.answer(t("book_name_too_short", lang), parse_mode="HTML")
         return
     await state.update_data(name=name)
     try:
@@ -664,9 +697,8 @@ async def get_name(message: Message, state: FSMContext):
     except TelegramBadRequest:
         pass
     phone_prompt = await message.answer(
-        f"<i>поделись номером телефона.</i>\n\n"
-        f"<i>так быстрее, чем набирать.</i>",
-        reply_markup=contact_keyboard(),
+        t("book_ask_phone", lang),
+        reply_markup=contact_keyboard(lang),
         parse_mode="HTML",
     )
     await state.update_data(_phone_prompt_msg_id=phone_prompt.message_id)
@@ -675,56 +707,37 @@ async def get_name(message: Message, state: FSMContext):
 
 @router.message(BookingStates.get_phone, F.contact)
 async def get_phone(message: Message, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(message.from_user.id)
     contact = message.contact
-    # Telegram проставляет contact.user_id только для ОТПРАВИТЕЛЯ своего контакта.
-    # Если пользователь шарит чужой контакт (из адресной книги) — user_id=None
-    # или != from_user.id. Защита от: (а) случайного выбора контакта мамы/мужа,
-    # (б) намеренной записи чужого человека.
     if contact.user_id is None or contact.user_id != message.from_user.id:
         await message.answer(
-            "<i>поделись своим номером — кнопкой ниже.</i>",
-            reply_markup=contact_keyboard(),
+            t("book_ask_phone", lang),
+            reply_markup=contact_keyboard(lang),
             parse_mode="HTML",
         )
         return
     phone = contact.phone_number
     await state.update_data(phone=phone)
 
-    # Удаляем системное сообщение с контактом — в чате не должно болтаться
-    # личное инфо и клавиатура «отправить номер».
     try:
         await message.delete()
     except TelegramBadRequest:
         pass
 
     data = await state.get_data()
-    addon_line = (f"\n<i>+ {h(', '.join(data['addon_names']).lower())}</i>") if data.get("addon_names") else ""
-    master_line = (f"\n<i>мастер · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
-    summary = (
-        f"<blockquote>"
-        f"<b><i>всё так?</i></b>\n\n"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<b>{h(data['service_name'].lower())}</b>"
-        f"{addon_line}"
-        f"{master_line}\n\n"
-        f"<i>когда</i>       <code>{date_soft(data['date'])} · {data['time']}</code>\n"
-        f"<i>стоимость</i>   <code>{fmt_price(data['service_price'])}</code>\n\n"
-        f"<i>{h(data['name'])} · {h(data['phone'])}</i>"
-        f"</blockquote>"
-    )
-
-    # summary — трекаем для удаления после подтверждения; reply-keyboard
-    # возвращаем к обычной (иначе после contact-kb чат остаётся без кнопок).
+    summary = _render_summary(data, lang)
     summary_msg = await message.answer(
         summary,
-        reply_markup=client_reply_keyboard(),
+        reply_markup=client_reply_keyboard(lang),
         parse_mode="HTML",
     )
     await state.update_data(_summary_msg_id=summary_msg.message_id)
 
     await message.answer(
-        "<i>подтверди, если всё верно.</i>",
-        reply_markup=confirm_keyboard(),
+        t("book_confirm_header", lang),
+        reply_markup=confirm_keyboard(lang),
         parse_mode="HTML",
     )
     await state.set_state(BookingStates.confirm)
@@ -732,6 +745,9 @@ async def get_phone(message: Message, state: FSMContext):
 
 @router.callback_query(BookingStates.confirm, F.data == "confirm_yes")
 async def confirm_yes(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     data = await state.get_data()
     master_id: int | None = data.get("master_id")
 
@@ -740,7 +756,7 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     if master_id is not None and await resolve_active_master(master_id) is None:
         try:
             await callback.message.edit_text(
-                "<i>мастер больше недоступен.</i>\n<i>начни заново: /start</i>",
+                t("book_master_unavailable", lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -768,8 +784,7 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
                 master_id, data["date"], data["service_duration"],
             )
             await callback.message.edit_text(
-                f"<i>это время уже заняли.</i>\n\n"
-                f"<i>выбери другое:</i>",
+                t("book_slot_taken", lang),
                 reply_markup=times_keyboard(free_slots),
                 parse_mode="HTML",
             )
@@ -782,7 +797,7 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         logger.exception("DB write failed for user_id=%s", callback.from_user.id)
         try:
             await callback.message.edit_text(
-                "<i>что-то пошло не так.</i>\n<i>попробуй /start.</i>",
+                t("book_generic_error", lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -862,41 +877,41 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
             pass
 
     addon_line_done = (f"\n<i>+ {h(', '.join(data.get('addon_names', [])).lower())}</i>") if data.get("addon_names") else ""
-    master_line_done = (f"\n<i>мастер · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
+    master_label = t("book_confirm_master", lang)
+    master_line_done = (f"\n<i>{master_label} · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
+    when_label = t("book_confirm_when", lang)
+    dur_label = t("book_confirm_duration", lang)
+    price_label = "to'lovga" if lang == "uz" else "к оплате"
+    wait_line = f"{h(data['name'])}, kutaman." if lang == "uz" else f"{h(data['name'])}, жду тебя."
 
-    # 1. Hero — акцент на успехе записи. Идёт СРАЗУ после create_appointment,
-    # без ожидания уведомлений админа/мастера.
+    # 1. Hero — акцент на успехе записи.
     try:
         await callback.message.edit_text(
-            booking_done_hero(data['name']),
+            booking_done_hero(data['name'], lang),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
         pass
 
-    # 2. Детальная карточка в blockquote — «жду тебя»
+    # 2. Детальная карточка в blockquote.
     await callback.message.answer(
         f"<blockquote>"
-        f"<b><i>{h(data['name'])}, жду тебя.</i></b>\n\n"
+        f"<b><i>{wait_line}</i></b>\n\n"
         f"{DIVIDER_SOFT}\n\n"
         f"<b>{h(data['service_name'].lower())}</b>"
         f"{addon_line_done}"
         f"{master_line_done}\n\n"
-        f"<i>когда</i>         <code>{date_soft(data['date'])} · {data['time']}</code>\n"
-        f"<i>длительность</i>  <code>{fmt_dur(data['service_duration'])}</code>\n"
-        f"<i>к оплате</i>      <code>{fmt_price(data['service_price'])}</code>"
+        f"<i>{when_label}</i>         <code>{date_soft(data['date'], lang)} · {data['time']}</code>\n"
+        f"<i>{dur_label}</i>  <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
+        f"<i>{price_label}</i>      <code>{fmt_price(data['service_price'], lang)}</code>"
         f"</blockquote>",
         parse_mode="HTML",
     )
 
-    # 3. Мягкое напоминание + «до встречи ✧».
-    # reply_markup здесь возвращает нижнюю панель «записаться | мои записи»:
-    # summary_msg, на котором она висела, был удалён выше как transient,
-    # а hero/blockquote шли через edit_text и answer без reply_markup,
-    # поэтому клиент остался без reply-клавиатуры до этого момента.
+    # 3. Мягкое напоминание.
     await callback.message.answer(
-        booking_reminder_note(),
-        reply_markup=client_reply_keyboard(),
+        booking_reminder_note(lang),
+        reply_markup=client_reply_keyboard(lang),
         parse_mode="HTML",
     )
 
@@ -937,7 +952,7 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     pay_kb = payment_keyboard(pay_url)
     if pay_kb:
         await callback.message.answer(
-            "<i>ссылка на оплату:</i>",
+            t("pay_link_text", lang),
             reply_markup=pay_kb,
             parse_mode="HTML",
         )
@@ -947,12 +962,17 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.confirm, F.data == "confirm_no")
 async def confirm_no(callback: CallbackQuery, state: FSMContext):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     await state.clear()
+    back_text = "yaxshi. yozilish bekor." if lang == "uz" else "хорошо. ничего не создаём."
+    back_btn = "← xizmatlarga" if lang == "uz" else "← к услугам"
     try:
         await callback.message.edit_text(
-            f"<i>хорошо. ничего не создаём.</i>",
+            f"<i>{back_text}</i>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text=f"{ARROW_BACK} к услугам", callback_data="client_restart"),
+                InlineKeyboardButton(text=back_btn, callback_data="client_restart"),
             ]]),
             parse_mode="HTML",
         )
@@ -963,9 +983,12 @@ async def confirm_no(callback: CallbackQuery, state: FSMContext):
 
 @router.message(BookingStates.get_phone)
 async def get_phone_wrong(message: Message):
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(message.from_user.id)
     await message.answer(
-        "<i>номер нужен через кнопку ниже.</i>",
-        reply_markup=contact_keyboard(),
+        t("book_ask_phone", lang),
+        reply_markup=contact_keyboard(lang),
         parse_mode="HTML",
     )
 
@@ -988,7 +1011,10 @@ async def confirm_escape_to_booking(message: Message, state: FSMContext):
 
 @router.message(BookingStates.confirm)
 async def confirm_text_fallback(message: Message):
-    await message.answer("<i>используй кнопки выше.</i>", parse_mode="HTML")
+    from db import get_user_lang
+    lang = await get_user_lang(message.from_user.id)
+    text = "<i>yuqoridagi tugmalardan foydalaning.</i>" if lang == "uz" else "<i>используй кнопки выше.</i>"
+    await message.answer(text, parse_mode="HTML")
 
 
 @router.callback_query(F.data == "client_restart")
@@ -1002,15 +1028,17 @@ async def cb_client_restart(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.in_({"cat_hands", "cat_feet"}))
 async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     """Клиент выбрал категорию — показываем услуги в ней с ценами."""
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     category = "hands" if callback.data == "cat_hands" else "feet"
     services = await get_services(active_only=True, category=category)
     if not services:
-        # В этой категории пусто — возвращаем клиента на выбор категории
-        # с короткой пометкой. Не даём ему тупика.
+        empty_hint = "<i>tanlangan kategoriyada hozircha xizmatlar yo'q. boshqasini tanlang:</i>" if lang == "uz" else "<i>тут пока пусто. попробуй другую:</i>"
         try:
             await callback.message.edit_text(
-                f"<i>тут пока пусто. попробуй другую:</i>\n\n{CATEGORY_PROMPT}",
-                reply_markup=category_keyboard(),
+                f"{empty_hint}\n\n{t('book_category_prompt', lang)}",
+                reply_markup=category_keyboard(lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -1020,8 +1048,8 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     _remember_services_msg(callback.message.chat.id, callback.message.message_id)
     try:
         await callback.message.edit_text(
-            SERVICES_BY_CATEGORY_PROMPT,
-            reply_markup=services_keyboard(services, with_back=True),
+            t("book_services_prompt", lang),
+            reply_markup=services_keyboard(services, with_back=True, lang=lang),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
@@ -1084,9 +1112,9 @@ async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
         # Возвращающийся клиент — не должен был сюда попасть, но safety.
         return
 
-    await callback.message.answer(greeting_new(), parse_mode="HTML")
+    await callback.message.answer(greeting_new(lang), parse_mode="HTML")
     await asyncio.sleep(0.4)
-    await _send_category_picker(callback.message, state)
+    await _send_category_picker(callback.message, state, user_id=callback.from_user.id)
 
 
 @router.message(F.text == "🌐 Язык / Til")
