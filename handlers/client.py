@@ -815,6 +815,14 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     # Следующий текст клиента попадал в confirm_text_fallback → «используй кнопки выше».
     await state.clear()
 
+    # Ранний ack — чтобы у клиента не висел «часики» на inline-кнопке пока
+    # мы долбимся в create_invoice (Click/Payme API timeout = 10s).
+    # Запись уже создана, FSM очищен — бэкофис может занимать сколько хочет.
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
     # Сохранение доп. опций
     addon_ids = data.get("selected_addons", [])
     if addon_ids:
