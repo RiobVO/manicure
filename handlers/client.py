@@ -874,18 +874,6 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         _bg_tasks.add(bg_task)
         bg_task.add_done_callback(_bg_tasks.discard)
 
-    # Уборка transient-сообщений флоу: "как тебя зовут?" (последнее состояние
-    # цепочки edit_text), "поделись номером", summary "всё так?". Оставляем
-    # в чате только итог — hero + blockquote + напоминалка + (опц.) оплата.
-    flow_msg_id = _client_services_msg.pop(callback.message.chat.id, None)
-    for msg_id in (flow_msg_id, data.get("_phone_prompt_msg_id"), data.get("_summary_msg_id")):
-        if not msg_id or msg_id == callback.message.message_id:
-            continue
-        try:
-            await callback.bot.delete_message(callback.message.chat.id, msg_id)
-        except TelegramBadRequest:
-            pass
-
     addon_line_done = (f"\n<i>+ {h(', '.join(data.get('addon_names', [])).lower())}</i>") if data.get("addon_names") else ""
     master_label = t("book_confirm_master", lang)
     master_line_done = (f"\n<i>{master_label} · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
@@ -894,7 +882,9 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
     price_label = "to'lovga" if lang == "uz" else "к оплате"
     wait_line = f"{h(data['name'])}, kutaman." if lang == "uz" else f"{h(data['name'])}, жду тебя."
 
-    # 1. Hero — акцент на успехе записи.
+    # 1. Hero — АКЦЕНТ на успехе сразу же. Без await delete_message перед ним:
+    # три sequential delete_message давали 500-800мс задержки до первого
+    # сообщения клиенту.
     try:
         await callback.message.edit_text(
             booking_done_hero(data['name'], lang),
@@ -925,49 +915,76 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext):
         parse_mode="HTML",
     )
 
-    # 4. Ссылка на оплату — в самом конце, как CTA после полного подтверждения.
-    # Приоритет: PAYMENT_PROVIDER (click/payme) → legacy PAYMENT_URL → ничего.
+    # 4. Уборка transient-сообщений флоу — в фон. Клиенту не критично, чтобы
+    # они исчезли мгновенно; hero+blockquote+reminder уже на экране.
+    flow_msg_id = _client_services_msg.pop(callback.message.chat.id, None)
+    transient_ids = [
+        mid for mid in (flow_msg_id, data.get("_phone_prompt_msg_id"), data.get("_summary_msg_id"))
+        if mid and mid != callback.message.message_id
+    ]
+    if transient_ids:
+        chat_id = callback.message.chat.id
+        bot_ref = callback.bot
+
+        async def _bg_delete_transient() -> None:
+            for mid in transient_ids:
+                try:
+                    await bot_ref.delete_message(chat_id, mid)
+                except TelegramBadRequest:
+                    pass
+
+        _del_task = asyncio.create_task(_bg_delete_transient())
+        _bg_tasks.add(_del_task)
+        _del_task.add_done_callback(_bg_tasks.discard)
+
+    # 5. Ссылка на оплату — в фон: create_invoice делает HTTP-запрос к Click/
+    # Payme API (таймаут 10 сек), не должен задерживать показ booking-confirm.
+    # Если провайдер ответил — шлём отдельное сообщение с кнопкой «Оплатить».
     from keyboards.inline import payment_keyboard
     from utils.payments import get_provider
+    from config import PAYMENT_URL, PAYMENT_LABEL
 
-    pay_url: str | None = None
-    provider = get_provider()
-    if provider is not None:
-        try:
-            invoice = await provider.create_invoice(
-                appt_id=appt_id,
-                amount_uzs=data["service_price"],
-                phone=data["phone"],
-            )
-            from db.payments import attach_invoice
-            await attach_invoice(
-                appt_id, provider.name, invoice.invoice_id, invoice.pay_url
-            )
-            pay_url = invoice.pay_url
-        except Exception:
-            # Создание инвойса провалилось, но запись уже сохранена — клиент
-            # не страдает. Ошибка уйдёт в error-канал через @dp.errors.
-            logger.exception("create_invoice failed for appt=%s", appt_id)
+    async def _bg_send_pay_link() -> None:
+        pay_url: str | None = None
+        provider = get_provider()
+        if provider is not None:
+            try:
+                invoice = await provider.create_invoice(
+                    appt_id=appt_id,
+                    amount_uzs=data["service_price"],
+                    phone=data["phone"],
+                )
+                from db.payments import attach_invoice
+                await attach_invoice(
+                    appt_id, provider.name, invoice.invoice_id, invoice.pay_url
+                )
+                pay_url = invoice.pay_url
+            except Exception:
+                logger.exception("create_invoice failed for appt=%s", appt_id)
 
-    if pay_url is None:
-        # Fallback на legacy PAYMENT_URL — для салонов без интеграции провайдера.
-        from config import PAYMENT_URL
+        if pay_url is None:
+            from config import PAYMENT_URL
         if PAYMENT_URL:
-            pay_url = (
-                PAYMENT_URL
-                .replace("{amount}", str(data["service_price"]))
-                .replace("{appt_id}", str(appt_id))
-            )
+                pay_url = (
+                    PAYMENT_URL
+                    .replace("{amount}", str(data["service_price"]))
+                    .replace("{appt_id}", str(appt_id))
+                )
 
-    pay_kb = payment_keyboard(pay_url)
-    if pay_kb:
-        await callback.message.answer(
-            t("pay_link_text", lang),
-            reply_markup=pay_kb,
-            parse_mode="HTML",
-        )
+        pay_kb = payment_keyboard(pay_url)
+        if pay_kb:
+            try:
+                await callback.message.answer(
+                    t("pay_link_text", lang),
+                    reply_markup=pay_kb,
+                    parse_mode="HTML",
+                )
+            except Exception:
+                logger.exception("не смог доставить ссылку на оплату appt=%s", appt_id)
 
-    await callback.answer()
+    _pay_task = asyncio.create_task(_bg_send_pay_link())
+    _bg_tasks.add(_pay_task)
+    _pay_task.add_done_callback(_bg_tasks.discard)
 
 
 @router.callback_query(BookingStates.confirm, F.data == "confirm_no")
