@@ -174,7 +174,7 @@ async def _show_master_step(
         try:
             await callback.message.edit_text(
                 f"{service_header}\n\n{date_prompt}",
-                reply_markup=dates_keyboard(day_off_weekdays),
+                reply_markup=dates_keyboard(day_off_weekdays, lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -190,7 +190,7 @@ async def _show_master_step(
         try:
             await callback.message.edit_text(
                 f"{service_header}\n\n{date_prompt}",
-                reply_markup=dates_keyboard(day_off_weekdays),
+                reply_markup=dates_keyboard(day_off_weekdays, lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -509,7 +509,7 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
             f"{service_card}\n\n"
             f"{master_card}\n\n"
             f"{t('book_date_prompt', lang)}",
-            reply_markup=dates_keyboard(day_off_weekdays),
+            reply_markup=dates_keyboard(day_off_weekdays, lang),
             parse_mode="HTML",
         )
     except TelegramBadRequest:
@@ -544,7 +544,7 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
         try:
             await callback.message.edit_text(
                 t("book_no_free_slots", lang),
-                reply_markup=dates_keyboard(day_off_weekdays),
+                reply_markup=dates_keyboard(day_off_weekdays, lang),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:

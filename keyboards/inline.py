@@ -96,17 +96,20 @@ def services_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def dates_keyboard(day_off_weekdays: frozenset[int] = frozenset()) -> InlineKeyboardMarkup:
-    # Две колонки, лейбл через date_tiny: «18 апр · пт»
+def dates_keyboard(
+    day_off_weekdays: frozenset[int] = frozenset(),
+    lang: str = "ru",
+) -> InlineKeyboardMarkup:
+    # Две колонки, лейбл через date_tiny: «18 апр · пт» / «18 apr · ju»
     buttons: list[list[InlineKeyboardButton]] = []
     row: list[InlineKeyboardButton] = []
     today = now_local()
     for i in range(BOOKING_DAYS_AVAILABLE):
         day = today + timedelta(days=i)
         if day.weekday() in day_off_weekdays:
-            continue  # пропустить выходной по расписанию
+            continue
         date_str = day.strftime("%Y-%m-%d")
-        label = date_tiny(date_str)
+        label = date_tiny(date_str, lang)
         row.append(InlineKeyboardButton(text=label, callback_data=f"date_{date_str}"))
         if len(row) == 2:
             buttons.append(row)
@@ -203,23 +206,29 @@ CANCEL_REASONS: dict[str, str] = {
     "master": "нашла другого мастера",
     "other":  "другая причина",
 }
+_CANCEL_REASONS_UZ: dict[str, str] = {
+    "plans":  "rejalar o'zgardi",
+    "time":   "vaqt mos kelmadi",
+    "master": "boshqa ustani topdim",
+    "other":  "boshqa sabab",
+}
 
 
-def cancel_reason_keyboard(appt_id: int) -> InlineKeyboardMarkup:
+def cancel_reason_keyboard(appt_id: int, lang: str = "ru") -> InlineKeyboardMarkup:
+    table = _CANCEL_REASONS_UZ if lang == "uz" else CANCEL_REASONS
+    keep = "← yozilishni qoldirish" if lang == "uz" else "← оставить запись"
     buttons = [
         [InlineKeyboardButton(text=label, callback_data=f"cr_{key}_{appt_id}")]
-        for key, label in CANCEL_REASONS.items()
+        for key, label in table.items()
     ]
-    buttons.append([InlineKeyboardButton(
-        text=f"{ARROW_BACK} оставить запись",
-        callback_data=f"my_appt_{appt_id}",
-    )])
+    buttons.append([InlineKeyboardButton(text=keep, callback_data=f"my_appt_{appt_id}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def my_appointments_keyboard() -> InlineKeyboardMarkup:
+def my_appointments_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
+    label = "mening yozilishlarim" if lang == "uz" else "мои записи"
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="мои записи", callback_data="client_my_appointments"),
+        InlineKeyboardButton(text=label, callback_data="client_my_appointments"),
     ]])
 
 
