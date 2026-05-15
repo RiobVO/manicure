@@ -242,11 +242,11 @@ def greeting_new(lang: str = "ru") -> str:
     """Приветствие нового клиента."""
     if lang == "uz":
         return (
-            "Salom! Men Sabinaning botiman. U chiroyli tirnoqchalarni "
-            "qilayotgan paytda, men yozilishda yordam beraman ✨\n\n"
-            "Bo'sh vaqt topaman, sizni tez yozaman va tashrifni "
-            "unutib qo'ymasligingiz uchun eslatma yuboraman.\n\n"
-            "Vaqtni ko'ramizmi? 👇"
+            "Salom! Men Sabinaning yordamchisiman. U go'zal tirnoqlar "
+            "ustida sehr ko'rsatayotgan bir vaqtda, men sizga navbatga "
+            "yozilishda yordam beraman ✨\n\n"
+            "Bo'sh vaqt topamiz, darhol yozib qo'yaman va eslatma yuboraman.\n\n"
+            "Vaqtni tanlaymizmi? 👇"
         )
     return (
         "Привет! Я бот Сабины. Пока она пилит красивые ноготочки, "
