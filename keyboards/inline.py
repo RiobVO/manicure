@@ -380,10 +380,11 @@ def client_reply_keyboard(lang: str = "ru") -> ReplyKeyboardMarkup:
     else:
         book_btn = "записаться"
         my_btn = "мои записи"
+    # Переключатель языка — НЕ в reply-клаве (visual noise, клиент меняет
+    # язык редко). Доступен через /language и inline-кнопку в «мои записи».
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=book_btn), KeyboardButton(text=my_btn)],
-            [KeyboardButton(text="🌐 Язык / Til")],
         ],
         resize_keyboard=True,
     )
@@ -396,7 +397,6 @@ CLIENT_BTN_BOOK = frozenset({"записаться", "yozilish", "Yozilish"})
 CLIENT_BTN_MY_APPTS = frozenset({
     "мои записи", "mening yozilishlarim", "Mening yozuvlarim",
 })
-CLIENT_BTN_LANG = "🌐 Язык / Til"
 
 
 def admin_reply_keyboard() -> ReplyKeyboardMarkup:
