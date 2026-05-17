@@ -39,6 +39,7 @@ from db.traffic import (
 from keyboards.inline import admin_cancel_keyboard
 from states import AdminStates
 from utils.admin import IsAdminFilter
+from utils.panel import edit_panel, edit_panel_with_callback
 from utils.qrgen import generate_qr
 
 logger = logging.getLogger(__name__)
@@ -104,11 +105,21 @@ def _render_sources_text(stats: list[dict]) -> str:
 
 @router.message(StateFilter("*"), F.text == "📈 Откуда клиенты")
 async def msg_traffic_entry(message: Message, state: FSMContext):
+    """
+    Вход в раздел. Удаляем тап-сообщение «📈 Откуда клиенты» и редактируем
+    единую админ-панель — иначе каждый клик плодит новое сообщение, и чат
+    быстро засоряется.
+    """
     await state.clear()
+    try:
+        await message.delete()
+    except Exception:
+        pass
     stats = await aggregate_by_source()
-    await message.answer(
+    await edit_panel(
+        message.bot, message.chat.id,
         _render_sources_text(stats),
-        reply_markup=_sources_keyboard(stats),
+        _sources_keyboard(stats),
         parse_mode="HTML",
     )
 
@@ -117,18 +128,12 @@ async def msg_traffic_entry(message: Message, state: FSMContext):
 async def cb_traffic_list(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     stats = await aggregate_by_source()
-    try:
-        await callback.message.edit_text(
-            _render_sources_text(stats),
-            reply_markup=_sources_keyboard(stats),
-            parse_mode="HTML",
-        )
-    except Exception:
-        await callback.message.answer(
-            _render_sources_text(stats),
-            reply_markup=_sources_keyboard(stats),
-            parse_mode="HTML",
-        )
+    await edit_panel_with_callback(
+        callback,
+        _render_sources_text(stats),
+        _sources_keyboard(stats),
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 
@@ -150,20 +155,10 @@ async def cb_traffic_src(callback: CallbackQuery):
         f"<code>{link}</code>\n\n"
         f"<i>жми «📱 QR для печати» чтобы получить картинку</i>"
     )
-    try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=_source_detail_keyboard(source_id),
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
-    except Exception:
-        await callback.message.answer(
-            text,
-            reply_markup=_source_detail_keyboard(source_id),
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
+    await edit_panel_with_callback(
+        callback, text, _source_detail_keyboard(source_id),
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 
@@ -221,16 +216,14 @@ async def cb_traffic_del(callback: CallbackQuery):
         [InlineKeyboardButton(text="✅ да, удалить", callback_data=f"traffic_del_yes_{source_id}")],
         [InlineKeyboardButton(text="↩️ отмена", callback_data=f"traffic_src_{source_id}")],
     ])
-    try:
-        await callback.message.edit_text(
-            f"Удалить источник <b>{src['label']}</b> (<code>{src['code']}</code>)?\n\n"
-            f"<i>клиенты, пришедшие с этого кода, остаются в статистике,\n"
-            f"но новые QR/ссылки с ним не создашь.</i>",
-            reply_markup=kb,
-            parse_mode="HTML",
-        )
-    except Exception:
-        pass
+    await edit_panel_with_callback(
+        callback,
+        f"Удалить источник <b>{src['label']}</b> (<code>{src['code']}</code>)?\n\n"
+        f"<i>клиенты, пришедшие с этого кода, остаются в статистике,\n"
+        f"но новые QR/ссылки с ним не создашь.</i>",
+        kb,
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 
@@ -247,46 +240,52 @@ async def cb_traffic_del_yes(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "traffic_add")
 async def cb_traffic_add(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AdminStates.traffic_source_add_code)
-    try:
-        await callback.message.edit_text(
-            "<b>Новый источник</b> — шаг 1/2\n\n"
-            "Пришли <b>код</b> для ссылки (латиница, цифры, <code>_</code>/<code>-</code>, 2-32 симв.).\n\n"
-            "Пример: <code>ig_bio</code>, <code>story_apr20</code>, <code>friend_anya</code>.\n"
-            "Он подставится в <code>t.me/bot?start=&lt;код&gt;</code>.",
-            reply_markup=admin_cancel_keyboard(),
-            parse_mode="HTML",
-        )
-    except Exception:
-        pass
+    await edit_panel_with_callback(
+        callback,
+        "<b>Новый источник</b> — шаг 1/2\n\n"
+        "Пришли <b>код</b> для ссылки (латиница, цифры, <code>_</code>/<code>-</code>, 2-32 симв.).\n\n"
+        "Пример: <code>ig_bio</code>, <code>story_apr20</code>, <code>friend_anya</code>.\n"
+        "Он подставится в <code>t.me/bot?start=&lt;код&gt;</code>.",
+        admin_cancel_keyboard(),
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 
 @router.message(AdminStates.traffic_source_add_code)
 async def msg_traffic_code(message: Message, state: FSMContext):
+    # Удаляем тап-сообщение клиента с введённым кодом — не засоряем чат.
+    try:
+        await message.delete()
+    except Exception:
+        pass
     code = normalize_code(message.text or "")
     if not code:
-        await message.answer(
+        await edit_panel(
+            message.bot, message.chat.id,
             "⚠️ Неверный формат. Только латиница/цифры/<code>_-</code>, 2-32 симв.\n"
             "Пришли заново или нажми <i>↩️ Отмена</i>.",
-            reply_markup=admin_cancel_keyboard(),
+            admin_cancel_keyboard(),
             parse_mode="HTML",
         )
         return
     from db.traffic import get_source_by_code
     if await get_source_by_code(code):
-        await message.answer(
+        await edit_panel(
+            message.bot, message.chat.id,
             f"⚠️ Код <code>{code}</code> уже существует. Пришли другой.",
-            reply_markup=admin_cancel_keyboard(),
+            admin_cancel_keyboard(),
             parse_mode="HTML",
         )
         return
     await state.update_data(new_source_code=code)
     await state.set_state(AdminStates.traffic_source_add_label)
-    await message.answer(
+    await edit_panel(
+        message.bot, message.chat.id,
         f"Ок, код <code>{code}</code>.\n\n"
         f"Теперь <b>подпись</b> (человекочитаемая, до 64 симв.).\n"
         f"Пример: <code>Instagram bio</code>, <code>Сторис 20 апреля</code>.",
-        reply_markup=admin_cancel_keyboard(),
+        admin_cancel_keyboard(),
         parse_mode="HTML",
     )
 
@@ -295,9 +294,15 @@ async def msg_traffic_code(message: Message, state: FSMContext):
 async def msg_traffic_label(message: Message, state: FSMContext):
     label = (message.text or "").strip()
     if not label or len(label) > 64:
-        await message.answer(
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        await edit_panel(
+            message.bot, message.chat.id,
             "⚠️ Подпись обязательна, макс 64 симв. Пришли ещё раз.",
-            reply_markup=admin_cancel_keyboard(),
+            admin_cancel_keyboard(),
+            parse_mode="HTML",
         )
         return
     data = await state.get_data()
@@ -308,26 +313,25 @@ async def msg_traffic_label(message: Message, state: FSMContext):
         return
     source_id = await create_source(code, label)
     await state.clear()
+    # Удаляем тап-сообщение клиента с введённым label — он уже в state.
+    try:
+        await message.delete()
+    except Exception:
+        pass
     if source_id is None:
-        await message.answer(
+        await edit_panel(
+            message.bot, message.chat.id,
             f"⚠️ Не удалось создать (код <code>{code}</code> уже занят?).",
             parse_mode="HTML",
         )
         return
 
-    username = await _bot_username(message.bot)
-    link = _deep_link(username, code)
-    await message.answer(
-        f"✅ Источник <b>{label}</b> создан.\n\n"
-        f"Ссылка: <code>{link}</code>\n\n"
-        f"<i>нажми «📱 QR для печати» в списке чтобы получить картинку.</i>",
-        parse_mode="HTML",
-        disable_web_page_preview=True,
-    )
-    # Сразу показываем обновлённый список.
+    # Показываем обновлённый список в той же живой панели — одно сообщение,
+    # а не два раздельных «создано» + «список».
     stats = await aggregate_by_source()
-    await message.answer(
+    await edit_panel(
+        message.bot, message.chat.id,
         _render_sources_text(stats),
-        reply_markup=_sources_keyboard(stats),
+        _sources_keyboard(stats),
         parse_mode="HTML",
     )
