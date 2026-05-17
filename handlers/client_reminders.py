@@ -41,7 +41,7 @@ async def cb_client_confirm(callback: CallbackQuery):
         return
 
     lang = await get_user_lang(callback.from_user.id)
-    heading = "kutamiz." if lang == "uz" else "ждём тебя."
+    heading = "Sizni kutamiz." if lang == "uz" else "ждём тебя."
     when_label = t("history_when", lang)
     try:
         await callback.message.edit_text(
