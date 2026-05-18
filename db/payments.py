@@ -71,7 +71,10 @@ async def mark_paid(provider: str, invoice_id: str) -> int | None:
 
     Возвращает appt_id при первой успешной пометке, None если:
       • invoice не найден (левый webhook, но подпись прошла — странно, но возможно);
-      • paid_at уже был выставлен (дубль-webhook от провайдера).
+      • paid_at уже был выставлен (дубль-webhook от провайдера);
+      • запись отменена — ставить paid_at бессмысленно, админ должен
+        делать рефанд вручную. Отсутствие пометки сигнализирует в логах
+        что webhook пришёл «поздно» (после cancel).
     """
     lock = await get_write_lock()
     async with lock:
@@ -79,7 +82,7 @@ async def mark_paid(provider: str, invoice_id: str) -> int | None:
         try:
             await db.execute("BEGIN IMMEDIATE")
             cursor = await db.execute(
-                "SELECT id, paid_at FROM appointments "
+                "SELECT id, paid_at, status FROM appointments "
                 "WHERE payment_provider = ? AND payment_invoice_id = ?",
                 (provider, invoice_id),
             )
@@ -91,11 +94,19 @@ async def mark_paid(provider: str, invoice_id: str) -> int | None:
                     provider, invoice_id,
                 )
                 return None
-            appt_id, already_paid = row
+            appt_id, already_paid, status = row
             if already_paid:
                 await db.execute("ROLLBACK")
                 logger.info(
                     "mark_paid: дубль webhook appt=%s invoice=%s — игнор",
+                    appt_id, invoice_id,
+                )
+                return None
+            if status == "cancelled":
+                await db.execute("ROLLBACK")
+                logger.warning(
+                    "mark_paid: запись уже отменена appt=%s invoice=%s — "
+                    "админу нужен ручной рефанд (оплата прошла после cancel)",
                     appt_id, invoice_id,
                 )
                 return None
