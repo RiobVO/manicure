@@ -46,11 +46,11 @@ def _price_short(price: int) -> str:
 def category_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     """Первый экран записи: выбор ручек/ножек."""
     if lang == "uz":
-        hands = "❋ Qo'llar"
-        feet = "○ Oyoqlar"
+        hands = "💅 Manikyur"
+        feet = "🦶 Pedikyur"
     else:
-        hands = "❋ ручки"
-        feet = "○ ножки"
+        hands = "💅 Маникюр"
+        feet = "🦶 Педикюр"
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=hands, callback_data="cat_hands"),
         InlineKeyboardButton(text=feet, callback_data="cat_feet"),
@@ -189,11 +189,11 @@ def addon_detail_keyboard(addon: dict) -> InlineKeyboardMarkup:
 
 def confirm_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
     if lang == "uz":
-        yes = "Tasdiqlash ✅"
-        no = "Bekor qilish ❌"
+        yes = "✅ Tasdiqlash"
+        no = "❌ Bekor qilish"
     else:
-        yes = f"{ARROW_DO} подтвердить"
-        no = f"{CLOSE} отмена"
+        yes = "✅ Подтвердить"
+        no = "❌ Отменить"
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=yes, callback_data="confirm_yes"),
         InlineKeyboardButton(text=no, callback_data="confirm_no"),
@@ -375,11 +375,11 @@ def client_reply_keyboard(lang: str = "ru") -> ReplyKeyboardMarkup:
     (его кнопки из прошлой сессии старого языка всё ещё работают).
     """
     if lang == "uz":
-        book_btn = "Yozilish"
-        my_btn = "Mening yozuvlarim"
+        book_btn = "📅 Yozilish"
+        my_btn = "📋 Yozuvlarim"
     else:
-        book_btn = "записаться"
-        my_btn = "мои записи"
+        book_btn = "📅 Записаться"
+        my_btn = "📋 Мои записи"
     # Переключатель языка — НЕ в reply-клаве (visual noise, клиент меняет
     # язык редко). Доступен через /language и inline-кнопку в «мои записи».
     return ReplyKeyboardMarkup(
@@ -393,9 +393,13 @@ def client_reply_keyboard(lang: str = "ru") -> ReplyKeyboardMarkup:
 # Все строки reply-кнопок клиента, по которым фильтруют хендлеры
 # (F.text.in_(CLIENT_BTN_BOOK) и т.п.). Старые написания оставлены —
 # у клиентов с прошлой сессии кнопки могут быть на них.
-CLIENT_BTN_BOOK = frozenset({"записаться", "yozilish", "Yozilish"})
+CLIENT_BTN_BOOK = frozenset({
+    "записаться", "yozilish", "Yozilish",
+    "📅 Записаться", "📅 Yozilish",
+})
 CLIENT_BTN_MY_APPTS = frozenset({
     "мои записи", "mening yozilishlarim", "Mening yozuvlarim",
+    "📋 Мои записи", "📋 Yozuvlarim",
 })
 
 

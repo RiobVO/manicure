@@ -400,7 +400,7 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
     await callback.answer(t("history_cancelled", lang))
 
 
-@router.message(F.text.in_({"мои записи", "mening yozilishlarim", "Mening yozuvlarim"}))
+@router.message(F.text.in_({"мои записи", "mening yozilishlarim", "Mening yozuvlarim", "📋 Мои записи", "📋 Yozuvlarim"}))
 async def btn_my_appointments(message: Message, state: FSMContext):
     """Кнопка reply-клавиатуры — сбрасывает FSM и показывает записи клиента (стр. 1)."""
     await state.clear()

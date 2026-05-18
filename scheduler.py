@@ -130,19 +130,19 @@ async def _send_24h_reminder(
         confirm_btn = "✅ Tasdiqlayman"
         cancel_btn = "❌ Bekor qilish"
         text = (
-            f"<i>xayrli tong ☼</i>\n\n"
-            f"ertaga soat <b>{time}</b> da kutamiz ✧\n"
-            f"{h(service_name.lower())}\n\n"
-            f"<i>hamma narsa rejalashtirilgandek?</i>"
+            f"🔔 <b>ESLATMA</b>\n\n"
+            f"Ertaga soat <b>{time}</b>\n"
+            f"{h(service_name)}\n\n"
+            f"Yozilishni tasdiqlang:"
         )
     else:
         confirm_btn = "✅ Подтверждаю"
         cancel_btn = "❌ Отменить"
         text = (
-            f"<i>доброе утро ☼</i>\n\n"
-            f"завтра в <b>{time}</b> жду тебя ✧\n"
-            f"{h(service_name.lower())}\n\n"
-            f"<i>всё в силе?</i>"
+            f"🔔 <b>НАПОМИНАНИЕ</b>\n\n"
+            f"Завтра в <b>{time}</b>\n"
+            f"{h(service_name)}\n\n"
+            f"Подтвердите запись:"
         )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[[
@@ -170,9 +170,19 @@ async def _send_2h_reminder(
     from db import get_user_lang
     lang = await get_user_lang(user_id)
     if lang == "uz":
-        text = f"<i>bir-ikki soatdan keyin kelishingizni kutamiz ✦</i>\n\n{h(service_name.lower())} · <b>{time}</b>"
+        text = (
+            f"⏰ <b>2 SOATDAN KEYIN</b>\n\n"
+            f"{h(service_name)}\n"
+            f"Vaqt: <b>{time}</b>\n\n"
+            f"Kutamiz!"
+        )
     else:
-        text = f"<i>через час-два приходи ✦</i>\n\n{h(service_name.lower())} · <b>{time}</b>"
+        text = (
+            f"⏰ <b>ЧЕРЕЗ 2 ЧАСА</b>\n\n"
+            f"{h(service_name)}\n"
+            f"Время: <b>{time}</b>\n\n"
+            f"Ждём!"
+        )
     try:
         await bot.send_message(user_id, text, parse_mode="HTML")
     except TelegramAPIError:

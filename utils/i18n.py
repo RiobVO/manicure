@@ -94,40 +94,40 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     # ─── 3. Booking flow ───────────────────────────────────────────────────
     "book_no_services": {
-        "ru": "<i>пока нет доступных услуг.</i>\n\n<i>скоро вернёмся.</i>",
-        "uz": "<i>hozircha xizmatlar yo'q.</i>\n\n<i>tez orada qaytamiz.</i>",
+        "ru": "Пока нет доступных услуг. Скоро вернёмся.",
+        "uz": "Hozircha xizmatlar yo'q. Tez orada qaytamiz.",
     },
     "book_category_prompt": {
-        "ru": "<i>ручки или ножки?</i>",
-        "uz": "<i>Qo'llarmi yoki oyoqlar?</i>",
+        "ru": "<b>Выбери направление</b>",
+        "uz": "<b>Yo'nalishni tanlang</b>",
     },
     "book_services_prompt": {
-        "ru": "<i>что красим?</i>",
-        "uz": "<i>Qanday xizmatni tanlaymiz?</i>",
+        "ru": "<b>Выбери услугу</b>",
+        "uz": "<b>Xizmatni tanlang</b>",
     },
     "book_master_prompt": {
-        "ru": "<i>кто тебя принимает?</i>",
-        "uz": "<i>qaysi usta qabul qiladi?</i>",
+        "ru": "<b>Выбери мастера</b>",
+        "uz": "<b>Ustani tanlang</b>",
     },
     "book_any_master": {
-        "ru": "любой свободный",
-        "uz": "bo'sh bo'lgan usta",
+        "ru": "Любой свободный",
+        "uz": "Bo'sh usta",
     },
     "book_date_prompt": {
-        "ru": "<i>выбери дату.</i>",
-        "uz": "<i>sanani tanlang.</i>",
+        "ru": "<b>Выбери дату</b>",
+        "uz": "<b>Sanani tanlang</b>",
     },
     "book_time_prompt": {
-        "ru": "<i>выбери время.</i>",
-        "uz": "<i>vaqtni tanlang.</i>",
+        "ru": "<b>Выбери время</b>",
+        "uz": "<b>Vaqtni tanlang</b>",
     },
     "book_no_free_slots": {
-        "ru": "<i>на этот день свободных окон нет.</i>\n<i>попробуй другую дату.</i>",
-        "uz": "<i>bu kunda bo'sh vaqt yo'q.</i>\n<i>boshqa sanani tanlang.</i>",
+        "ru": "На этот день свободных окон нет.\nПопробуй другую дату.",
+        "uz": "Bu kunda bo'sh vaqt yo'q.\nBoshqa sanani tanlang.",
     },
     "book_addons_prompt": {
-        "ru": "<i>добавить что-то к услуге?</i>",
-        "uz": "<i>xizmatga nimadir qo'shamizmi?</i>",
+        "ru": "<b>Добавить к услуге?</b>",
+        "uz": "<b>Xizmatga qo'shamizmi?</b>",
     },
     "book_addons_skip": {
         "ru": "без дополнений",
@@ -138,33 +138,33 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "tayyor",
     },
     "book_ask_name": {
-        "ru": "<i>как тебя зовут?</i>",
-        "uz": "<i>ismingiz nima?</i>",
+        "ru": "<b>Как вас зовут?</b>",
+        "uz": "<b>Ismingizni ayting</b>",
     },
     "book_name_too_short": {
-        "ru": "<i>имя коротковато. 2-64 символа, только буквы и пробелы.</i>",
-        "uz": "<i>ism juda qisqa. 2-64 belgi, faqat harflar va probel.</i>",
+        "ru": "Имя коротковато. 2–64 символа, только буквы и пробелы.",
+        "uz": "Ism juda qisqa. 2–64 belgi, faqat harflar va probel.",
     },
     "book_ask_phone": {
-        "ru": "<i>пришли номер — кнопкой ниже или текстом.</i>",
-        "uz": "<i>telefon raqamini yuboring — pastdagi tugma yoki matn orqali.</i>",
+        "ru": "📱 <b>Поделитесь номером</b>\nКнопкой ниже или текстом.",
+        "uz": "📱 <b>Telefon raqamingizni ulashing</b>\nPastdagi tugma yoki matn orqali.",
     },
     "book_phone_share_btn": {
-        "ru": "📱 поделиться номером",
-        "uz": "📱 raqamni ulashish",
+        "ru": "📱 Поделиться номером",
+        "uz": "📱 Raqamni ulashish",
     },
     "book_phone_invalid": {
-        "ru": "<i>непохоже на телефон. пришли ещё раз.</i>",
-        "uz": "<i>telefon raqamiga o'xshamaydi. qayta yuboring.</i>",
+        "ru": "Непохоже на телефон. Пришлите ещё раз.",
+        "uz": "Telefon raqamiga o'xshamaydi. Qayta yuboring.",
     },
     "book_confirm_header": {
-        "ru": "<b><i>всё верно?</i></b>",
-        "uz": "<b><i>Ma'lumotlar to'g'rimi?</i></b>",
+        "ru": "<b>Проверьте данные</b>",
+        "uz": "<b>Ma'lumotlarni tekshiring</b>",
     },
-    "book_confirm_when": {"ru": "когда", "uz": "Sana va vaqt"},
-    "book_confirm_price": {"ru": "стоимость", "uz": "Xizmat narxi"},
-    "book_confirm_duration": {"ru": "длительность", "uz": "Davomiyligi"},
-    "book_confirm_master": {"ru": "мастер", "uz": "Usta"},
+    "book_confirm_when": {"ru": "Когда:       ", "uz": "Sana:        "},
+    "book_confirm_price": {"ru": "К оплате:    ", "uz": "To'lov:      "},
+    "book_confirm_duration": {"ru": "Длительность:", "uz": "Davomiyligi: "},
+    "book_confirm_master": {"ru": "Мастер:      ", "uz": "Usta:        "},
     "book_service_unavailable": {
         "ru": "услуга недоступна. начни заново: /start",
         "uz": "xizmat mavjud emas. qayta boshlang: /start",

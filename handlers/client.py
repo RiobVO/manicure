@@ -356,18 +356,15 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
         selected_addons=[],
     )
 
-    dur_label = t("book_confirm_duration", lang)
-    price_label = t("book_confirm_price", lang)
     desc = service.get("description")
-    desc_line = f"\n\n<i>{h(desc)}</i>" if desc else ""
+    desc_line = f"\n{h(desc)}\n" if desc else ""
+    dur_label = "Davomiyligi:" if lang == "uz" else "Длительность:"
+    price_label = "Narxi:      " if lang == "uz" else "Цена:       "
     service_card = (
-        f"<blockquote>"
-        f"<b><i>{h(service['name'].lower())}</i></b>"
-        f"{desc_line}\n\n"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<i>{dur_label}</i>   <code>{fmt_dur(service['duration'], lang)}</code>\n"
-        f"<i>{price_label}</i>      <code>{fmt_price(service['price'], lang)}</code>"
-        f"</blockquote>"
+        f"💅 <b>{h(service['name'])}</b>"
+        f"{desc_line}\n"
+        f"<code>{dur_label} {fmt_dur(service['duration'], lang)}\n"
+        f"{price_label} {fmt_price(service['price'], lang)}</code>"
     )
 
     addons = await get_addons_for_service(service_id)
@@ -409,17 +406,14 @@ async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
     await state.update_data(selected_addons=selected)
 
     addons = await get_addons_for_service(data["service_id"])
-    dur_label = t("book_confirm_duration", lang)
-    price_label = t("book_confirm_price", lang)
+    dur_label = "Davomiyligi:" if lang == "uz" else "Длительность:"
+    price_label = "Narxi:      " if lang == "uz" else "Цена:       "
     try:
         total = calculate_total_price(data["service_price"], selected, addons)
         service_card = (
-            f"<blockquote>"
-            f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
-            f"{DIVIDER_SOFT}\n\n"
-            f"<i>{dur_label}</i>   <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
-            f"<i>{price_label}</i>      <code>{fmt_price(total, lang)}</code>"
-            f"</blockquote>"
+            f"💅 <b>{h(data['service_name'])}</b>\n\n"
+            f"<code>{dur_label} {fmt_dur(data['service_duration'], lang)}\n"
+            f"{price_label} {fmt_price(total, lang)}</code>"
         )
         await callback.message.edit_text(
             f"{service_card}\n\n{t('book_addons_prompt', lang)}",
@@ -449,17 +443,15 @@ async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
         addon_names=addon_names,
     )
 
-    dur_label = t("book_confirm_duration", lang)
-    price_label = t("book_confirm_price", lang)
-    addon_line = (f"<i>+ {h(', '.join(addon_names).lower())}</i>\n\n") if addon_names else ""
+    dur_label = "Davomiyligi:" if lang == "uz" else "Длительность:"
+    price_label = "Narxi:      " if lang == "uz" else "Цена:       "
+    service_text = h(data['service_name'])
+    if addon_names:
+        service_text += " + " + h(", ".join(addon_names))
     header = (
-        f"<blockquote>"
-        f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
-        f"{addon_line}"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<i>{dur_label}</i>   <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
-        f"<i>{price_label}</i>      <code>{fmt_price(final_price, lang)}</code>"
-        f"</blockquote>"
+        f"💅 <b>{service_text}</b>\n\n"
+        f"<code>{dur_label} {fmt_dur(data['service_duration'], lang)}\n"
+        f"{price_label} {fmt_price(final_price, lang)}</code>"
     )
     await _show_master_step(callback, state, header)
 
@@ -483,32 +475,23 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
     await state.update_data(master_id=master_id, master_name=master["name"])
     data = await state.get_data()
 
-    dur_label = t("book_confirm_duration", lang)
-    price_label = t("book_confirm_price", lang)
-    addon_line = (f"<i>+ {h(', '.join(data['addon_names']).lower())}</i>\n\n") if data.get("addon_names") else ""
-    service_card = (
-        f"<blockquote>"
-        f"<b><i>{h(data['service_name'].lower())}</i></b>\n\n"
-        f"{addon_line}"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<i>{dur_label}</i>   <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
-        f"<i>{price_label}</i>      <code>{fmt_price(data['service_price'], lang)}</code>"
-        f"</blockquote>"
-    )
-    bio_line = f"\n\n<i>{h(master['bio'])}</i>" if master.get("bio") else ""
-    master_card = (
-        f"<blockquote>"
-        f"<b><i>{h(master['name'].title())}</i></b>"
-        f"{bio_line}"
-        f"</blockquote>"
+    dur_label = "Davomiyligi:" if lang == "uz" else "Длительность:"
+    price_label = "Narxi:      " if lang == "uz" else "Цена:       "
+    service_text = h(data['service_name'])
+    if data.get("addon_names"):
+        service_text += " + " + h(", ".join(data['addon_names']))
+    bio_line = f"\n<i>{h(master['bio'])}</i>" if master.get("bio") else ""
+    card = (
+        f"💅 <b>{service_text}</b>\n"
+        f"👩‍🎨 <b>{h(master['name'].title())}</b>{bio_line}\n\n"
+        f"<code>{dur_label} {fmt_dur(data['service_duration'], lang)}\n"
+        f"{price_label} {fmt_price(data['service_price'], lang)}</code>"
     )
 
     day_off_weekdays = await get_day_off_weekdays_for_master(master_id)
     try:
         await callback.message.edit_text(
-            f"{service_card}\n\n"
-            f"{master_card}\n\n"
-            f"{t('book_date_prompt', lang)}",
+            f"{card}\n\n{t('book_date_prompt', lang)}",
             reply_markup=dates_keyboard(day_off_weekdays, lang),
             parse_mode="HTML",
         )
@@ -609,26 +592,35 @@ async def choose_time(callback: CallbackQuery, state: FSMContext):
 
 
 def _render_summary(data: dict, lang: str) -> str:
-    """Сводка записи перед confirm_yes. Используется и при use_saved_profile,
-    и при get_phone — чтобы одна и та же версия текста была в обоих местах."""
+    """Сводка записи перед confirm_yes — моноширинный блок в B-стиле."""
     from utils.i18n import t
-    when_label = t("book_confirm_when", lang)
-    price_label = t("book_confirm_price", lang)
-    master_label = t("book_confirm_master", lang)
     header = t("book_confirm_header", lang)
-    addon_line = (f"\n<i>+ {h(', '.join(data['addon_names']).lower())}</i>") if data.get("addon_names") else ""
-    master_line = (f"\n<i>{master_label} · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
+    service_label = "Xizmat:      " if lang == "uz" else "Услуга:      "
+    master_label = "Usta:        " if lang == "uz" else "Мастер:      "
+    date_label = "Sana:        " if lang == "uz" else "Дата:        "
+    time_label = "Vaqt:        " if lang == "uz" else "Время:       "
+    dur_label = "Davomiyligi: " if lang == "uz" else "Длительность:"
+    price_label = "To'lov:      " if lang == "uz" else "К оплате:    "
+    client_label = "Mijoz:       " if lang == "uz" else "Клиент:      "
+    phone_label = "Telefon:     " if lang == "uz" else "Телефон:     "
+
+    service_text = h(data['service_name'])
+    if data.get("addon_names"):
+        service_text += " + " + h(", ".join(data['addon_names']))
+    master_text = h(data['master_name'].title()) if data.get("master_name") else "—"
+
     return (
-        f"<blockquote>"
         f"{header}\n\n"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<b>{h(data['service_name'].lower())}</b>"
-        f"{addon_line}"
-        f"{master_line}\n\n"
-        f"<i>{when_label}</i>       <code>{date_soft(data['date'], lang)} · {data['time']}</code>\n"
-        f"<i>{price_label}</i>   <code>{fmt_price(data['service_price'], lang)}</code>\n\n"
-        f"<i>{h(data['name'])} · {h(data['phone'])}</i>"
-        f"</blockquote>"
+        f"<code>"
+        f"{service_label}{service_text}\n"
+        f"{master_label}{master_text}\n"
+        f"{date_label}{date_soft(data['date'], lang)}\n"
+        f"{time_label}{data['time']}\n"
+        f"{dur_label}{fmt_dur(data['service_duration'], lang)}\n"
+        f"{price_label}{fmt_price(data['service_price'], lang)}\n"
+        f"{client_label}{h(data['name'])}\n"
+        f"{phone_label}{h(data['phone'])}"
+        f"</code>"
     )
 
 
@@ -896,17 +888,20 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
         _bg_tasks.add(bg_task)
         bg_task.add_done_callback(_bg_tasks.discard)
 
-    addon_line_done = (f"\n<i>+ {h(', '.join(data.get('addon_names', [])).lower())}</i>") if data.get("addon_names") else ""
-    master_label = t("book_confirm_master", lang)
-    master_line_done = (f"\n<i>{master_label} · {h(data['master_name'].title())}</i>") if data.get("master_name") else ""
-    when_label = t("book_confirm_when", lang)
-    dur_label = t("book_confirm_duration", lang)
-    price_label = "to'lovga" if lang == "uz" else "к оплате"
-    wait_line = f"{h(data['name'])}, sizni kutamiz." if lang == "uz" else f"{h(data['name'])}, жду тебя."
+    # Лейблы для моноширинного блока
+    service_label = "Xizmat:      " if lang == "uz" else "Услуга:      "
+    master_label_c = "Usta:        " if lang == "uz" else "Мастер:      "
+    date_label = "Sana:        " if lang == "uz" else "Дата:        "
+    time_label = "Vaqt:        " if lang == "uz" else "Время:       "
+    dur_label = "Davomiyligi: " if lang == "uz" else "Длительность:"
+    price_label = "To'lov:      " if lang == "uz" else "К оплате:    "
 
-    # 1. Hero — АКЦЕНТ на успехе сразу же. Без await delete_message перед ним:
-    # три sequential delete_message давали 500-800мс задержки до первого
-    # сообщения клиенту.
+    service_text = h(data['service_name'])
+    if data.get("addon_names"):
+        service_text += " + " + h(", ".join(data['addon_names']))
+    master_text = h(data['master_name'].title()) if data.get("master_name") else "—"
+
+    # 1. Hero — АКЦЕНТ на успехе сразу же.
     try:
         await callback.message.edit_text(
             booking_done_hero(data['name'], lang),
@@ -915,18 +910,16 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
 
-    # 2. Детальная карточка в blockquote.
+    # 2. Детальная карточка — моноширинный блок.
     await callback.message.answer(
-        f"<blockquote>"
-        f"<b><i>{wait_line}</i></b>\n\n"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<b>{h(data['service_name'].lower())}</b>"
-        f"{addon_line_done}"
-        f"{master_line_done}\n\n"
-        f"<i>{when_label}</i>         <code>{date_soft(data['date'], lang)} · {data['time']}</code>\n"
-        f"<i>{dur_label}</i>  <code>{fmt_dur(data['service_duration'], lang)}</code>\n"
-        f"<i>{price_label}</i>      <code>{fmt_price(data['service_price'], lang)}</code>"
-        f"</blockquote>",
+        f"<code>"
+        f"{service_label}{service_text}\n"
+        f"{master_label_c}{master_text}\n"
+        f"{date_label}{date_soft(data['date'], lang)}\n"
+        f"{time_label}{data['time']}\n"
+        f"{dur_label}{fmt_dur(data['service_duration'], lang)}\n"
+        f"{price_label}{fmt_price(data['service_price'], lang)}"
+        f"</code>",
         parse_mode="HTML",
     )
 
@@ -1047,7 +1040,7 @@ async def get_phone_wrong(message: Message):
     )
 
 
-@router.message(BookingStates.confirm, F.text.in_({"записаться", "yozilish", "Yozilish", "/start"}))
+@router.message(BookingStates.confirm, F.text.in_({"записаться", "yozilish", "Yozilish", "📅 Записаться", "📅 Yozilish", "/start"}))
 async def confirm_escape_to_booking(message: Message, state: FSMContext):
     """
     Escape-hatch для клиентов, у которых FSM залип в BookingStates.confirm
@@ -1120,7 +1113,7 @@ async def cb_category_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(F.text.in_({"записаться", "yozilish", "Yozilish"}))
+@router.message(F.text.in_({"записаться", "yozilish", "Yozilish", "📅 Записаться", "📅 Yozilish"}))
 async def btn_book(message: Message, state: FSMContext):
     """Кнопка reply-клавиатуры — сбрасывает FSM и ведёт на выбор категории."""
     await state.clear()
