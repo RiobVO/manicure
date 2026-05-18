@@ -45,12 +45,11 @@ async def cb_client_confirm(callback: CallbackQuery):
     when_label = t("history_when", lang)
     try:
         await callback.message.edit_text(
-            f"{FLOWER}\n\n"
-            f"<b><i>{heading}</i></b>\n\n"
-            f"<blockquote>"
-            f"<b>{h(appt['service_name'].lower())}</b>\n"
-            f"<i>{when_label}</i>  <code>{date_soft(appt['date'], lang)} · {appt['time']}</code>"
-            f"</blockquote>",
+            f"✅ <b>{heading}</b>\n\n"
+            f"<code>"
+            f"{when_label}{date_soft(appt['date'], lang)} · {appt['time']}\n"
+            f"          {h(appt['service_name'])}"
+            f"</code>",
             parse_mode="HTML",
         )
     except TelegramBadRequest:
@@ -102,10 +101,10 @@ async def cb_client_cancel_reminder(callback: CallbackQuery):
 
     lang = await get_user_lang(callback.from_user.id)
     if lang == "uz":
-        txt = "<i>yozilish bekor qilindi.</i>\n\n<i>fikringiz o'zgarsa — biz shu yerdamiz.</i>"
+        txt = "❌ <b>Yozilish bekor qilindi</b>\n\nFikringiz o'zgarsa — biz shu yerdamiz."
         btn = f"{ARROW_DO} qayta yozilish"
     else:
-        txt = "<i>запись ушла.</i>\n\n<i>если передумаешь — мы рядом.</i>"
+        txt = "❌ <b>Запись отменена</b>\n\nЕсли передумаешь — мы рядом."
         btn = f"{ARROW_DO} записаться снова"
     try:
         await callback.message.edit_text(

@@ -308,7 +308,7 @@ async def cmd_start(message: Message, state: FSMContext):
         svc_name_short = last_completed["service_name"][:45]
         repeat_text = f"{REPEAT}  takrorlash · {svc_name_short}" if lang == "uz" else f"{REPEAT}  повторить · {svc_name_short}"
         another_text = f"{ARROW_SOFT} boshqasini tanlash" if lang == "uz" else f"{ARROW_SOFT} выбрать другое"
-        what_today_text = "<i>bugun nima?</i>" if lang == "uz" else "<i>что сегодня?</i>"
+        what_today_text = "bugun nima?" if lang == "uz" else "что сегодня?"
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=repeat_text, callback_data=f"quick_rebook_{last_completed['id']}")],
             [InlineKeyboardButton(text=another_text, callback_data="client_restart")],
@@ -480,7 +480,7 @@ async def choose_master(callback: CallbackQuery, state: FSMContext):
     service_text = h(data['service_name'])
     if data.get("addon_names"):
         service_text += " + " + h(", ".join(data['addon_names']))
-    bio_line = f"\n<i>{h(master['bio'])}</i>" if master.get("bio") else ""
+    bio_line = f"\n{h(master['bio'])}" if master.get("bio") else ""
     card = (
         f"💅 <b>{service_text}</b>\n"
         f"👩‍🎨 <b>{h(master['name'].title())}</b>{bio_line}\n\n"
@@ -538,7 +538,7 @@ async def choose_date(callback: CallbackQuery, state: FSMContext):
     await state.update_data(date=date_str)
     try:
         await callback.message.edit_text(
-            f"<b><i>{date_soft(date_str, lang)}</i></b>\n\n"
+            f"📅 <b>{date_soft(date_str, lang)}</b>\n\n"
             f"{t('book_time_prompt', lang)}",
             reply_markup=times_keyboard(free_slots),
             parse_mode="HTML",
@@ -1017,7 +1017,7 @@ async def confirm_no(callback: CallbackQuery, state: FSMContext):
     back_btn = "← xizmatlarga" if lang == "uz" else "← к услугам"
     try:
         await callback.message.edit_text(
-            f"<i>{back_text}</i>",
+            back_text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text=back_btn, callback_data="client_restart"),
             ]]),
@@ -1060,7 +1060,7 @@ async def confirm_escape_to_booking(message: Message, state: FSMContext):
 async def confirm_text_fallback(message: Message):
     from db import get_user_lang
     lang = await get_user_lang(message.from_user.id)
-    text = "<i>yuqoridagi tugmalardan foydalaning.</i>" if lang == "uz" else "<i>используй кнопки выше.</i>"
+    text = "👆 yuqoridagi tugmalardan foydalaning." if lang == "uz" else "👆 используй кнопки выше."
     await message.answer(text, parse_mode="HTML")
 
 
@@ -1081,7 +1081,7 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     category = "hands" if callback.data == "cat_hands" else "feet"
     services = await get_services(active_only=True, category=category)
     if not services:
-        empty_hint = "<i>tanlangan kategoriyada hozircha xizmatlar yo'q. boshqasini tanlang:</i>" if lang == "uz" else "<i>тут пока пусто. попробуй другую:</i>"
+        empty_hint = "tanlangan kategoriyada hozircha xizmatlar yo'q. boshqasini tanlang:" if lang == "uz" else "тут пока пусто. попробуй другую:"
         try:
             await callback.message.edit_text(
                 f"{empty_hint}\n\n{t('book_category_prompt', lang)}",
@@ -1237,13 +1237,12 @@ async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
         await state.update_data(name=profile["name"], phone=profile["phone"])
 
     header = (
-        f"<blockquote>"
-        f"<b><i>повторяем</i></b>\n\n"
-        f"{DIVIDER_SOFT}\n\n"
-        f"<b>{h(service['name'].lower())}</b>\n"
-        f"<i>длительность</i>   <code>{fmt_dur(service['duration'])}</code>\n"
-        f"<i>стоимость</i>      <code>{fmt_price(service['price'])}</code>"
-        f"</blockquote>"
+        f"🔄 <b>ПОВТОРЯЕМ</b>\n\n"
+        f"<code>"
+        f"Услуга:       {h(service['name'])}\n"
+        f"Длительность: {fmt_dur(service['duration'])}\n"
+        f"Цена:         {fmt_price(service['price'])}"
+        f"</code>"
     )
     await _show_master_step(callback, state, header)
 
