@@ -459,11 +459,28 @@ async def cb_appt_mark_paid(callback: CallbackQuery):
         await callback.answer()
         return
     appt_id = int(parts[0])
-    from db.payments import mark_paid_manual
+    from db.payments import mark_paid_manual, get_payment_state
     ok = await mark_paid_manual(appt_id)
     if not ok:
         await callback.answer("Запись уже оплачена или не найдена.", show_alert=True)
         return
+
+    # Удалить pay-сообщение у клиента — та же логика что в webhook _notify_paid:
+    # url-кнопка в старом сообщении продолжит работать, если её не убрать,
+    # и клиент может случайно инициировать второй платёж. Ошибку глотаем —
+    # 48-часовой лимит Telegram на delete, сообщение могло устареть.
+    state = await get_payment_state(appt_id)
+    if state and state.get("payment_message_id"):
+        try:
+            await callback.bot.delete_message(
+                chat_id=state["user_id"],
+                message_id=state["payment_message_id"],
+            )
+        except Exception as exc:
+            logger.debug(
+                "не удалил pay-сообщение при ручной оплате appt=%s: %s",
+                appt_id, exc,
+            )
 
     try:
         await log_admin_action(

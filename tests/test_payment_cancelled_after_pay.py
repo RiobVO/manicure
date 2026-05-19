@@ -234,6 +234,53 @@ async def test_payme_check_on_cancelled_returns_31008(
     payments_pkg._reset_for_tests()
 
 
+# ─── Click: duplicate (уже оплачено) → error=-4 ─────────────────────────────
+
+async def test_click_duplicate_after_pay_returns_error_4(
+    monkeypatch, fresh_db, seed_master, seed_service,
+):
+    """
+    Клиент тапнул старую pay-ссылку после успешной оплаты → mark_paid видит
+    paid_at и возвращает 'duplicate'. Сервер должен ответить -4 «Already paid»,
+    чтобы Click откатил повторное списание.
+    """
+    _enable_click(monkeypatch)
+
+    from db import create_appointment
+    from db.payments import attach_invoice, mark_paid
+
+    master_id = await seed_master(name="Оля")
+    service_id = await seed_service(name="Маникюр", price=150000, duration=60)
+    appt_id = await create_appointment(
+        user_id=555, name="Повторятель", phone="+998900000003",
+        service_id=service_id, service_name="Маникюр",
+        service_duration=60, service_price=150000,
+        date="2099-05-05", time="09:00", master_id=master_id,
+    )
+    await attach_invoice(
+        appt_id, provider="click", invoice_id=str(appt_id),
+        pay_url="https://pay.test/dup",
+    )
+    # Первый платёж — ставим paid_at напрямую.
+    status, _ = await mark_paid("click", invoice_id=str(appt_id))
+    assert status == "paid"
+
+    # Второй webhook — клиент тапнул старую ссылку.
+    body = _click_signed_body(appt_id, amount=150000)
+    async with TestClient(TestServer(_make_app())) as client:
+        resp = await client.post(
+            "/payment/click", data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert resp.status == 200
+        payload = await resp.json()
+        assert payload["error"] == -4, (
+            f"duplicate должен давать -4 'Already paid', получили {payload}"
+        )
+
+    payments_pkg._reset_for_tests()
+
+
 # ─── Payme: defence-in-depth на PerformTransaction → -31008 ──────────────────
 
 async def test_payme_perform_on_cancelled_returns_31008(
