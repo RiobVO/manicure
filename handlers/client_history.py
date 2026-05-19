@@ -226,30 +226,24 @@ async def _render_history_b_style(user_id: int, lang: str) -> tuple[str, InlineK
         ]])
 
     # ── Клавиатура ────────────────────────────────────────────────────────
+    # Сознательно не показываем здесь кнопку «💳 Оплатить». Когда у клиента
+    # несколько предстоящих, одна общая кнопка «Оплатить» без привязки к
+    # записи — путаница: непонятно что оплачиваешь. Pay-кнопка живёт в
+    # детали конкретной записи (cb_my_appt_detail), там контекст явный.
+    # На главной — одна кнопка «📋 открыть» с услугой+временем ближайшей,
+    # клиент видит куда идёт.
     kb_rows: list[list[InlineKeyboardButton]] = []
 
     if nearest:
-        # Кнопка оплаты — только для неоплаченной scheduled с валидной ссылкой.
-        # resolve_pay_url ретраит create_invoice если pay_url в БД NULL
-        # (запись-«зомби» после падения провайдера в момент confirm).
-        if not nearest.get("paid_at"):
-            from utils.payment_ui import resolve_pay_url
-            pay_url = await resolve_pay_url(nearest)
-            if pay_url:
-                kb_rows.append([InlineKeyboardButton(
-                    text=f"💳 {t('pay_btn', lang)}",
-                    url=pay_url,
-                )])
-        kb_rows.append([
-            InlineKeyboardButton(
-                text=t("btn_open_nearest", lang),
-                callback_data=f"my_appt_{nearest['id']}",
-            ),
-            InlineKeyboardButton(
-                text=t("history_cancel_btn", lang),
-                callback_data=f"my_appt_cancel_{nearest['id']}",
-            ),
-        ])
+        rel = _relative_date(nearest["date"], lang)
+        svc_short = nearest["service_name"][:28] + (
+            "…" if len(nearest["service_name"]) > 28 else ""
+        )
+        open_label = f"📋 {svc_short} · {rel} · {nearest['time']}"
+        kb_rows.append([InlineKeyboardButton(
+            text=open_label,
+            callback_data=f"my_appt_{nearest['id']}",
+        )])
 
     # Кнопка «Повторить» — для самой свежей completed-записи (не cancelled).
     last_completed = next((a for a in past if a["status"] == "completed"), None)
