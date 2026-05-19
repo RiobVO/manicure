@@ -230,9 +230,11 @@ async def _render_history_b_style(user_id: int, lang: str) -> tuple[str, InlineK
 
     if nearest:
         # Кнопка оплаты — только для неоплаченной scheduled с валидной ссылкой.
+        # resolve_pay_url ретраит create_invoice если pay_url в БД NULL
+        # (запись-«зомби» после падения провайдера в момент confirm).
         if not nearest.get("paid_at"):
-            from utils.payment_ui import reconstruct_pay_url
-            pay_url = reconstruct_pay_url(nearest)
+            from utils.payment_ui import resolve_pay_url
+            pay_url = await resolve_pay_url(nearest)
             if pay_url:
                 kb_rows.append([InlineKeyboardButton(
                     text=f"💳 {t('pay_btn', lang)}",
@@ -362,8 +364,8 @@ async def cb_my_appt_detail(callback: CallbackQuery):
     kb_buttons = []
 
     if appt["status"] == "scheduled" and not appt.get("paid_at"):
-        from utils.payment_ui import reconstruct_pay_url
-        pay_url = reconstruct_pay_url(appt)
+        from utils.payment_ui import resolve_pay_url
+        pay_url = await resolve_pay_url(appt)
         if pay_url:
             kb_buttons.append([InlineKeyboardButton(
                 text=f"💳 {t('pay_btn', lang)}",
@@ -371,7 +373,7 @@ async def cb_my_appt_detail(callback: CallbackQuery):
             )])
         else:
             logger.warning(
-                "reconstruct_pay_url=None для appt=%s (status=scheduled, paid_at=None, payment_pay_url=%s)",
+                "resolve_pay_url=None для appt=%s (status=scheduled, paid_at=None, payment_pay_url=%s)",
                 appt_id, appt.get("payment_pay_url"),
             )
 

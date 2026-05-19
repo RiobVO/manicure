@@ -100,3 +100,81 @@ def reconstruct_pay_url(appt: Mapping) -> str | None:
 def _active_provider() -> str:
     from config import PAYMENT_PROVIDER
     return PAYMENT_PROVIDER
+
+
+async def resolve_pay_url(appt: Mapping) -> str | None:
+    """
+    Async-версия reconstruct_pay_url с retry через provider.create_invoice.
+
+    Зачем: если в момент подтверждения записи провайдер был недоступен
+    (Click API down, mock не запущен, сеть моргнула), payment_pay_url в
+    БД остался NULL. Клиент открывает «Мои записи» и не видит кнопку
+    оплаты — запись-«зомби». Retry при просмотре восстанавливает ссылку:
+    один раз дёргаем API, сохраняем pay_url в БД, дальше работает как
+    обычно из кеша.
+
+    Порядок попыток:
+      1. paid_at → None (уже оплачено, кнопка не нужна).
+      2. payment_pay_url из БД → вернуть его (happy path).
+      3. PAYMENT_URL legacy fallback → собрать из шаблона.
+      4. Payme detereministic — URL собирается без API.
+      5. Click / другой провайдер — попытка create_invoice + attach_invoice.
+         Ошибку глотаем (provider всё ещё может быть недоступен),
+         возвращаем None.
+    """
+    if appt.get("paid_at"):
+        return None
+
+    saved = appt.get("payment_pay_url")
+    if saved:
+        return saved
+
+    # Сначала пробуем синхронные пути (legacy PAYMENT_URL + Payme детерминизм)
+    # — они не делают сеть, быстрые.
+    sync_url = reconstruct_pay_url(appt)
+    if sync_url:
+        return sync_url
+
+    # Осталась одна причина: Click без сохранённого URL. Ретраим create_invoice.
+    if appt.get("status") != "scheduled":
+        return None
+
+    appt_id = appt.get("id")
+    amount = appt.get("service_price")
+    phone = appt.get("phone")
+    if not (appt_id and amount and phone):
+        return None
+
+    from utils.payments import get_provider
+    provider = get_provider()
+    if provider is None:
+        return None
+
+    try:
+        invoice = await provider.create_invoice(
+            appt_id=appt_id, amount_uzs=int(amount), phone=str(phone),
+        )
+    except Exception as exc:
+        logger.warning(
+            "resolve_pay_url retry create_invoice упал appt=%s: %s",
+            appt_id, exc,
+        )
+        return None
+
+    # Сохраняем чтобы в следующий раз читали из БД без API-запроса.
+    # attach_invoice вернёт False если invoice_id уже есть — в сиротских
+    # записях он NULL, так что должен пройти. На False просто вернём URL:
+    # клиент оплатит, провайдер пришлёт webhook по нашему же appt_id.
+    try:
+        from db.payments import attach_invoice
+        await attach_invoice(
+            appt_id, provider.name, invoice.invoice_id, invoice.pay_url,
+        )
+    except Exception:
+        logger.warning(
+            "resolve_pay_url: attach_invoice не записал appt=%s — URL отдаём,"
+            " но в следующий раз снова дёрнем API",
+            appt_id, exc_info=True,
+        )
+
+    return invoice.pay_url
