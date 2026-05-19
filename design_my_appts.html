@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>«Мои записи» · 3 варианта визуала</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #17212b;
+    --bg-panel: #0e1621;
+    --bubble: #182533;
+    --ink: #e6eaef;
+    --ink-soft: #8a9aa9;
+    --ink-dim: #6b7a8a;
+    --accent: #6ab2f2;
+    --btn: #2a3d52;
+    --btn-hover: #355068;
+    --rule: #253544;
+    --mono: "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --paid: #7bc47b;
+    --wait: #e6c478;
+    --cancel: #e0806b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg-panel);
+    color: var(--ink);
+    font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-weight: 400;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header.page {
+    padding: 48px 32px 8px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  header.page h1 {
+    font-weight: 600;
+    font-size: 28px;
+    letter-spacing: -0.01em;
+    margin-bottom: 10px;
+  }
+  header.page .sub {
+    color: var(--ink-soft);
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 800px;
+  }
+  header.page .data-preview {
+    margin-top: 18px;
+    padding: 14px 18px;
+    background: var(--bubble);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.7;
+    max-width: 800px;
+    font-family: var(--mono);
+  }
+  header.page .data-preview b { color: var(--ink); font-weight: 500; }
+
+  .section {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 32px 40px;
+  }
+
+  .variants {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 28px;
+  }
+
+  .phone {
+    background: var(--bg);
+    border-radius: 18px;
+    padding: 18px 14px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--rule);
+  }
+
+  .chat-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 0 4px 10px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 8px;
+  }
+  .avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #d4a5c8, #9d6b8e);
+    flex-shrink: 0;
+  }
+  .peer-name { font-weight: 600; font-size: 14px; }
+  .peer-sub { font-size: 12px; color: var(--ink-soft); }
+
+  .style-label {
+    display: inline-block;
+    padding: 5px 12px;
+    color: var(--ink);
+    font-size: 11px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    align-self: flex-start;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .lbl-a { background: #3a5270; }
+  .lbl-b { background: #4a6a4a; }
+  .lbl-c { background: #6a4a4a; }
+
+  .bubble {
+    background: var(--bubble);
+    padding: 12px 14px;
+    border-radius: 12px;
+    border-top-left-radius: 4px;
+    font-size: 14px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    color: var(--ink);
+    max-width: 96%;
+  }
+
+  .bubble b { font-weight: 600; }
+  .bubble code {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: #9fc9f0;
+    background: rgba(106, 178, 242, 0.06);
+    padding: 0;
+    border-radius: 3px;
+    display: block;
+    white-space: pre;
+  }
+  .bubble .inline-code {
+    display: inline;
+    padding: 0 3px;
+    white-space: normal;
+  }
+
+  .bubble blockquote {
+    border-left: 3px solid var(--accent);
+    padding: 4px 0 4px 12px;
+    margin: 8px 0;
+    color: var(--ink);
+  }
+
+  .keyboard {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .kb-row {
+    display: flex;
+    gap: 4px;
+  }
+  .btn {
+    background: var(--btn);
+    color: var(--ink);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: center;
+    flex: 1;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+  .btn.primary { background: #2b5278; }
+  .btn.pay { background: #3d5a3d; }
+
+  /* визуальные акценты внутри текста */
+  .paid { color: var(--paid); }
+  .wait { color: var(--wait); }
+  .cancel { color: var(--cancel); }
+  .dim { color: var(--ink-soft); }
+
+  .notes {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.65;
+  }
+  .notes b { color: var(--ink); }
+  .pros { color: #7bc47b; }
+  .cons { color: #e0a06b; }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--ink-dim);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+
+  .divider-soft {
+    color: var(--ink-dim);
+  }
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>«Мои записи» — три варианта</h1>
+  <div class="sub">Тот же набор данных, три способа подачи. Telegram dark mode, реальный рендеринг <code style="color:#9fc9f0;font-family:var(--mono);">&lt;b&gt;</code>, <code style="color:#9fc9f0;font-family:var(--mono);">&lt;code&gt;</code>, <code style="color:#9fc9f0;font-family:var(--mono);">&lt;blockquote&gt;</code>. Выбери — переведу код.</div>
+
+  <div class="data-preview">
+    <b>Данные клиента для всех вариантов:</b><br>
+    предстоящие: <b>24 апр пт 14:00</b> · Гель-лак с дизайном · Катя · 250 000 · ⏳ ждёт оплаты<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>27 апр пн 11:00</b> · Маникюр классический · Лена · 180 000 · 💰 оплачено<br>
+    прошлые:&nbsp;&nbsp;&nbsp;&nbsp;<b>20 апр</b> состоялся · Маникюр классический · 180 000<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>15 апр</b> отменён · Педикюр · 220 000<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>10 апр</b> состоялся · Маникюр + гель-лак · 250 000
+  </div>
+</header>
+
+<div class="section">
+  <div class="variants">
+
+    <!-- ─────────── ВАРИАНТ A: МИНИМУМ ─────────── -->
+    <div class="phone">
+      <div class="chat-header">
+        <div class="avatar"></div>
+        <div>
+          <div class="peer-name">Sabina Nails</div>
+          <div class="peer-sub">bot</div>
+        </div>
+      </div>
+      <span class="style-label lbl-a">Вариант A · Минимум</span>
+
+      <div class="bubble">📋 <b>МОИ ЗАПИСИ</b>
+
+<span class="dim">ПРЕДСТОЯЩИЕ</span>
+
+🕐 <b>завтра · 14:00</b>
+   Гель-лак с дизайном · 250 000 · <span class="wait">⏳</span>
+
+🕐 <b>пн · 11:00</b>
+   Маникюр классический · 180 000 · <span class="paid">💰</span>
+
+<span class="dim">ПРОШЛЫЕ</span>
+
+<span class="paid">✅</span> 20 апр · Маникюр классический · 180 000
+<span class="cancel">❌</span> 15 апр · Педикюр · 220 000
+<span class="paid">✅</span> 10 апр · Маникюр + гель-лак · 250 000</div>
+
+      <div class="keyboard">
+        <div class="kb-row">
+          <div class="btn primary">📋 Открыть: Гель-лак с дизайном</div>
+        </div>
+        <div class="kb-row">
+          <div class="btn">🔄 Повторить: Маникюр + гель-лак</div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <b>Что меняется:</b>
+        <span class="pros">+ группировка «Предстоящие / Прошлые»</span><br>
+        <span class="pros">+ относительная дата «завтра / пн»</span><br>
+        <span class="pros">+ цена и статус оплаты (💰/⏳) в строке</span><br>
+        <span class="pros">+ эмодзи-префикс статуса (🕐 ✅ ❌)</span><br>
+        <span class="cons">− ближайшая запись визуально не выделена</span><br>
+        <span class="cons">− при 10+ записях список плотный</span>
+      </div>
+    </div>
+
+    <!-- ─────────── ВАРИАНТ B: АКЦЕНТ ─────────── -->
+    <div class="phone">
+      <div class="chat-header">
+        <div class="avatar"></div>
+        <div>
+          <div class="peer-name">Sabina Nails</div>
+          <div class="peer-sub">bot</div>
+        </div>
+      </div>
+      <span class="style-label lbl-b">Вариант B · Акцент на ближайшей</span>
+
+      <div class="bubble">📋 <b>МОИ ЗАПИСИ</b>
+
+<span class="dim">БЛИЖАЙШАЯ · завтра</span>
+<code>Услуга:    Гель-лак с дизайном
+Мастер:    Катя
+Когда:     завтра · 14:00
+К оплате:  250 000  ⏳</code>
+
+<span class="dim">ЕЩЁ ПРЕДСТОЯЩИЕ</span>
+
+🕐 <b>пн · 11:00</b> · Маникюр классический
+   180 000 · <span class="paid">💰 оплачено</span>
+
+<span class="dim">ИСТОРИЯ</span>
+
+<span class="paid">✅</span> 20 апр · Маникюр классический · 180 000
+<span class="cancel">❌</span> 15 апр · Педикюр · 220 000
+<span class="paid">✅</span> 10 апр · Маникюр + гель-лак · 250 000</div>
+
+      <div class="keyboard">
+        <div class="kb-row">
+          <div class="btn pay">💳 Оплатить</div>
+        </div>
+        <div class="kb-row">
+          <div class="btn primary">📋 Открыть</div>
+          <div class="btn">❌ Отменить</div>
+        </div>
+        <div class="kb-row">
+          <div class="btn">🔄 Повторить: Маникюр + гель-лак</div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <b>Что меняется:</b>
+        <span class="pros">+ ближайшая запись — карточка в <code style="color:#9fc9f0;font-family:var(--mono);">&lt;code&gt;</code> сверху</span><br>
+        <span class="pros">+ кнопка оплаты доступна сразу (если ⏳)</span><br>
+        <span class="pros">+ «Открыть / Отменить» для ближайшей — на виду</span><br>
+        <span class="pros">+ 3 уровня: ближайшая → предстоящие → история</span><br>
+        <span class="cons">− сообщение длиннее на ~6 строк чем A</span>
+      </div>
+    </div>
+
+    <!-- ─────────── ВАРИАНТ C: КАРТОЧКИ ВСЕМ ─────────── -->
+    <div class="phone">
+      <div class="chat-header">
+        <div class="avatar"></div>
+        <div>
+          <div class="peer-name">Sabina Nails</div>
+          <div class="peer-sub">bot</div>
+        </div>
+      </div>
+      <span class="style-label lbl-c">Вариант C · Карточки всем</span>
+
+      <div class="bubble">📋 <b>МОИ ЗАПИСИ</b>  <span class="dim">· стр. 1/2</span>
+
+🕐 <b>завтра · 14:00</b>
+<code>Услуга:  Гель-лак с дизайном
+Мастер:  Катя
+Цена:    250 000  ⏳</code>
+
+🕐 <b>пн · 11:00</b>
+<code>Услуга:  Маникюр классический
+Мастер:  Лена
+Цена:    180 000  💰</code>
+
+<span class="paid">✅</span> <b>20 апр · состоялся</b>
+<code>Услуга:  Маникюр классический
+Мастер:  Катя
+Цена:    180 000</code></div>
+
+      <div class="keyboard">
+        <div class="kb-row">
+          <div class="btn primary">📋 Открыть: Гель-лак с дизайном</div>
+        </div>
+        <div class="kb-row">
+          <div class="btn">← стр. 1/2</div>
+          <div class="btn">→</div>
+        </div>
+        <div class="kb-row">
+          <div class="btn">🔄 Повторить: Маникюр классический</div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <b>Что меняется:</b>
+        <span class="pros">+ каждая запись — читается как таблица</span><br>
+        <span class="pros">+ однородно: нет разных уровней</span><br>
+        <span class="cons">− страница вмещает только 3 записи</span><br>
+        <span class="cons">− при 20+ записях — много пагинации</span><br>
+        <span class="cons">− ближайшая не выделяется (смешана с 15 апр)</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:40px; padding:20px 24px; background: var(--bubble); border-radius:10px; max-width: 860px; border-left: 3px solid var(--accent);">
+    <div style="font-weight:600; font-size:14px; margin-bottom:10px;">Моя рекомендация — B</div>
+    <div style="font-size:13px; color: var(--ink-soft); line-height:1.7;">
+      A решает половину проблемы: группировка есть, акцента на главном нет. Клиент всё равно глазами ищет «что у меня дальше?».<br><br>
+      C однороден, но при 15+ записях выбешивает прокрутка. 3 записи на страницу — это мало: в реальности клиент открывает «Мои записи» раз в неделю, за месяц набегает 4-6 записей, хочется видеть их все сразу.<br><br>
+      B сразу отвечает на главный вопрос «что у меня впереди?» — карточка ближайшей, с кнопкой оплаты если надо. Остальное — плоский список, не плотный, но и не крохотный. История в конце — «для памяти».
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
