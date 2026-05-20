@@ -18,7 +18,7 @@ from aiogram.filters import Command
 from aiogram.types import FSInputFile, Message
 
 from config import BACKUP_CHAT_ID, DB_PATH, REDIS_URL, TENANT_SLUG
-from db.connection import backup_db
+from db.connection import backup_db, get_db
 from utils.admin import is_admin
 from utils.error_reporter import get_last_error, get_start_time
 from utils.timezone import get_tz, now_local
@@ -151,3 +151,67 @@ async def cmd_backup_now(message: Message) -> None:
         )
     except Exception:
         pass
+
+
+async def _force_send_reminder(
+    message: Message, reminder_type: str, kind_label: str
+) -> None:
+    """
+    Принудительно шлёт 24h/2h напоминание на ближайшую scheduled-запись
+    самого админа (который отправил команду). Игнорирует окно и dedup —
+    нужно для smoke-теста UI напоминания без ожидания 2 часа.
+
+    Снимает запись из sent_reminders перед отправкой, чтобы повторные
+    вызовы работали.
+    """
+    if not message.from_user or not is_admin(message.from_user.id):
+        return
+
+    user_id = message.from_user.id
+    db = await get_db()
+    # Ищем ближайшую scheduled-запись этого tg-пользователя.
+    cursor = await db.execute(
+        """SELECT id, service_name, time FROM appointments
+           WHERE user_id = ? AND status = 'scheduled'
+           ORDER BY date ASC, time ASC
+           LIMIT 1""",
+        (user_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        await message.answer(
+            "⚠ У тебя нет scheduled-записей. Сделай одну через /start → "
+            "«Записаться», потом запусти команду снова."
+        )
+        return
+    appt_id, service_name, time = row
+
+    # Сбрасываем dedup, чтобы повторные /test_reminder_* работали подряд.
+    await db.execute(
+        "DELETE FROM sent_reminders WHERE appointment_id = ? AND reminder_type = ?",
+        (appt_id, reminder_type),
+    )
+    await db.commit()
+
+    from scheduler import _send_24h_reminder, _send_2h_reminder
+    sender = _send_24h_reminder if reminder_type == "reminder_24h" else _send_2h_reminder
+    await sender(message.bot, user_id, service_name, time, appt_id)
+
+    await message.answer(
+        f"✅ Отправил <b>{kind_label}</b> напоминание для записи #{appt_id}\n"
+        f"Услуга: {html.escape(service_name)} · время: {time}\n\n"
+        f"Проверь что выше пришло в этот чат.",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("test_reminder_24h"))
+async def cmd_test_reminder_24h(message: Message) -> None:
+    """Шлёт 24h напоминание немедленно — для smoke-теста."""
+    await _force_send_reminder(message, "reminder_24h", "24-часовое")
+
+
+@router.message(Command("test_reminder_2h"))
+async def cmd_test_reminder_2h(message: Message) -> None:
+    """Шлёт 2h напоминание немедленно — для smoke-теста."""
+    await _force_send_reminder(message, "reminder_2h", "2-часовое")
