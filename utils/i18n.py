@@ -226,6 +226,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "ru": "<b>Точно отменить запись?</b>",
         "uz": "<b>Yozilishni aniq bekor qilasizmi?</b>",
     },
+    "history_cancel_paid_warning": {
+        "ru": "⚠️ Запись оплачена. Деньги вернёт салон — свяжись для возврата.",
+        "uz": "⚠️ Yozilish to'langan. Salon pulni qaytaradi — bog'laning.",
+    },
     "history_cancel_yes": {
         "ru": "❌ Да, отменить",
         "uz": "❌ Ha, bekor qilish",
