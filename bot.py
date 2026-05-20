@@ -31,6 +31,7 @@ from handlers import reviews, admin_export, admin_masters, admin_master_schedule
 from handlers import client_reminders, client_history, admin_status, admin_traffic
 from handlers import master
 from middlewares.license_gate import LicenseGateMiddleware
+from middlewares.timing import TimingMiddleware
 from scheduler import setup_scheduler
 from utils.admin import all_admin_ids, refresh_admins_cache, refresh_masters_cache
 from utils.error_reporter import mark_started, report_error
@@ -99,6 +100,13 @@ async def main() -> None:
         license_state.mode.value,
         f"({license_state.reason})" if license_state.reason else "",
     )
+
+    # TimingMiddleware — первой, чтобы покрыть всё включая license_gate.
+    # Пишет WARNING при duration > 500мс, ERROR при > 1500мс — по ним
+    # ищем тормозящие хендлеры в `docker compose logs`.
+    timing = TimingMiddleware()
+    dp.message.middleware(timing)
+    dp.callback_query.middleware(timing)
 
     gate = LicenseGateMiddleware(license_state, LICENSE_CONTACT)
     dp.message.middleware(gate)
