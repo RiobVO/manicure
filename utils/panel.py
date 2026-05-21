@@ -7,7 +7,7 @@ from collections import OrderedDict
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, ReplyKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
@@ -116,3 +116,29 @@ async def edit_panel_with_callback(
             clear_panel_msg_id(chat_id)
 
     await edit_panel(callback.bot, chat_id, text, markup, parse_mode)
+
+
+# ─── Фоновый delete (оптимизация) ────────────────────────────────────────────
+# asyncio хранит только weak-refs на таски, без strong-ref-сета GC соберёт
+# _safe() до реального delete. Поэтому держим set + discard в done-callback.
+_delete_bg_tasks: set[asyncio.Task] = set()
+
+
+def delete_in_bg(message: Message) -> None:
+    """
+    Удалить сообщение в фоне. Не блокирует вызывающий код на Telegram round-trip
+    (~240мс в dev, ~100мс на VPS). Ошибки (сообщение уже удалено, нет прав,
+    >48ч) глотаются — UX не страдает.
+
+    Использовать вместо `try: await message.delete() except: pass` везде,
+    где delete — не жизненно важный шаг (тап reply-кнопок, очистка старых
+    сообщений, закрытие формы).
+    """
+    async def _safe() -> None:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+    task = asyncio.create_task(_safe())
+    _delete_bg_tasks.add(task)
+    task.add_done_callback(_delete_bg_tasks.discard)
