@@ -39,10 +39,13 @@ async def get_write_lock() -> asyncio.Lock:
     """Глобальный лок для сериализации write-транзакций.
     aiosqlite с единым connection не сериализует вложенные BEGIN IMMEDIATE,
     поэтому параллельные записи ловят OperationalError вместо бизнес-ошибки.
+
+    Инициализация перенесена в init_db() — раньше создавался лениво в каждом
+    вызове, это TOCTOU (две корутины могли одновременно пройти `is None`
+    и получить каждая свой Lock). Теперь ошибка, если init_db() не вызывали.
     """
-    global _write_lock
     if _write_lock is None:
-        _write_lock = asyncio.Lock()
+        raise RuntimeError("get_write_lock() called before init_db()")
     return _write_lock
 
 
@@ -120,6 +123,13 @@ async def init_db() -> None:
     # Создание коннекшна делегируется get_db() — единственный путь открытия.
     # init_db отвечает только за схему и миграции.
     db = await get_db()
+
+    # Write-lock создаём здесь, один раз, пока running loop доступен.
+    # Раньше он создавался лениво в get_write_lock() — TOCTOU между двумя
+    # корутинами, подхваченными на старте (аудит от 2026-04-22).
+    global _write_lock
+    if _write_lock is None:
+        _write_lock = asyncio.Lock()
 
     # --- appointments ---
     await db.execute("""
