@@ -50,9 +50,12 @@ def main() -> None:
     # через архив/git/облако). Правильное место — ~/.config/manicure/ или
     # password manager. В .gitignore он есть, но не защитит от `tar -czf`
     # или «скинь мне проект в Telegram» (аудит 2026-04-22).
+    # Берём project_root от __file__, а не cwd — скрипт могут запустить
+    # откуда угодно, эвристика должна работать независимо.
     resolved = PRIVATE_KEY_PATH.resolve()
+    project_root = Path(__file__).resolve().parent.parent
     try:
-        resolved.relative_to(Path.cwd().resolve())
+        resolved.relative_to(project_root)
         sys.stderr.write(
             "⚠ ВНИМАНИЕ: приватный ключ лежит в директории проекта.\n"
             "  Рекомендуется перенести в ~/.config/manicure/license_private_key.pem\n"
