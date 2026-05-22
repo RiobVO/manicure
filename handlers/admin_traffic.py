@@ -39,7 +39,7 @@ from db.traffic import (
 from keyboards.inline import admin_cancel_keyboard
 from states import AdminStates
 from utils.admin import IsAdminFilter
-from utils.panel import edit_panel, edit_panel_with_callback
+from utils.panel import delete_in_bg, edit_panel, edit_panel_with_callback
 from utils.qrgen import generate_qr
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,6 @@ async def msg_traffic_entry(message: Message, state: FSMContext):
     быстро засоряется.
     """
     await state.clear()
-    from utils.panel import delete_in_bg
     delete_in_bg(message)
     stats = await aggregate_by_source()
     await edit_panel(
