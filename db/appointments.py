@@ -132,8 +132,58 @@ async def reschedule_appointment(
 ) -> None:
     """
     Атомарно переносит запись на новое время.
-    Бросает ValueError если новый слот пересекается с другой записью.
+    Бросает ValueError если:
+      • новый слот пересекается с другой записью,
+      • новая дата — выходной (is_day_off / weekly_schedule / master_schedule),
+      • новое время выходит за рабочие часы или попадает в blocked_slots.
+
+    Defence-in-depth: хендлер уже фильтрует слоты через generate_free_slots,
+    но подделка callback rs_time_<id>_<date>_<time> пройдёт guard и без проверки
+    в БД-слое вылезет как "запись на закрытый день" → поход клиента в закрытый
+    салон. БД — последняя линия.
     """
+    # Импорты здесь, а не наверху: эти функции живут в db/settings.py и db/masters.py,
+    # которые импортят из db.connection. Top-level — циклический импорт.
+    from db.settings import get_day_schedule, is_day_off, get_time_blocks
+    from db.masters import get_day_schedule_for_master, get_time_blocks_for_master
+
+    # Валидация рабочих часов и выходных (вне lock — чистое чтение).
+    if master_id is not None:
+        day_sched = await get_day_schedule_for_master(master_id, new_date)
+        if day_sched is None:
+            raise ValueError("Этот день — выходной или заблокирован для мастера.")
+        blocks = await get_time_blocks_for_master(master_id, new_date)
+    else:
+        if await is_day_off(new_date):
+            raise ValueError("Этот день заблокирован.")
+        day_sched = await get_day_schedule(new_date)
+        if day_sched is None:
+            raise ValueError("Салон не работает в этот день недели.")
+        blocks = await get_time_blocks(new_date)
+
+    work_start_h, work_end_h = day_sched
+    # new_time имеет формат HH:MM; сравниваем как минуты от полуночи.
+    try:
+        hh, mm = new_time.split(":")
+        slot_start_min = int(hh) * 60 + int(mm)
+    except (ValueError, IndexError) as exc:
+        raise ValueError("Некорректное время.") from exc
+    slot_end_min = slot_start_min + service_duration
+    if slot_start_min < work_start_h * 60 or slot_end_min > work_end_h * 60:
+        raise ValueError("Время вне рабочих часов.")
+
+    for b_start, b_end in blocks:
+        try:
+            bh1, bm1 = b_start.split(":")
+            bh2, bm2 = b_end.split(":")
+        except (ValueError, IndexError):
+            continue
+        block_start_min = int(bh1) * 60 + int(bm1)
+        block_end_min = int(bh2) * 60 + int(bm2)
+        # Симметричный overlap с blocked-диапазоном.
+        if slot_start_min < block_end_min and slot_end_min > block_start_min:
+            raise ValueError("Время попадает в заблокированный диапазон.")
+
     db = await get_db()
     lock = await get_write_lock()
     async with lock:
@@ -173,6 +223,13 @@ async def reschedule_appointment(
             await db.execute(
                 "UPDATE appointments SET date = ?, time = ?, status = 'scheduled' WHERE id = ?",
                 (new_date, new_time, appointment_id),
+            )
+            # Перенос = новый горизонт → старые маркеры reminder_24h/reminder_2h
+            # больше не релевантны. Без DELETE клиент не получит напоминание,
+            # если новое время попадает в уже «отправленное» окно.
+            await db.execute(
+                "DELETE FROM sent_reminders WHERE appointment_id = ?",
+                (appointment_id,),
             )
             await db.execute("COMMIT")
         except ValueError:

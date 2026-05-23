@@ -1,8 +1,8 @@
 aiogram==3.7.0
-aiosqlite
-apscheduler
-python-dotenv
-openpyxl
+aiosqlite==0.20.0
+apscheduler==3.10.4
+python-dotenv==1.0.1
+openpyxl==3.1.5
 redis==5.2.1
 cryptography==43.0.3
 qrcode[pil]==7.4.2

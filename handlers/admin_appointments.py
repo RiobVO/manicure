@@ -632,8 +632,15 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
             await callback.answer("Этот день — выходной или заблокирован.", show_alert=True)
             return
     else:
+        # is_day_off смотрит только blocked_slots, а выходной может быть задан
+        # и через weekly_schedule.work_start=NULL (регулярный выходной). Без
+        # этой второй проверки fallback (9,19) ниже сгенерирует слоты в день,
+        # когда салон не работает → клиент приходит к закрытой двери.
         if await is_day_off(date_str):
             await callback.answer("Этот день заблокирован. Выберите другую дату.", show_alert=True)
+            return
+        if await get_day_schedule(date_str) is None:
+            await callback.answer("Салон не работает в этот день недели.", show_alert=True)
             return
 
     # Рабочие часы — по мастеру если есть
@@ -641,8 +648,8 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
         day_sched = await get_day_schedule_for_master(master_id, date_str)
     else:
         day_sched = await get_day_schedule(date_str)
-    # Если день — выходной по расписанию, для переноса (действие админа)
-    # используем полный диапазон 9–19, чтобы не блокировать перенос.
+    # До двух проверок выше day_sched мог быть None (выходной); теперь — точно не None.
+    # Fallback (9,19) остаётся только на случай пустого weekly_schedule (fresh install).
     work_start, work_end = day_sched if day_sched else (9, 19)
     slot_step = int((await get_all_settings()).get("slot_step", 30))
 
