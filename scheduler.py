@@ -53,19 +53,31 @@ async def _prune_old_rows() -> None:
     Удаляет устаревшие строки из admin_logs и sent_reminders.
     Без этого через год у активной админши ~50k строк в admin_logs → бэкапы
     пухнут, send_document в TG упирается в лимит 50 МБ.
+
+    Атомарно под write_lock + BEGIN IMMEDIATE — симметрично с остальными
+    write-путями (db/appointments.py, db/payments.py). Без этого параллельный
+    commit из другого хендлера флашил наши DELETE частично.
     """
+    from db.connection import get_write_lock
     db = await get_db()
-    cur = await db.execute(
-        "DELETE FROM admin_logs WHERE created_at < date('now', ?)",
-        (f"-{ADMIN_LOGS_RETENTION_DAYS} days",),
-    )
-    admin_removed = cur.rowcount
-    cur = await db.execute(
-        "DELETE FROM sent_reminders WHERE sent_at < date('now', ?)",
-        (f"-{SENT_REMINDERS_RETENTION_DAYS} days",),
-    )
-    reminders_removed = cur.rowcount
-    await db.commit()
+    lock = await get_write_lock()
+    async with lock:
+        await db.execute("BEGIN IMMEDIATE")
+        try:
+            cur = await db.execute(
+                "DELETE FROM admin_logs WHERE created_at < date('now', ?)",
+                (f"-{ADMIN_LOGS_RETENTION_DAYS} days",),
+            )
+            admin_removed = cur.rowcount
+            cur = await db.execute(
+                "DELETE FROM sent_reminders WHERE sent_at < date('now', ?)",
+                (f"-{SENT_REMINDERS_RETENTION_DAYS} days",),
+            )
+            reminders_removed = cur.rowcount
+            await db.execute("COMMIT")
+        except Exception:
+            await db.execute("ROLLBACK")
+            raise
     if admin_removed or reminders_removed:
         logger.info(
             "retention: admin_logs=-%d, sent_reminders=-%d",

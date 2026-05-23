@@ -83,6 +83,29 @@ PAYME_SECRET_KEY: Final[str] = os.getenv("PAYME_SECRET_KEY", "").strip()
 PAYMENT_PUBLIC_URL: Final[str] = os.getenv("PAYMENT_PUBLIC_URL", "").rstrip("/")
 PAYMENT_WEBHOOK_PORT: Final[int] = int(os.getenv("PAYMENT_WEBHOOK_PORT", "8443"))
 
+# Fail-fast по HTTPS: утечка CLICK_SECRET_KEY на http://attacker/merchant
+# или фишинговый pay-url для клиента. Разрешаем http только для localhost-моков.
+def _require_https(name: str, value: str) -> None:
+    if not value:
+        return
+    if value.startswith("https://"):
+        return
+    if value.startswith("http://") and (
+        value.startswith("http://localhost")
+        or value.startswith("http://127.0.0.1")
+        or value.startswith("http://host.docker.internal")
+    ):
+        return
+    raise EnvironmentError(
+        f"{name}='{value}' должен быть https:// (или http://localhost для dev-моков)."
+    )
+
+
+if PAYMENT_PROVIDER != "none":
+    _require_https("CLICK_API_BASE", CLICK_API_BASE)
+    _require_https("CLICK_PAY_URL_BASE", CLICK_PAY_URL_BASE)
+    _require_https("PAYMENT_PUBLIC_URL", PAYMENT_PUBLIC_URL)
+
 # Fail-fast: если провайдер включён — все его креды обязаны быть заданы.
 if PAYMENT_PROVIDER == "click":
     _missing = [
@@ -145,6 +168,7 @@ LICENSE_KEY: Final[str] = os.getenv("LICENSE_KEY", "").strip()
 
 # URL для heartbeat-POST (автор-контролируемый endpoint). Пусто → heartbeat не шлём.
 HEARTBEAT_URL: Final[str] = os.getenv("HEARTBEAT_URL", "").strip()
+_require_https("HEARTBEAT_URL", HEARTBEAT_URL)
 
 # Контакт для сообщения «лицензия истекла, обратитесь к X». Например: @sabina_nails_author.
 LICENSE_CONTACT: Final[str] = os.getenv("LICENSE_CONTACT", "поставщика бота")
