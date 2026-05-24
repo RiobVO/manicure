@@ -85,16 +85,20 @@ PAYMENT_WEBHOOK_PORT: Final[int] = int(os.getenv("PAYMENT_WEBHOOK_PORT", "8443")
 
 # Fail-fast по HTTPS: утечка CLICK_SECRET_KEY на http://attacker/merchant
 # или фишинговый pay-url для клиента. Разрешаем http только для localhost-моков.
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "host.docker.internal"})
+
+
 def _require_https(name: str, value: str) -> None:
     if not value:
         return
-    if value.startswith("https://"):
+    from urllib.parse import urlparse
+    parsed = urlparse(value)
+    if parsed.scheme == "https":
         return
-    if value.startswith("http://") and (
-        value.startswith("http://localhost")
-        or value.startswith("http://127.0.0.1")
-        or value.startswith("http://host.docker.internal")
-    ):
+    # Точная проверка hostname через urlparse: startswith ловился на
+    # http://localhost.attacker.com — парсер видит это как hostname
+    # 'localhost.attacker.com' и не матчит whitelist.
+    if parsed.scheme == "http" and parsed.hostname in _LOCAL_HOSTS:
         return
     raise EnvironmentError(
         f"{name}='{value}' должен быть https:// (или http://localhost для dev-моков)."
@@ -105,6 +109,11 @@ if PAYMENT_PROVIDER != "none":
     _require_https("CLICK_API_BASE", CLICK_API_BASE)
     _require_https("CLICK_PAY_URL_BASE", CLICK_PAY_URL_BASE)
     _require_https("PAYMENT_PUBLIC_URL", PAYMENT_PUBLIC_URL)
+
+# Legacy PAYMENT_URL тоже показывается клиенту в кнопке — опечатка админа в
+# http:// отправит клиента на HTTP. Проверяем независимо от PAYMENT_PROVIDER.
+if PAYMENT_URL:
+    _require_https("PAYMENT_URL", PAYMENT_URL)
 
 # Fail-fast: если провайдер включён — все его креды обязаны быть заданы.
 if PAYMENT_PROVIDER == "click":
