@@ -147,48 +147,54 @@ async def reschedule_appointment(
     from db.settings import get_day_schedule, is_day_off, get_time_blocks
     from db.masters import get_day_schedule_for_master, get_time_blocks_for_master
 
-    # Валидация рабочих часов и выходных (вне lock — чистое чтение).
-    if master_id is not None:
-        day_sched = await get_day_schedule_for_master(master_id, new_date)
-        if day_sched is None:
-            raise ValueError("Этот день — выходной или заблокирован для мастера.")
-        blocks = await get_time_blocks_for_master(master_id, new_date)
-    else:
-        if await is_day_off(new_date):
-            raise ValueError("Этот день заблокирован.")
-        day_sched = await get_day_schedule(new_date)
-        if day_sched is None:
-            raise ValueError("Салон не работает в этот день недели.")
-        blocks = await get_time_blocks(new_date)
-
-    work_start_h, work_end_h = day_sched
-    # new_time имеет формат HH:MM; сравниваем как минуты от полуночи.
+    # Парсинг времени — дешёвое и без БД, делаем до lock'а.
     try:
         hh, mm = new_time.split(":")
         slot_start_min = int(hh) * 60 + int(mm)
     except (ValueError, IndexError) as exc:
         raise ValueError("Некорректное время.") from exc
     slot_end_min = slot_start_min + service_duration
-    if slot_start_min < work_start_h * 60 or slot_end_min > work_end_h * 60:
-        raise ValueError("Время вне рабочих часов.")
-
-    for b_start, b_end in blocks:
-        try:
-            bh1, bm1 = b_start.split(":")
-            bh2, bm2 = b_end.split(":")
-        except (ValueError, IndexError):
-            continue
-        block_start_min = int(bh1) * 60 + int(bm1)
-        block_end_min = int(bh2) * 60 + int(bm2)
-        # Симметричный overlap с blocked-диапазоном.
-        if slot_start_min < block_end_min and slot_end_min > block_start_min:
-            raise ValueError("Время попадает в заблокированный диапазон.")
 
     db = await get_db()
     lock = await get_write_lock()
     async with lock:
         await db.execute("BEGIN IMMEDIATE")
         try:
+            # Валидация внутри lock+BEGIN IMMEDIATE: иначе TOCTOU — админ может
+            # поставить day_off между нашим чтением и UPDATE.
+            if master_id is not None:
+                day_sched = await get_day_schedule_for_master(master_id, new_date)
+                if day_sched is None:
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Этот день — выходной или заблокирован для мастера.")
+                blocks = await get_time_blocks_for_master(master_id, new_date)
+            else:
+                if await is_day_off(new_date):
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Этот день заблокирован.")
+                day_sched = await get_day_schedule(new_date)
+                if day_sched is None:
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Салон не работает в этот день недели.")
+                blocks = await get_time_blocks(new_date)
+
+            work_start_h, work_end_h = day_sched
+            if slot_start_min < work_start_h * 60 or slot_end_min > work_end_h * 60:
+                await db.execute("ROLLBACK")
+                raise ValueError("Время вне рабочих часов.")
+
+            for b_start, b_end in blocks:
+                try:
+                    bh1, bm1 = b_start.split(":")
+                    bh2, bm2 = b_end.split(":")
+                except (ValueError, IndexError):
+                    continue
+                block_start_min = int(bh1) * 60 + int(bm1)
+                block_end_min = int(bh2) * 60 + int(bm2)
+                # Симметричный overlap с blocked-диапазоном.
+                if slot_start_min < block_end_min and slot_end_min > block_start_min:
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Время попадает в заблокированный диапазон.")
             # Проверка пересечения с другими scheduled записями (исключая саму переносимую).
             # Симметричный overlap: existing.start < new.end AND existing.end > new.start.
             if master_id is not None:

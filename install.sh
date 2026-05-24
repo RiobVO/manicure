@@ -59,10 +59,9 @@ fi
 
 if [[ -f .env ]]; then
     BAK=".env.bak.$(date +%s)"
-    cp .env "$BAK"
-    # Копия наследует umask (обычно 022 → 644). В .env лежат BOT_TOKEN,
-    # LICENSE_KEY, *_SECRET_KEY — читать их должен только root/1000.
-    chmod 600 "$BAK"
+    # install -m 600 атомарно создаёт файл с нужными правами — без окна
+    # между cp+chmod, когда копия лежит 644 и токен уже читаем.
+    install -m 600 .env "$BAK"
     echo "Найден существующий .env → сохранён в $BAK (chmod 600)"
 fi
 
