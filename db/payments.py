@@ -13,6 +13,7 @@ from typing import Any, Literal
 import aiosqlite
 
 from db.connection import get_db, get_write_lock
+from utils.timezone import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +126,12 @@ async def mark_paid(
                     appt_id, invoice_id,
                 )
                 return ("cancelled", appt_id)
+            # datetime('now') в SQLite = UTC; Asia/Tashkent отстаёт на 5ч →
+            # отчёт по выручке «переезжает» между сутками. Подставляем
+            # локальную метку явно.
             await db.execute(
-                "UPDATE appointments SET paid_at = datetime('now') WHERE id = ?",
-                (appt_id,),
+                "UPDATE appointments SET paid_at = ? WHERE id = ?",
+                (now_local().strftime("%Y-%m-%d %H:%M:%S"), appt_id),
             )
             await db.execute("COMMIT")
             return ("paid", appt_id)
@@ -168,11 +172,12 @@ async def mark_paid_manual(appt_id: int) -> bool:
             # webhook всё-таки придёт позже).
             await db.execute(
                 "UPDATE appointments "
-                "SET paid_at = datetime('now'), "
+                "SET paid_at = ?, "
                 "    payment_provider = COALESCE(payment_provider, 'manual'), "
                 "    payment_invoice_id = COALESCE(payment_invoice_id, ?) "
                 "WHERE id = ?",
-                (f"manual_{appt_id}", appt_id),
+                (now_local().strftime("%Y-%m-%d %H:%M:%S"),
+                 f"manual_{appt_id}", appt_id),
             )
             await db.execute("COMMIT")
             return True
@@ -208,18 +213,27 @@ async def get_payment_state(appt_id: int) -> dict[str, Any] | None:
 async def save_pay_message_id(appt_id: int, message_id: int) -> None:
     """
     Запомнить message_id сообщения «💳 ссылка на оплату» чтобы удалить его
-    после успешной оплаты. Не транзакция — одиночный UPDATE, ошибка не должна
-    валить основной booking-flow (лучше дубль-оплата, чем упавший confirm).
+    после успешной оплаты. Под write_lock + BEGIN IMMEDIATE — параллельный
+    commit другого хендлера не должен флашить этот UPDATE частично.
+    Ошибку логируем warning и не пробрасываем: лучше дубль-оплата, чем
+    упавший confirm.
     """
     db = await get_db()
-    try:
-        await db.execute(
-            "UPDATE appointments SET payment_message_id = ? WHERE id = ?",
-            (message_id, appt_id),
-        )
-        await db.commit()
-    except Exception:
-        logger.warning(
-            "не сохранил payment_message_id appt=%s msg=%s", appt_id, message_id,
-            exc_info=True,
-        )
+    lock = await get_write_lock()
+    async with lock:
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            await db.execute(
+                "UPDATE appointments SET payment_message_id = ? WHERE id = ?",
+                (message_id, appt_id),
+            )
+            await db.execute("COMMIT")
+        except Exception:
+            try:
+                await db.execute("ROLLBACK")
+            except Exception:
+                pass
+            logger.warning(
+                "не сохранил payment_message_id appt=%s msg=%s", appt_id, message_id,
+                exc_info=True,
+            )

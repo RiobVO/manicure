@@ -35,6 +35,16 @@ logger = logging.getLogger(__name__)
 _RATE_LIMIT_PER_MIN = 60
 _rate_log: dict[str, deque] = defaultdict(deque)
 
+# asyncio хранит только weak-ref на task — GC может собрать _notify_paid
+# ДО отправки уведомлений клиенту/админам. Держим strong-ref здесь,
+# снимаем через done_callback. Тот же паттерн что в utils/panel.py.
+_webhook_bg: set[asyncio.Task] = set()
+
+
+def _track_bg(task: asyncio.Task) -> None:
+    _webhook_bg.add(task)
+    task.add_done_callback(_webhook_bg.discard)
+
 
 def _rate_limited(ip: str) -> bool:
     """Простой sliding-window 60 секунд. Чистим устаревшие запросы на месте."""
@@ -137,7 +147,7 @@ async def _click_handler(request: web.Request) -> web.Response:
     status, paid_appt = await mark_paid("click", invoice_id=appt_id_str)
     if status == "paid":
         bot: Bot = request.app["bot"]
-        asyncio.create_task(_notify_paid(bot, paid_appt))
+        _track_bg(asyncio.create_task(_notify_paid(bot, paid_appt)))
 
     # Click error-коды (docs): 0 Success, -4 already paid, -9 transaction
     # cancelled. Для cancelled ОБЯЗАТЕЛЬНО вернуть -9, иначе Click считает
@@ -208,7 +218,7 @@ async def _payme_handler(request: web.Request) -> web.Response:
     status, paid_appt = await mark_paid("payme", invoice_id=appt_id_str)
     if status == "paid":
         bot: Bot = request.app["bot"]
-        asyncio.create_task(_notify_paid(bot, paid_appt))
+        _track_bg(asyncio.create_task(_notify_paid(bot, paid_appt)))
 
     # rpc_id нужен для любого ответа — ok и error.
     try:
