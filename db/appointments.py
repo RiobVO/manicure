@@ -260,12 +260,19 @@ async def get_upcoming_appointments() -> list[dict[str, Any]]:
     """
     Для планировщика напоминаний. Возвращает dict-строки —
     scheduler.py обращается по именам ключей, а не по позиции.
+
+    date('now') в SQLite возвращает UTC, а appointments.date хранится
+    в локальном TZ салона. В окне 00:00-05:00 Ташкент UTC-дата отстаёт
+    на день → SQL включает вчерашние записи в выборку. Подставляем
+    локальную дату явно.
     """
+    today_local = now_local().strftime("%Y-%m-%d")
     return await _dict_rows(
         """SELECT id, user_id, name, service_name, date, time
            FROM appointments
-           WHERE status = 'scheduled' AND date >= date('now')
-           ORDER BY date, time"""
+           WHERE status = 'scheduled' AND date >= ?
+           ORDER BY date, time""",
+        (today_local,),
     )
 
 
@@ -307,11 +314,15 @@ async def cancel_appointment_by_client(
 
 
 async def get_all_future_appointments() -> list[dict[str, Any]]:
+    # date('now') = UTC; локальная дата подставляется явно, иначе в окне
+    # 00:00-05:00 Ташкент вчерашние записи всплывают как «будущие».
+    today_local = now_local().strftime("%Y-%m-%d")
     return await _dict_rows(
         """SELECT id, name, phone, service_name, date, time, status
            FROM appointments
-           WHERE status = 'scheduled' AND date >= date('now')
-           ORDER BY date, time"""
+           WHERE status = 'scheduled' AND date >= ?
+           ORDER BY date, time""",
+        (today_local,),
     )
 
 
