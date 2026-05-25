@@ -49,22 +49,43 @@ async def _build_storage() -> BaseStorage:
     if not REDIS_URL:
         logger.info("REDIS_URL не задан → MemoryStorage (FSM теряется при рестарте)")
         return MemoryStorage()
+    client = None
     try:
         # Локальные импорты: redis — опциональная зависимость на этапе Phase 1.
         from aiogram.fsm.storage.redis import RedisStorage
         from redis.asyncio import Redis
 
-        client = Redis.from_url(REDIS_URL)
-        await client.ping()
+        # Защита от «Redis TCP-reachable, но висит» (BGSAVE/OOM/swap-storm):
+        # без явных socket-таймаутов redis-py ждёт бесконечно — бот никогда
+        # не дойдёт до polling. socket_connect_timeout=3 — на установку TCP,
+        # socket_timeout=3 — на ответ (включая ping). asyncio.wait_for сверху —
+        # belt-and-suspenders: гарантирует что корутина точно завершится,
+        # даже если клиент залип ниже уровня сокета.
+        client = Redis.from_url(
+            REDIS_URL,
+            socket_connect_timeout=3,
+            socket_timeout=3,
+        )
+        await asyncio.wait_for(client.ping(), timeout=3.0)
         logger.info("FSM storage: RedisStorage (%s)", REDIS_URL)
         # TTL=24ч на state и data: брошенные booking-флоу не копятся в Redis вечно.
         # Каждое действие пользователя обновляет expiry, активные не теряются.
         return RedisStorage(redis=client, state_ttl=86400, data_ttl=86400)
     except Exception as exc:
-        # Redis лёг или URL кривой — логируем и работаем без персиста.
+        # Redis лёг, URL кривой, или ping не уложился в таймаут — логируем
+        # и работаем без персиста. type(exc).__name__ — на случай asyncio.TimeoutError,
+        # у которого str(exc) пустой и сообщение становится бесполезным.
         logger.warning(
-            "Redis недоступен (%s): %s → fallback на MemoryStorage", REDIS_URL, exc
+            "Redis недоступен (%s): %s: %s → fallback на MemoryStorage",
+            REDIS_URL, type(exc).__name__, exc,
         )
+        # Закрываем orphan-коннекшен, если клиент успел создаться до исключения.
+        # Без этого socket висит в FIN_WAIT до TCP keepalive (минуты).
+        if client is not None:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
         return MemoryStorage()
 
 
@@ -233,7 +254,15 @@ async def main() -> None:
         logger.info("Polling cancelled, shutting down")
     finally:
         logger.info("Бот останавливается.")
-        scheduler.shutdown()
+        # wait=False — не висим на running jobs: send_document бэкапа (50МБ)
+        # на flappy-uplink может уложиться только в 30-60с, а SIGTERM от docker
+        # даёт 10с до SIGKILL. Дефолт wait=True съедал бы весь grace без пользы.
+        # Потери данных нет: SQLite в WAL-режиме восстанавливает незакоммиченный
+        # WAL-лог на следующем старте, даже если процесс убит SIGKILL.
+        # Running jobs (напр. send_reminders) продолжат выполняться в event loop
+        # до close_db()/session.close() ниже; их ошибки при закрытом connection —
+        # best-effort, следующий тик повторит.
+        scheduler.shutdown(wait=False)
         if payment_runner is not None:
             try:
                 await payment_runner.cleanup()
