@@ -67,7 +67,8 @@ On a fresh Ubuntu VPS:
 ```bash
 git clone https://github.com/RiobVO/manicure.git
 cd manicure
-./install.sh <tenant_slug> <bot_token> <admin_telegram_id>
+./install.sh <tenant_slug> <admin_telegram_id>
+# BOT_TOKEN: prompted interactively (input hidden) or via env var BOT_TOKEN=...
 ```
 
 The installer prompts optionally for the backup channel, error channel,

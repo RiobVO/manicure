@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 **Продакшн (docker):**
 ```bash
-./install.sh <tenant_slug> <bot_token> <admin_id>   # первый деплой на VPS
+./install.sh <tenant_slug> <admin_id>               # первый деплой на VPS (BOT_TOKEN — интерактивно или env)
 docker compose up -d --build                        # обновление
 ./scripts/update.sh                                 # git pull + rebuild
 ./scripts/uninstall.sh                              # архив в /root + снос
