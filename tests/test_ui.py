@@ -63,7 +63,7 @@ def test_greeting_new_contains_accent():
     # После UI-рефактора в B-стиль greeting начинается с 💅 и названия салона.
     s = greeting_new()
     assert "💅" in s
-    assert "sabina nails" in s.lower()
+    assert "nail studio demo" in s.lower()
 
 
 def test_greeting_returning_has_name_and_master():
