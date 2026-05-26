@@ -82,7 +82,24 @@ if [[ "${answer,,}" == "y" ]]; then
 fi
 
 LICENSE_KEY=""
-read -rp "Лицензионный ключ (от tools/issue_license.py; Enter — пропустить, бот будет в restricted): " LICENSE_KEY
+echo ""
+echo "Лицензионный ключ обязателен для продакшна. Без ключа enforcement-middleware"
+echo "переводит бот в RESTRICTED — отвечает только на /start, записи невозможны."
+read -rp "LICENSE_KEY (от tools/issue_license.py; Enter — пропустить, только для теста): " LICENSE_KEY
+if [[ -z "$LICENSE_KEY" ]]; then
+    # Fail-loud: чаще всего пустое значение тут — это «промахнулся Enter»,
+    # а не «осознанный тестовый стенд». Без явного [y/N] салон рискует
+    # получить молчащий бот и не понять причину.
+    read -rp "  Точно продолжить без лицензии? Бот не будет принимать записи [y/N]: " confirm
+    if [[ "${confirm,,}" != "y" ]]; then
+        echo ""
+        echo "Отмена. Выпусти ключ:"
+        echo "  python tools/issue_license.py ${TENANT_SLUG} \"<customer name>\" 60"
+        echo "и запусти install.sh снова."
+        exit 2
+    fi
+    echo "  → продолжаем без ключа, режим RESTRICTED."
+fi
 
 HEARTBEAT_URL=""
 read -rp "URL heartbeat-эндпоинта (Enter — не слать): " HEARTBEAT_URL
@@ -135,6 +152,12 @@ echo ""
 echo "=== Последние логи бота ==="
 docker compose logs --tail 20 bot || true
 
+if [[ -n "$LICENSE_KEY" ]]; then
+    LICENSE_LINE="OK"
+else
+    LICENSE_LINE="RESTRICTED (нет ключа — бот молчит на всё кроме /start)"
+fi
+
 cat <<NEXT
 
 === Установка завершена ===
@@ -142,6 +165,7 @@ cat <<NEXT
 Салон:        ${TENANT_SLUG}
 Админ:        ${ADMIN_ID}
 Бэкап в TG:   ${BACKUP_CHAT_ID:-отключён}
+Лицензия:     ${LICENSE_LINE}
 
 Что дальше:
   • Проверь бот в Telegram: /start от admin_id=${ADMIN_ID}

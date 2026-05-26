@@ -94,8 +94,9 @@ Restoring from a backup: [docs/RESTORE.md](docs/RESTORE.md).
   exceptions push to an error channel with tenant tag and short
   traceback — support without SSH.
 - **Offline license verification.** Ed25519-signed keys, 90-day grace,
-  daily heartbeat. Enforcement is present but off by default for the
-  first ~20 customers (see [docs/LICENSING.md](docs/LICENSING.md)).
+  daily heartbeat. Enforcement is **active** — without `LICENSE_KEY`
+  the bot runs in `restricted` mode and replies only to `/start`
+  (see [docs/LICENSING.md](docs/LICENSING.md)).
 
 ## Pricing and licensing
 
@@ -122,9 +123,10 @@ of things deliberately deferred until a concrete trigger fires:
 - Did NOT touch the existing booking logic during the commercial-readiness
   pass. Symmetric overlap check with a write-lock was hundreds of hours
   of UX tuning; "refactoring while I'm here" is how products die.
-- Shipped license enforcement **disabled by default**. First 20 customers
-  can't pirate this — they don't know what `git clone` is. False-positive
-  lock-out would kill a salon's business day over the author's forgetfulness.
+- Shipped license enforcement **enabled by default** (after a tested
+  signing/verify pipeline). The "off until 20 customers" hedge created
+  doc/code drift — every install ends up needing a key anyway, so make
+  the missing key fail loud at install-time, not silent at first booking.
 
 ## Stack
 
@@ -154,7 +156,7 @@ handlers/                aiogram routers (client, admin_*, reviews, status)
 keyboards/inline.py      all inline & reply keyboards
 services/booking.py      free-slot calculation
 utils/                   panel, admin, license, heartbeat, error_reporter, ...
-middlewares/             license_gate (present, disabled until ~20 tenants)
+middlewares/             license_gate (active — enforces RESTRICTED mode)
 tools/                   generate_keys, issue_license (author-only CLIs)
 tests/                   86+ real integration tests (not stubs)
 docs/                    LICENSING.md, INSTALL.md, RESTORE.md

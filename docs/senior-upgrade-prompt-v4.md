@@ -37,7 +37,8 @@ Respond in Russian, matching my energy.
 **Phase 1 (MUST, do first)** — Online payments via Click/Payme.
 **Phase 2 (SHOULD)** — Deep-links for Instagram/QR with source tracking.
 **Phase 3 (COULD, on request)** — Uzbek localization.
-**Phase 4 (DEFERRED)** — Enable license enforcement middleware.
+**Phase 4** — ✅ DONE (2026-04-26). License enforcement middleware is
+active in `bot.py:133-135`. See section below for historical context.
 
 **Why this order.** Phase 1 is the only one every single manager asks
 about. Without it, the bot is "booking"; with it, it's "booking AND
@@ -45,8 +46,9 @@ payment" — a fundamentally different product in the buyer's mind.
 Phase 2 is a 1-2 day quick win with high wow-factor in demos
 ("scan the QR at the front desk — book instantly"). Phase 3 matters,
 but Russian-speaking salon managers are the target segment for the
-first 15-20 clients — Uzbek is not a blocker. Phase 4 is already
-code-complete; its trigger is 20+ clients or the first piracy attempt.
+first 15-20 clients — Uzbek is not a blocker. Phase 4 was flipped on
+2026-04-26 — the "wait until 20 clients" hedge created doc/code drift
+without buying anything (every install needs a key anyway).
 
 ---
 
@@ -258,28 +260,35 @@ We do NOT build this proactively.
 
 ---
 
-## Phase 4 — License enforcement (DEFERRED)
+## Phase 4 — License enforcement (✅ DONE 2026-04-26)
 
-**Trigger:** 20+ paying clients OR first detected forking attempt.
+**Why we flipped it earlier than the original "20+ clients" trigger.**
+The hedge created doc/code drift: README/CLAUDE/FUTURE/LICENSING all
+claimed "enforcement off", but middleware was already registered in
+`bot.py`. Every fresh install needed `LICENSE_KEY` anyway (otherwise
+`restricted` mode), so the "off" claim was a foot-gun: a contractor
+or future-self could deploy without a key, see the bot go silent
+without obvious cause, and waste 30-60 minutes debugging — or worse,
+ship to a customer in that state.
 
-**What we do** (when we get there):
+**What was done:**
 
-- Uncomment the 3 lines in `bot.py:107-109`.
-- Test on demo with an expired license — `/start` shows
-  "лицензия истекла, обратитесь к X", everything else is silently
-  ignored.
-- Update `docs/LICENSING.md` — remove the "enforcement is off for now"
-  paragraph.
+- Synced docs (README, CLAUDE.md, AGENTS.md, FUTURE.md, CHANGELOG.md,
+  docs/LICENSING.md, this file) with the actual state of `bot.py:133-135`.
+- `install.sh`: empty `LICENSE_KEY` now triggers an explicit warning
+  + `[y/N]` confirmation. Test stands can still skip; production
+  deploys can't accidentally Enter past it.
+- `.env.template`: clarified `LICENSE_KEY` as required for production.
 
-Everything else is already working: verify, grace, heartbeat, proactive
-expiry alert at 60 days — all live right now.
+**What we DIDN'T do:**
 
-**What we DON'T do:**
+- Did not change middleware behavior. Dev mode (PUBLIC_KEY_PEM placeholder)
+  still passes through — local development without a real keypair stays
+  zero-friction.
+- Did not add a kill-switch. If a false-positive lockout ever happens,
+  the fix is to issue a fresh key, not to add a `LICENSE_BYPASS=1` flag.
 
-- Not turning it on today. A false positive at Sabina's salon at
-  22:00 would kill the relationship and cost us our first customer.
-
-**Commit:** `feat(license): enable enforcement middleware`.
+**Commit:** `docs: sync enforcement status to reality + install.sh fail-loud`.
 
 ---
 
