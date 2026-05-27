@@ -1254,6 +1254,10 @@ async def cmd_change_lang(message: Message, state: FSMContext):
 @router.callback_query(F.data.regexp(r"^quick_rebook_(\d+)$"))
 async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
     """Быстрая повторная запись — берёт услугу из последней завершённой записи."""
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
+
     parts = parse_callback(callback.data, "quick_rebook", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
@@ -1263,13 +1267,13 @@ async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer(t("book_repeat_appt_not_found", lang), show_alert=True)
         return
 
     # Проверяем, что услуга ещё активна
     service = await get_service_by_id(appt["service_id"])
     if not service or not service.get("is_active"):
-        await callback.answer("Эта услуга больше не доступна.", show_alert=True)
+        await callback.answer(t("book_repeat_service_inactive", lang), show_alert=True)
         return
 
     await state.clear()
@@ -1285,12 +1289,15 @@ async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
     if profile:
         await state.update_data(name=profile["name"], phone=profile["phone"])
 
+    service_label = "Xizmat:       " if lang == "uz" else "Услуга:       "
+    dur_label = "Davomiyligi:  " if lang == "uz" else "Длительность: "
+    price_label = "Narxi:        " if lang == "uz" else "Цена:         "
     header = (
-        f"🔄 <b>ПОВТОРЯЕМ</b>\n\n"
+        f"{t('book_repeat_header', lang)}\n\n"
         f"<code>"
-        f"Услуга:       {h(service['name'])}\n"
-        f"Длительность: {fmt_dur(service['duration'])}\n"
-        f"Цена:         {fmt_price(service['price'])}"
+        f"{service_label}{h(service['name'])}\n"
+        f"{dur_label}{fmt_dur(service['duration'], lang)}\n"
+        f"{price_label}{fmt_price(service['price'], lang)}"
         f"</code>"
     )
     await _show_master_step(callback, state, header)
