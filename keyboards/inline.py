@@ -61,10 +61,12 @@ def admin_category_picker() -> InlineKeyboardMarkup:
     """
     Админский выбор категории при создании услуги. Отдельный callback-неймспейс
     (svc_cat_*), чтобы не пересекался с клиентским cat_hands/cat_feet.
+    Подписи кнопок симметричны клиентскому category_keyboard — админ узнаёт
+    свои же категории «маникюр/педикюр», а не внутренние «ручки/ножки».
     """
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="❋ ручки", callback_data="svc_cat_hands"),
-        InlineKeyboardButton(text="○ ножки", callback_data="svc_cat_feet"),
+        InlineKeyboardButton(text="💅 Маникюр", callback_data="svc_cat_hands"),
+        InlineKeyboardButton(text="🦶 Педикюр", callback_data="svc_cat_feet"),
     ]])
 
 
