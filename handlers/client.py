@@ -18,10 +18,9 @@ from utils.notifications import notify_master, broadcast_to_admins
 from utils.timezone import now_local
 from utils.ui import (
     DIVIDER_SOFT, DIVIDER_WHISPER,
-    ARROW_DO, ARROW_SOFT, ARROW_BACK, REPEAT,
     price as fmt_price, duration as fmt_dur,
     date_soft,
-    greeting_new, greeting_returning,
+    greeting_new,
     booking_done_hero, booking_reminder_note,
     h,
 )
@@ -287,47 +286,9 @@ async def cmd_start(message: Message, state: FSMContext):
     lang = await get_user_lang(message.from_user.id)
     await message.answer("\u2063", reply_markup=client_reply_keyboard(lang))
 
-    last_appts = await get_client_appointments(message.from_user.id) if profile else []
-    last_completed = next((a for a in last_appts if a["status"] == "completed"), None)
-
-    if profile and last_completed:
-        # Возвращающийся клиент — тёплое приветствие + быстрые действия
-        days_since = (now_local().date() - datetime.strptime(last_completed["date"], "%Y-%m-%d").date()).days
-        master_name = None
-        if last_completed.get("master_id"):
-            m = await get_master(last_completed["master_id"])
-            if m:
-                master_name = m["name"].title()
-
-        greet = greeting_returning(
-            name=profile["name"],
-            days_ago=days_since,
-            service=last_completed["service_name"],
-            master=master_name,
-            lang=lang,
-        )
-        await message.answer(greet, parse_mode="HTML")
-
-        # Небольшая пауза перед меню — воздух между репликами
-        await asyncio.sleep(0.6)
-
-        svc_name_short = last_completed["service_name"][:45]
-        repeat_text = f"{REPEAT}  takrorlash · {svc_name_short}" if lang == "uz" else f"{REPEAT}  повторить · {svc_name_short}"
-        another_text = f"{ARROW_SOFT} boshqasini tanlash" if lang == "uz" else f"{ARROW_SOFT} выбрать другое"
-        what_today_text = "bugun nima?" if lang == "uz" else "что сегодня?"
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=repeat_text, callback_data=f"quick_rebook_{last_completed['id']}")],
-            [InlineKeyboardButton(text=another_text, callback_data="client_restart")],
-        ])
-        await message.answer(
-            f"{what_today_text}\n{DIVIDER_WHISPER}",
-            reply_markup=kb,
-            parse_mode="HTML",
-        )
-        await state.set_state(BookingStates.choose_service)
-        return
-
-    # Новый клиент — hero-приветствие + выбор категории (ручки/ножки)
+    # Returning-ветку с персональным «рад снова видеть, в прошлый раз —
+    # ...» убрали по UX-решению: единый онбординг для всех. Быстрый rebook
+    # остаётся через reply-кнопку «📋 Мои записи» (там есть «Повторить»).
     await message.answer(greeting_new(lang), parse_mode="HTML")
     await asyncio.sleep(0.5)
     await _send_category_picker(message, state)
@@ -1185,7 +1146,7 @@ async def btn_book(message: Message, state: FSMContext):
 @router.callback_query(F.data.in_({"lang_set_ru", "lang_set_uz"}))
 async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
     """Сохранить выбор языка клиента + запустить обычный /start-флоу."""
-    from db import set_user_lang, get_client_profile, get_client_appointments
+    from db import set_user_lang
     from utils.i18n import t, Lang
     lang = Lang.UZ if callback.data == "lang_set_uz" else Lang.RU
     await set_user_lang(callback.from_user.id, lang)
@@ -1202,15 +1163,9 @@ async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
     )
     await asyncio.sleep(0.3)
 
-    # Продолжение обычного /start для нового клиента — hero + категории.
-    # Полный текст приветствия пока на ru (будет переведён в чекпоинте 2).
-    profile = await get_client_profile(callback.from_user.id)
-    last_appts = await get_client_appointments(callback.from_user.id) if profile else []
-    last_completed = next((a for a in last_appts if a["status"] == "completed"), None)
-    if profile and last_completed:
-        # Возвращающийся клиент — не должен был сюда попасть, но safety.
-        return
-
+    # Единый онбординг — hero + категории. Возвращающийся клиент тоже
+    # сюда попадает (через /language) и должен видеть полный экран,
+    # а не пустое подтверждение смены языка.
     await callback.message.answer(greeting_new(lang), parse_mode="HTML")
     await asyncio.sleep(0.4)
     await _send_category_picker(callback.message, state, user_id=callback.from_user.id)
