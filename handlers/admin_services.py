@@ -21,6 +21,7 @@ from keyboards.inline import (
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
 from utils.panel import edit_panel, edit_panel_with_callback
+from utils.ui import h
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -58,6 +59,7 @@ async def cb_admin_services(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()  # ранний ack — иначе TG крутит спиннер до 30с
     await _show_services(callback)
 
 
@@ -72,6 +74,7 @@ async def cb_svc_detail(callback: CallbackQuery):
         await callback.answer()
         return
     service_id = int(parts[0])
+    await callback.answer()  # ранний ack
     await _show_service_detail(callback, service_id)
 
 
@@ -86,6 +89,7 @@ async def cb_svc_toggle(callback: CallbackQuery):
         await callback.answer()
         return
     service_id = int(parts[0])
+    await callback.answer()  # ранний ack
     service = await get_service_by_id(service_id)
     await toggle_service_active(service_id)
 
@@ -121,6 +125,7 @@ async def cb_svc_delete(callback: CallbackQuery):
         )
         return
 
+    await callback.answer()  # ранний ack
     service = await get_service_by_id(service_id)
     await delete_service(service_id)
 
@@ -472,12 +477,13 @@ async def cb_svc_addons(callback: CallbackQuery):
     if not service:
         await callback.answer("Услуга не найдена.", show_alert=True)
         return
+    await callback.answer()  # ранний ack
     addons = await get_addons_for_service(service_id, active_only=False)
     await edit_panel_with_callback(
         callback,
-        f"✨ <b>Доп. опции: {service['name']}</b>\n\n"
+        f"✨ <b>Доп. опции: {h(service['name'])}</b>\n\n"
         + (("\n".join(
-            f"{'🟢' if a['is_active'] else '🔴'} {a['name']} — {_price_fmt(a['price'])} сум"
+            f"{'🟢' if a['is_active'] else '🔴'} {h(a['name'])} — {_price_fmt(a['price'])} сум"
             for a in addons
         )) if addons else "Нет опций"),
         addon_manage_keyboard(addons, service_id),
@@ -501,10 +507,11 @@ async def cb_addon_detail(callback: CallbackQuery):
     if not addon:
         await callback.answer("Опция не найдена.", show_alert=True)
         return
+    await callback.answer()  # ранний ack
     status = "🟢 Активна" if addon["is_active"] else "🔴 Неактивна"
     await edit_panel_with_callback(
         callback,
-        f"✨ <b>{addon['name']}</b>\n\n"
+        f"✨ <b>{h(addon['name'])}</b>\n\n"
         f"💰 Цена: {_price_fmt(addon['price'])} сум\n"
         f"📌 Статус: {status}",
         addon_detail_keyboard(addon),
@@ -528,6 +535,7 @@ async def cb_addon_toggle(callback: CallbackQuery):
     if not addon:
         await callback.answer("Опция не найдена.", show_alert=True)
         return
+    await callback.answer()  # ранний ack
     await log_admin_action(
         admin_id=callback.from_user.id,
         action="toggle_addon",
@@ -540,9 +548,9 @@ async def cb_addon_toggle(callback: CallbackQuery):
     service = await get_service_by_id(addon["service_id"])
     await edit_panel_with_callback(
         callback,
-        f"✨ <b>Доп. опции: {service['name']}</b>\n\n"
+        f"✨ <b>Доп. опции: {h(service['name'])}</b>\n\n"
         + (("\n".join(
-            f"{'🟢' if a['is_active'] else '🔴'} {a['name']} — {_price_fmt(a['price'])} сум"
+            f"{'🟢' if a['is_active'] else '🔴'} {h(a['name'])} — {_price_fmt(a['price'])} сум"
             for a in addons
         )) if addons else "Нет опций"),
         addon_manage_keyboard(addons, addon["service_id"]),
@@ -565,6 +573,7 @@ async def cb_addon_delete(callback: CallbackQuery):
     if not addon:
         await callback.answer("Опция не найдена.", show_alert=True)
         return
+    await callback.answer()  # ранний ack
     service_id = addon["service_id"]
     await delete_addon(addon_id)
     await log_admin_action(
@@ -578,9 +587,9 @@ async def cb_addon_delete(callback: CallbackQuery):
     service = await get_service_by_id(service_id)
     await edit_panel_with_callback(
         callback,
-        f"✨ <b>Доп. опции: {service['name']}</b>\n\n"
+        f"✨ <b>Доп. опции: {h(service['name'])}</b>\n\n"
         + (("\n".join(
-            f"{'🟢' if a['is_active'] else '🔴'} {a['name']} — {_price_fmt(a['price'])} сум"
+            f"{'🟢' if a['is_active'] else '🔴'} {h(a['name'])} — {_price_fmt(a['price'])} сум"
             for a in addons
         )) if addons else "Нет опций"),
         addon_manage_keyboard(addons, service_id),
@@ -663,10 +672,10 @@ async def msg_addon_add_price(message: Message, state: FSMContext):
     service = await get_service_by_id(service_id)
     await edit_panel(
         message.bot, message.chat.id,
-        f"✅ Опция добавлена: {data['addon_name']}\n\n"
-        f"✨ <b>Доп. опции: {service['name']}</b>\n\n"
+        f"✅ Опция добавлена: {h(data['addon_name'])}\n\n"
+        f"✨ <b>Доп. опции: {h(service['name'])}</b>\n\n"
         + (("\n".join(
-            f"{'🟢' if a['is_active'] else '🔴'} {a['name']} — {_price_fmt(a['price'])} сум"
+            f"{'🟢' if a['is_active'] else '🔴'} {h(a['name'])} — {_price_fmt(a['price'])} сум"
             for a in addons
         )) if addons else "Нет опций"),
         addon_manage_keyboard(addons, service_id),
