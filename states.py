@@ -39,7 +39,6 @@ class AdminStates(StatesGroup):
     reschedule_pick_time = State()
 
     # Настройки
-    settings_edit_slot_step = State()
     settings_edit_contact = State()  # @handle / телефон / ссылка для клиентов
     settings_edit_name = State()     # название салона (для QR-плакатов)
 

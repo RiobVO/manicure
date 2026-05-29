@@ -213,10 +213,8 @@ async def _render_history_b_style(
             )
         if len(past) > _HISTORY_PAST_LIMIT:
             more = len(past) - _HISTORY_PAST_LIMIT
-            more_ru = f"… и ещё {more}"
-            more_uz = f"… yana {more} ta"
             lines.append("")
-            lines.append(more_uz if lang == "uz" else more_ru)
+            lines.append(t("history_more_count", lang, more=more))
 
     # Совсем пусто — но сюда по идее не приходим: caller отсекает до вызова.
     if not nearest and not rest_upcoming and not past_shown:
@@ -328,8 +326,7 @@ async def cb_my_appt_detail(callback: CallbackQuery):
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        not_found = "Yozilish topilmadi." if lang == "uz" else "Запись не найдена."
-        await callback.answer(not_found, show_alert=True)
+        await callback.answer(t("appt_not_found_short", lang), show_alert=True)
         return
 
     emoji = _STATUS_EMOJI.get(appt["status"], "•")
@@ -413,8 +410,7 @@ async def cb_my_appt_cancel(callback: CallbackQuery):
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        not_found = "Yozilish topilmadi." if lang == "uz" else "Запись не найдена."
-        await callback.answer(not_found, show_alert=True)
+        await callback.answer(t("appt_not_found_short", lang), show_alert=True)
         return
 
     # Если запись оплачена — предупреждаем про ручной возврат ДО подтверждения,
@@ -456,14 +452,12 @@ async def cb_my_appt_cancel_yes(callback: CallbackQuery):
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        not_found = "Yozilish topilmadi." if lang == "uz" else "Запись не найдена."
-        await callback.answer(not_found, show_alert=True)
+        await callback.answer(t("appt_not_found_short", lang), show_alert=True)
         return
 
-    reason_prompt = "<b>Nima bo'ldi?</b>" if lang == "uz" else "<b>Что случилось?</b>"
     try:
         await callback.message.edit_text(
-            f"{reason_prompt}\n\n"
+            f"{t('history_cancel_reason_q', lang)}\n\n"
             f"💅 <b>{h(appt['service_name'])}</b>\n"
             f"📅 {date_soft(appt['date'], lang)} · {appt['time']}",
             reply_markup=cancel_reason_keyboard(appt_id, lang),
@@ -494,9 +488,10 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     reason_label = CANCEL_REASONS[reason_key]
+    lang = await get_user_lang(user_id)
     success = await cancel_appointment_by_client(appt_id, user_id, reason=reason_label)
     if not success:
-        await callback.answer("Не удалось отменить запись.", show_alert=True)
+        await callback.answer(t("cancel_failed", lang), show_alert=True)
         return
 
     appt = await get_appointment_by_id(appt_id)
@@ -546,8 +541,6 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
         details=f"Клиент {appt['name']} отменил запись. Причина: {reason_label}",
     )
 
-    lang = await get_user_lang(callback.from_user.id)
-
     # Для оплаченных — клиенту строка про возврат (контакт салона из
     # settings.salon_contact если задан). Сабина сама вернёт деньги.
     refund_block = ""
@@ -558,20 +551,8 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
             f"{await refund_contact_line(lang)}"
         )
 
-    if lang == "uz":
-        txt = (
-            f"❌ <b>Yozilish bekor qilindi</b>\n\n"
-            f"Fikringiz o'zgarsa — biz shu yerdamiz."
-            f"{refund_block}"
-        )
-        btn = "📅 Qayta yozilish"
-    else:
-        txt = (
-            f"❌ <b>Запись отменена</b>\n\n"
-            f"Если передумаешь — мы рядом."
-            f"{refund_block}"
-        )
-        btn = "📅 Записаться снова"
+    txt = f"{t('appt_cancelled_full', lang)}{refund_block}"
+    btn = f"📅 {t('appt_book_again_btn', lang).capitalize()}"
     try:
         await callback.message.edit_text(
             txt,

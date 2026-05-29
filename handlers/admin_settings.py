@@ -1,6 +1,6 @@
 import logging
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.fsm.context import FSMContext
 
 from constants import WEEKDAYS_FULL_RU
@@ -69,46 +69,74 @@ async def cb_admin_settings(callback: CallbackQuery):
 
 
 # ─── ШАГ СЛОТОВ ──────────────────────────────────────────────────────────────
+# Допустимых значений всего четыре — даём четыре кнопки вместо текстового
+# ввода. Текущее значение помечаем «✓», чтобы было видно с первого взгляда.
+
+def _slot_step_keyboard(current: int) -> InlineKeyboardMarkup:
+    row: list[InlineKeyboardButton] = []
+    for value in sorted(VALID_SLOT_STEPS):
+        label = f"{value} мин ✓" if value == current else f"{value} мин"
+        row.append(InlineKeyboardButton(
+            text=label,
+            callback_data=f"slot_step_set_{value}",
+        ))
+    return InlineKeyboardMarkup(inline_keyboard=[
+        row,
+        [InlineKeyboardButton(text="↩️ Назад", callback_data="admin_settings")],
+    ])
+
 
 @router.callback_query(F.data == "settings_edit_step")
 async def cb_settings_edit_step(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await state.clear()
+    settings = await get_all_settings()
+    try:
+        current = int(settings.get("slot_step", 30))
+    except (TypeError, ValueError):
+        current = 30
     await edit_panel_with_callback(
         callback,
-        f"⏱ Введите шаг слотов в минутах.\nДопустимые значения: {', '.join(str(s) for s in sorted(VALID_SLOT_STEPS))}",
-        admin_cancel_keyboard(),
+        (
+            "⏱ <b>Шаг слотов</b>\n\n"
+            f"Сейчас: <b>{current} мин</b>\n\n"
+            "Сколько минут между записями? Чем меньше шаг — тем точнее "
+            "клиент подберёт удобное время, но больше «дробных» окон в дне."
+        ),
+        _slot_step_keyboard(current),
+        parse_mode="HTML",
     )
-    await state.set_state(AdminStates.settings_edit_slot_step)
     await callback.answer()
 
 
-@router.message(AdminStates.settings_edit_slot_step)
-async def msg_settings_slot_step(message: Message, state: FSMContext):
-    if not is_admin_message(message):
-        await state.clear()
+@router.callback_query(F.data.startswith("slot_step_set_"))
+async def cb_slot_step_set(callback: CallbackQuery):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "slot_step_set", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
         return
     try:
-        await message.delete()
-    except Exception:
-        pass
-    try:
-        value = int(message.text.strip())
-        if value not in VALID_SLOT_STEPS:
-            raise ValueError
-    except (ValueError, AttributeError):
-        await edit_panel(
-            message.bot, message.chat.id,
-            f"⚠️ Допустимые значения: {', '.join(str(s) for s in sorted(VALID_SLOT_STEPS))}",
-            admin_cancel_keyboard(),
-        )
+        value = int(parts[0])
+    except ValueError:
+        await callback.answer()
         return
-
+    # Whitelist: callback извне, защищаемся от подделанной строки.
+    if value not in VALID_SLOT_STEPS:
+        logger.warning("cb_slot_step_set: bad value=%r", value)
+        await callback.answer()
+        return
     await set_setting("slot_step", str(value))
-    await state.clear()
+    await callback.answer(f"✅ Шаг: {value} мин")
     settings = await get_all_settings()
-    await edit_panel(message.bot, message.chat.id, "⚙️ Настройки графика работы:", settings_keyboard(settings))
+    await edit_panel_with_callback(
+        callback, "⚙️ Настройки графика работы:", settings_keyboard(settings),
+    )
 
 
 # ─── КОНТАКТ ДЛЯ КЛИЕНТОВ ────────────────────────────────────────────────────

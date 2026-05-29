@@ -586,6 +586,23 @@ async def cb_appt_mark_paid(callback: CallbackQuery):
 
 # ─── ПЕРЕНОС ЗАПИСИ ──────────────────────────────────────────────────────────
 
+def _reschedule_header(appt: dict, master_name: str | None) -> str:
+    """Шапка экранов переноса — клиент + услуга + мастер.
+    Без неё админ кликает «🔄 Перенести» и видит только календарь —
+    непонятно чью именно запись двигаешь, особенно при ≥2 мастерах."""
+    master_line = (
+        f"\n👨‍🎨 Мастер: <b>{h(master_name)}</b>"
+        if master_name else ""
+    )
+    return (
+        f"🔄 <b>Перенос записи</b>\n\n"
+        f"👤 {h(appt['name'])}\n"
+        f"💅 {h(appt['service_name'])}"
+        f"{master_line}\n\n"
+        f"📅 Сейчас: {appt['date']} в {appt['time']}"
+    )
+
+
 @router.callback_query(F.data.startswith("appt_reschedule_"))
 async def cb_appt_reschedule(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
@@ -598,9 +615,25 @@ async def cb_appt_reschedule(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
     appt_id = int(parts[0])
-    await state.set_state(AdminStates.reschedule_pick_date)
+    appt = await get_appointment_by_id(appt_id)
+    if not appt:
+        await callback.answer("Запись не найдена.", show_alert=True)
+        return
 
-    await edit_panel_with_callback(callback, "🔄 Выберите новую дату для переноса:", reschedule_dates_keyboard(appt_id))
+    master_name: str | None = None
+    if appt.get("master_id"):
+        m = await get_master(appt["master_id"])
+        if m:
+            master_name = m["name"]
+
+    await state.set_state(AdminStates.reschedule_pick_date)
+    await edit_panel_with_callback(
+        callback,
+        f"{_reschedule_header(appt, master_name)}\n\n"
+        f"<b>Выберите новую дату:</b>",
+        reschedule_dates_keyboard(appt_id),
+        parse_mode="HTML",
+    )
     await callback.answer()
 
 
@@ -663,10 +696,19 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
         await callback.answer("На этот день нет свободных слотов.", show_alert=True)
         return
 
+    master_name: str | None = None
+    if master_id:
+        m = await get_master(master_id)
+        if m:
+            master_name = m["name"]
+
     await edit_panel_with_callback(
         callback,
-        f"🔄 Перенос на {date_str}\nВыберите время:",
+        f"{_reschedule_header(appt, master_name)}\n\n"
+        f"<b>Новая дата:</b> {date_str}\n"
+        f"<b>Выберите время:</b>",
         reschedule_times_keyboard(appt_id, date_str, free_slots),
+        parse_mode="HTML",
     )
     await state.set_state(AdminStates.reschedule_pick_time)
     await callback.answer()
