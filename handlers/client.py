@@ -1288,11 +1288,10 @@ async def ex_master_button(message: Message, state: FSMContext):
 async def fallback_message(message: Message, state: FSMContext):
     if await state.get_state() is not None:
         return
-    # Неизвестные slash-команды от админа/мастера молча игнорим: иначе любой
-    # опечатанный /foobar показывает им клиентский каталог услуг.
-    text = (message.text or "").strip()
-    if text.startswith("/") and (
-        is_admin(message.from_user.id) or is_master(message.from_user.id)
-    ):
+    # Любой текст (slash-команда или просто фраза) от админа/мастера молча
+    # игнорим: иначе после завершения admin-FSM (например, добавил аддон → state
+    # сбросился) случайный «ага» в чат показывает им клиентский каталог услуг
+    # с reply-клавиатурой клиента — UX-конфуз, выглядит как баг роли.
+    if is_admin(message.from_user.id) or is_master(message.from_user.id):
         return
     await _send_category_picker(message, state)
