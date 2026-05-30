@@ -14,17 +14,16 @@ from db import (
     get_all_future_appointments, get_recent_clients, _price_fmt,
     get_all_masters,
 )
-from db.stats import get_home_counters
 from keyboards.inline import (
     day_view_keyboard, calendar_keyboard,
     services_list_keyboard, settings_keyboard,
     blocks_list_keyboard, all_appointments_keyboard, clients_menu_keyboard,
-    admin_masters_keyboard, admin_reply_keyboard, admin_home_keyboard,
+    admin_masters_keyboard, admin_reply_keyboard,
 )
 from utils.admin import is_admin, is_admin_callback, deny_access, IsAdminFilter
 from utils.panel import (
     get_panel_msg_id, set_panel_msg_id, clear_panel_msg_id, get_panel_lock,
-    delete_in_bg, set_reply_kb, edit_panel,
+    delete_in_bg, set_reply_kb,
 )
 
 logger = logging.getLogger(__name__)
@@ -238,53 +237,6 @@ async def cb_admin_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer("Отменено")
 
 
-def _render_admin_home_text(counters: dict) -> str:
-    """Текст главного экрана админ-панели — заголовок + сводка с цифрами.
-    Кнопки рендерятся отдельно через admin_home_keyboard().
-
-    На пустой БД (нули в counters) показываем приглашение к настройке —
-    чтобы новый владелец не видел «👑 Панель» с пустым подзаголовком.
-    """
-    today = counters.get("today_count", 0)
-    upcoming = counters.get("upcoming_count", 0)
-    rev_avg = counters.get("reviews_avg", 0.0) or 0.0
-    rev_count = counters.get("reviews_count", 0)
-    masters = counters.get("masters_count", 0)
-
-    head = "👑 <b>Панель администратора</b>"
-
-    # Пусто — салон только что развернули. Не сыпать нулями, дать понять что
-    # нужно начать с мастеров и услуг.
-    if today == 0 and upcoming == 0 and masters == 0:
-        body = "\n\nСалон только настраивается. Добавь мастеров и услуги — клиенты подтянутся."
-        return head + body
-
-    parts = []
-    if today or upcoming:
-        parts.append(f"🕐 Сегодня: <b>{today}</b> · 📒 Грядёт: <b>{upcoming}</b>")
-    if rev_count:
-        parts.append(f"⭐ <b>{rev_avg}</b> ({rev_count} отзывов)")
-
-    if parts:
-        return head + "\n\n" + "\n".join(parts)
-    return head
-
-
-async def _show_admin_home_panel(bot, chat_id: int) -> None:
-    """Рендер главного экрана через edit_panel. Защищён от падений: если
-    счётчики или клавиатура упадут — бот покажет минималистичный заголовок,
-    но не выкинет 500-ку администратору в чат."""
-    try:
-        counters = await get_home_counters()
-        text = _render_admin_home_text(counters)
-        kb = admin_home_keyboard(counters)
-    except Exception:
-        logger.exception("admin home render failed; fallback на минимальный экран")
-        text = "👑 <b>Панель администратора</b>"
-        kb = None
-    await edit_panel(bot, chat_id, text, kb, parse_mode="HTML")
-
-
 @router.message(StateFilter("*"), F.text.regexp(r"^/start(?:\s|$)"))
 async def admin_cmd_start(message: Message, state: FSMContext):
     """
@@ -292,49 +244,18 @@ async def admin_cmd_start(message: Message, state: FSMContext):
     Без StateFilter('*') клиентский cmd_start в client.router не дотянется —
     admin_services.msg_addon_add_name (и подобные state-message-хендлеры)
     перехватывают сообщение раньше и записывают «/start» как введённое значение.
-
-    Шлёт ДВА сообщения: reply-якорь (привязывает нижнюю клавиатуру к чату,
-    Telegram не позволяет совмещать reply и inline в одном сообщении) и
-    inline-панель с главным меню. После первого /start якорь редко мешает —
-    дальше вся навигация идёт через одну панель.
     """
     await state.clear()
-    chat_id = message.chat.id
     try:
         await message.delete()
     except TelegramBadRequest:
         pass
-
-    # 1) Reply-якорь. Сообщение нужно ИМЕННО для крепления нижней клавиатуры —
-    # Telegram не покажет reply-кнопки без сообщения с reply_markup. Текст
-    # минимальный, чтобы не дублировать заголовок панели.
-    set_reply_kb(chat_id, admin_reply_keyboard())
-    try:
-        await message.answer(
-            "👋",
-            reply_markup=admin_reply_keyboard(),
-        )
-    except TelegramBadRequest:
-        pass
-
-    # 2) Inline-панель с главным меню. Старая панель (если была) переедет
-    # внутри edit_panel: попытка edit → fallback на send + clear старого id.
-    await _show_admin_home_panel(message.bot, chat_id)
-
-
-@router.callback_query(F.data == "admin_menu")
-async def cb_admin_menu(callback: CallbackQuery, state: FSMContext):
-    """Возврат на главный экран из любого подэкрана. Используется кнопкой
-    «🏠 Меню» (которую буду точечно добавлять в подэкраны отдельным шагом)."""
-    if not is_admin_callback(callback):
-        await deny_access(callback)
-        return
-    await state.clear()
-    await _show_admin_home_panel(callback.bot, callback.message.chat.id)
-    try:
-        await callback.answer()
-    except TelegramBadRequest:
-        pass
+    set_reply_kb(message.chat.id, admin_reply_keyboard())
+    await message.answer(
+        "👑 <b>Панель администратора</b>",
+        reply_markup=admin_reply_keyboard(),
+        parse_mode="HTML",
+    )
 
 
 @router.message(StateFilter("*"), F.text == "/cancel")

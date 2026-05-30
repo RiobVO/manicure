@@ -440,59 +440,6 @@ def admin_cancel_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
-def admin_home_keyboard(counters: dict | None = None) -> InlineKeyboardMarkup:
-    """
-    Главное inline-меню админ-панели. Группировка по смыслу: расписание,
-    каталог, финансы, маркетинг, настройки.
-
-    Бейджи (счётчики «· N») берутся из get_home_counters() — если не
-    переданы или ноль, кнопка рендерится без числа. Так home выглядит
-    одинаково и на пустой БД (нечего показывать) и на «живой».
-
-    Все callback_data — существующие хендлеры, ничего нового не вводим:
-    admin_today, admin_cal, admin_all_appointments, admin_services,
-    admin_masters, admin_stats, admin_export, traffic_list, admin_settings,
-    admin_blocks. Это сознательно: новый экран ничего не ломает в навигации,
-    клик по любой кнопке ведёт в уже протестированный код.
-    """
-    c = counters or {}
-
-    def _badge(value: int) -> str:
-        return f" · {value}" if value and value > 0 else ""
-
-    today_label = f"🕐 Сегодня{_badge(c.get('today_count', 0))}"
-    upcoming_label = f"📒 Все записи{_badge(c.get('upcoming_count', 0))}"
-    services_label = f"💅 Услуги{_badge(c.get('services_count', 0))}"
-    masters_label = f"👨‍🎨 Мастера{_badge(c.get('masters_count', 0))}"
-
-    rows = [
-        [
-            InlineKeyboardButton(text=today_label, callback_data="admin_today"),
-            InlineKeyboardButton(text="🗓 Календарь", callback_data="admin_cal"),
-        ],
-        [
-            InlineKeyboardButton(text=upcoming_label, callback_data="admin_all_appointments"),
-        ],
-        [
-            InlineKeyboardButton(text=services_label, callback_data="admin_services"),
-            InlineKeyboardButton(text=masters_label, callback_data="admin_masters"),
-        ],
-        [
-            InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats"),
-            InlineKeyboardButton(text="📥 Экспорт", callback_data="admin_export"),
-        ],
-        [
-            InlineKeyboardButton(text="📈 Источники", callback_data="traffic_list"),
-            InlineKeyboardButton(text="👥 Клиенты", callback_data="admin_clients"),
-        ],
-        [
-            InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_settings"),
-            InlineKeyboardButton(text="🚫 Блокировки", callback_data="admin_blocks"),
-        ],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
 def export_period_keyboard() -> InlineKeyboardMarkup:
     """Выбор периода для экспорта."""
     return InlineKeyboardMarkup(inline_keyboard=[
