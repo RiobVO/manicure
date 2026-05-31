@@ -16,7 +16,7 @@ from db import (
 from keyboards.inline import (
     services_list_keyboard, service_detail_keyboard, admin_cancel_keyboard,
     addon_manage_keyboard, addon_detail_keyboard,
-    admin_category_picker,
+    admin_category_picker, confirm_delete_keyboard,
 )
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
@@ -106,7 +106,15 @@ async def cb_svc_toggle(callback: CallbackQuery):
     await _show_service_detail(callback, service_id)
 
 
-@router.callback_query(F.data.startswith("svc_delete_"))
+# ─── УДАЛЕНИЕ УСЛУГИ ─────────────────────────────────────────────────────────
+# Двухшаговый flow: svc_delete_<id> → confirm-экран →
+# svc_delete_confirm_<id> реально удаляет. Если есть будущие записи —
+# alert без confirm (всё равно удалить нельзя, не пугаем диалогом).
+
+@router.callback_query(
+    F.data.startswith("svc_delete_") &
+    ~F.data.startswith("svc_delete_confirm_")
+)
 async def cb_svc_delete(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
@@ -118,6 +126,11 @@ async def cb_svc_delete(callback: CallbackQuery):
         return
     service_id = int(parts[0])
 
+    service = await get_service_by_id(service_id)
+    if not service:
+        await callback.answer("Эта услуга больше не доступна.", show_alert=True)
+        return
+
     if await service_has_future_appointments(service_id):
         await callback.answer(
             "На эту услугу записаны клиенты — удалить нельзя. "
@@ -127,19 +140,62 @@ async def cb_svc_delete(callback: CallbackQuery):
         )
         return
 
-    await callback.answer()  # ранний ack
+    text = (
+        f"⚠️ Удалить услугу <b>{h(service['name'])}</b>?\n\n"
+        f"Будущих записей нет. История прошлых записей сохранится, "
+        f"но услуга исчезнет из каталога. Отменить будет нельзя."
+    )
+    await edit_panel_with_callback(
+        callback, text,
+        confirm_delete_keyboard(
+            yes_callback=f"svc_delete_confirm_{service_id}",
+            back_callback=f"svc_detail_{service_id}",
+        ),
+        parse_mode="HTML",
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("svc_delete_confirm_"))
+async def cb_svc_delete_confirm(callback: CallbackQuery):
+    """Подтверждение — реально удаляем услугу."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "svc_delete_confirm", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    service_id = int(parts[0])
+
     service = await get_service_by_id(service_id)
-    await delete_service(service_id)
+    if not service:
+        await callback.answer("Эта услуга больше не доступна.", show_alert=True)
+        await _show_services(callback)
+        return
 
-    if service:
-        await log_admin_action(
-            admin_id=callback.from_user.id,
-            action="delete_service",
-            target_type="service",
-            target_id=service_id,
-            details=service["name"],
+    # Гонка: между confirm и yes-кликом могла появиться запись.
+    if await service_has_future_appointments(service_id):
+        await callback.answer(
+            "За это время на услугу записались клиенты — удалить уже нельзя.",
+            show_alert=True,
         )
+        await _show_services(callback)
+        return
 
+    await callback.answer()
+    await delete_service(service_id)
+    await log_admin_action(
+        admin_id=callback.from_user.id,
+        action="delete_service",
+        target_type="service",
+        target_id=service_id,
+        details=service["name"],
+    )
     await _show_services(callback)
 
 
@@ -560,12 +616,55 @@ async def cb_addon_toggle(callback: CallbackQuery):
     )
 
 
-@router.callback_query(F.data.startswith("addon_delete_"))
+# ─── УДАЛЕНИЕ АДДОНА ────────────────────────────────────────────────────────
+# Аддоны можно удалять всегда (FK appointment_addons → cascade на сервере),
+# но всё равно через confirm — симметрично остальным удалениям.
+
+@router.callback_query(
+    F.data.startswith("addon_delete_") &
+    ~F.data.startswith("addon_delete_confirm_")
+)
 async def cb_addon_delete(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
     parts = parse_callback(callback.data, "addon_delete", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    addon_id = int(parts[0])
+    addon = await get_addon_by_id(addon_id)
+    if not addon:
+        await callback.answer("Этой опции больше нет.", show_alert=True)
+        return
+
+    text = (
+        f"⚠️ Удалить опцию <b>{h(addon['name'])}</b>?\n\n"
+        f"Опция исчезнет из карточки услуги. "
+        f"Клиенты, которые её уже выбрали в прошлых записях, не пострадают."
+    )
+    await edit_panel_with_callback(
+        callback, text,
+        confirm_delete_keyboard(
+            yes_callback=f"addon_delete_confirm_{addon_id}",
+            back_callback=f"addon_detail_{addon_id}",
+        ),
+        parse_mode="HTML",
+    )
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
+
+@router.callback_query(F.data.startswith("addon_delete_confirm_"))
+async def cb_addon_delete_confirm(callback: CallbackQuery):
+    """Реальное удаление опции — после confirm-экрана."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "addon_delete_confirm", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()

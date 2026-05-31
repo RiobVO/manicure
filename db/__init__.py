@@ -76,6 +76,7 @@ from db.masters import (
     delete_master_day_off,
     get_future_master_day_offs,
     count_master_scheduled_on_date,
+    count_master_appointments_total,
 )
 
 # --- clients ---
