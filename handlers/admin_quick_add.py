@@ -48,7 +48,7 @@ from utils.admin import (
     IsAdminFilter, deny_access, is_admin_callback, is_admin_message,
 )
 from utils.callbacks import parse_callback
-from utils.notifications import broadcast_to_admins, notify_master
+from utils.notifications import admin_dismiss_kb, broadcast_to_admins, notify_master
 from utils.panel import edit_panel, edit_panel_with_callback
 from utils.slots import generate_free_slots
 from utils.ui import h
@@ -435,10 +435,15 @@ async def cb_qadd_pick_time(callback: CallbackQuery, state: FSMContext):
 
     data = await state.get_data()
     date_str = data["date"]
+    phone_line = (
+        f"\n📞 {h(data['phone'])}"
+        if data.get("phone") and data["phone"] != "—"
+        else "\n<i>📞 без телефона — напоминания не уйдут</i>"
+    )
     text = (
         f"<b>Записать?</b>\n\n"
-        f"👤 {h(data['name'])}\n"
-        f"📞 {h(data['phone'])}\n"
+        f"👤 {h(data['name'])}"
+        f"{phone_line}\n"
         f"💅 {h(data['service_name'])} · {data['service_price']:,} сум"
         .replace(",", " ") +
         f" · {data['service_duration']} мин\n"
@@ -467,9 +472,15 @@ async def cb_qadd_confirm(callback: CallbackQuery, state: FSMContext):
     date_str = data["date"]
     admin_id = callback.from_user.id
 
+    # user_id=0 для ручных записей — это sentinel «нет реального telegram-клиента».
+    # Если поставить admin_id, то при пометке записи 'completed' бот пришлёт
+    # ему же запрос на отзыв («оцените визит»), напоминания за 24ч/2ч тоже
+    # уйдут админу (он же и user_id записи). 0 — невалидный telegram chat_id,
+    # send_message(0, …) молча отвалится TelegramBadRequest, который везде
+    # ловится try/except. Поле в схеме INTEGER NOT NULL, 0 проходит.
     try:
         appt_id = await create_appointment(
-            user_id=admin_id,  # NOT NULL поле, ставим id записавшего админа
+            user_id=0,
             name=data["name"],
             phone=data["phone"],
             service_id=data["service_id"],
@@ -526,17 +537,19 @@ async def cb_qadd_confirm(callback: CallbackQuery, state: FSMContext):
         except Exception:
             logger.warning("qadd: notify_master failed", exc_info=True)
 
-    # Бродкаст всем админам — пусть владельцу прилетит «копия» в канал
-    # уведомлений, если он добавлен в ERROR_CHAT_ID/основной чат отдельно.
-    # Тот, кто записал, всё равно получит — это ок для аудита (заметка про
-    # «куда делась запись» если потом списали кому-то другому).
+    # Бродкаст всем админам — для ауди­та. Тот, кто записал, тоже получит
+    # копию (admin_dismiss_kb позволяет убрать одним кликом).
+    # Строку телефона показываем только если он реально введён —
+    # «📞 —» выглядит как недоделка, лучше просто пропустить строку.
+    phone_line = f"\n📞 {h(data['phone'])}" if data.get("phone") and data["phone"] != "—" else ""
     try:
         await broadcast_to_admins(
             callback.bot,
             f"➕ <b>Запись создана вручную</b>\n"
             f"{date_str} в <b>{data['time']}</b>\n"
-            f"💅 {h(data['service_name'])} — {h(data['name'])}\n"
-            f"📞 {h(data['phone'])}",
+            f"💅 {h(data['service_name'])} — {h(data['name'])}"
+            f"{phone_line}",
+            reply_markup=admin_dismiss_kb(),
             log_context="qadd notify",
         )
     except Exception:
