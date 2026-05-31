@@ -341,11 +341,12 @@ async def cb_appt_cancel(callback: CallbackQuery):
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
     if not appt:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer("Эта запись больше не существует — возможно, её отменили.", show_alert=True)
         return
 
     text = (
-        f"❓ Отменить запись?\n\n"
+        f"Отменить эту запись?\n"
+        f"Клиент получит уведомление об отмене.\n\n"
         f"👤 {appt['name']}\n"
         f"📅 {appt['date']} в {appt['time']}\n"
         f"💅 {appt['service_name']}"
@@ -368,7 +369,7 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
     if not appt:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer("Эта запись больше не существует — возможно, её отменили.", show_alert=True)
         return
 
     # Критичный путь: обновить БД + UI админа. Всё что касается
@@ -401,7 +402,7 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
             f"Сумма: {price:,} UZS\n".replace(",", " ") +
             f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
             f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>\n\n"
-            f"<i>сделай возврат вручную в дашборде провайдера.</i>"
+            f"<i>Возврат денег нужно сделать вручную в кабинете провайдера — у бота нет API для refund.</i>"
         )
         _fire(
             broadcast_to_admins(
@@ -529,7 +530,7 @@ async def cb_appt_mark_paid(callback: CallbackQuery):
     from db.payments import mark_paid_manual, get_payment_state
     ok = await mark_paid_manual(appt_id)
     if not ok:
-        await callback.answer("Запись уже оплачена или не найдена.", show_alert=True)
+        await callback.answer("Эта запись уже оплачена либо больше не существует.", show_alert=True)
         return
 
     # Удалить pay-сообщение у клиента — та же логика что в webhook _notify_paid:
@@ -559,7 +560,7 @@ async def cb_appt_mark_paid(callback: CallbackQuery):
     except Exception:
         logger.warning("не удалось записать лог ручной оплаты appt=%s", appt_id)
 
-    await callback.answer("✅ Помечено оплаченной", show_alert=False)
+    await callback.answer("✅ Записано как оплаченная", show_alert=False)
 
     # Обновляем карточку — перерисовываем с новым pill'ом.
     appt = await get_appointment_by_id(appt_id)
@@ -617,7 +618,7 @@ async def cb_appt_reschedule(callback: CallbackQuery, state: FSMContext):
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
     if not appt:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer("Эта запись больше не существует — возможно, её отменили.", show_alert=True)
         return
 
     master_name: str | None = None
@@ -653,7 +654,7 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
 
     appt = await get_appointment_by_id(appt_id)
     if not appt:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer("Эта запись больше не существует — возможно, её отменили.", show_alert=True)
         await state.clear()
         return
 
@@ -665,7 +666,7 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
     if master_id:
         day_sched = await get_day_schedule_for_master(master_id, date_str)
         if day_sched is None:
-            await callback.answer("Этот день — выходной или заблокирован.", show_alert=True)
+            await callback.answer("Этот день — выходной или полностью заблокирован.", show_alert=True)
             return
     else:
         if await is_day_off(date_str):
@@ -673,7 +674,7 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
             return
         day_sched = await get_day_schedule(date_str)
         if day_sched is None:
-            await callback.answer("Салон не работает в этот день недели.", show_alert=True)
+            await callback.answer("Салон в этот день недели не работает. Выберите другую дату.", show_alert=True)
             return
 
     # day_sched гарантированно не-None (выходные отсечены выше).
@@ -693,7 +694,7 @@ async def cb_reschedule_date(callback: CallbackQuery, state: FSMContext):
     )
 
     if not free_slots:
-        await callback.answer("На этот день нет свободных слотов.", show_alert=True)
+        await callback.answer("На этот день свободных слотов нет. Выберите другую дату.", show_alert=True)
         return
 
     master_name: str | None = None
@@ -731,7 +732,7 @@ async def cb_reschedule_time(callback: CallbackQuery, state: FSMContext):
 
     appt = await get_appointment_by_id(appt_id)
     if not appt:
-        await callback.answer("Запись не найдена.", show_alert=True)
+        await callback.answer("Эта запись больше не существует — возможно, её отменили.", show_alert=True)
         await state.clear()
         return
 
@@ -742,7 +743,7 @@ async def cb_reschedule_time(callback: CallbackQuery, state: FSMContext):
             master_id=appt.get("master_id"),
         )
     except ValueError:
-        await callback.answer("⚠️ Этот слот уже занят!", show_alert=True)
+        await callback.answer("⚠️ Этот слот только что заняли. Выберите другое время.", show_alert=True)
         return
 
     await log_admin_action(

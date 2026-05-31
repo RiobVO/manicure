@@ -49,7 +49,7 @@ async def _show_services(callback: CallbackQuery):
 async def _show_service_detail(callback: CallbackQuery, service_id: int):
     service = await get_service_by_id(service_id)
     if not service:
-        await callback.answer("Услуга не найдена.", show_alert=True)
+        await callback.answer("Эта услуга больше не доступна.", show_alert=True)
         return
     await edit_panel_with_callback(callback, _service_text(service), service_detail_keyboard(service))
 
@@ -120,7 +120,9 @@ async def cb_svc_delete(callback: CallbackQuery):
 
     if await service_has_future_appointments(service_id):
         await callback.answer(
-            "Нельзя удалить: есть будущие записи на эту услугу.",
+            "На эту услугу записаны клиенты — удалить нельзя. "
+            "Деактивируй: новые клиенты услугу не увидят, "
+            "а уже записанные останутся в расписании.",
             show_alert=True
         )
         return
@@ -475,7 +477,7 @@ async def cb_svc_addons(callback: CallbackQuery):
     service_id = int(parts[0])
     service = await get_service_by_id(service_id)
     if not service:
-        await callback.answer("Услуга не найдена.", show_alert=True)
+        await callback.answer("Эта услуга больше не доступна.", show_alert=True)
         return
     await callback.answer()  # ранний ack
     addons = await get_addons_for_service(service_id, active_only=False)
@@ -505,7 +507,7 @@ async def cb_addon_detail(callback: CallbackQuery):
     addon_id = int(parts[0])
     addon = await get_addon_by_id(addon_id)
     if not addon:
-        await callback.answer("Опция не найдена.", show_alert=True)
+        await callback.answer("Этой опции больше нет.", show_alert=True)
         return
     await callback.answer()  # ранний ack
     status = "🟢 Активна" if addon["is_active"] else "🔴 Неактивна"
@@ -533,7 +535,7 @@ async def cb_addon_toggle(callback: CallbackQuery):
     await toggle_addon_active(addon_id)
     addon = await get_addon_by_id(addon_id)
     if not addon:
-        await callback.answer("Опция не найдена.", show_alert=True)
+        await callback.answer("Этой опции больше нет.", show_alert=True)
         return
     await callback.answer()  # ранний ack
     await log_admin_action(
@@ -571,7 +573,7 @@ async def cb_addon_delete(callback: CallbackQuery):
     addon_id = int(parts[0])
     addon = await get_addon_by_id(addon_id)
     if not addon:
-        await callback.answer("Опция не найдена.", show_alert=True)
+        await callback.answer("Этой опции больше нет.", show_alert=True)
         return
     await callback.answer()  # ранний ack
     service_id = addon["service_id"]

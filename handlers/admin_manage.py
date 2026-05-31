@@ -116,7 +116,7 @@ async def cmd_remove_admin(message: Message):
         return
 
     if user_id in ADMIN_IDS:
-        await message.answer("🚫 Нельзя удалить владельца (из .env).")
+        await message.answer("🚫 Владельца из .env удалить нельзя — это защита от случайной потери доступа.")
         return
 
     removed = await remove_admin(user_id)
