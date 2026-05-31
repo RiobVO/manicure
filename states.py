@@ -76,6 +76,24 @@ class AdminStates(StatesGroup):
     traffic_source_add_label = State()
 
 
+class AdminQuickAddStates(StatesGroup):
+    """FSM «➕ Записать клиента» из дневного вида админ-панели.
+
+    Сценарий: владелец на стойке получил звонок «запишите Машу на 15:00» —
+    открывает «Сегодня» (или нужный день), тапает ➕, проводит клиента
+    через 5 шагов, запись попадает в БД и мастеру летит уведомление.
+
+    Все шаги — отдельные FSM-state'ы, потому что введённое сохраняется
+    через state.update_data между экранами; на ↩️ Отмена клиента возвращаем
+    на исходный день."""
+    enter_name = State()
+    enter_phone = State()
+    pick_service = State()
+    pick_master = State()
+    pick_time = State()
+    confirm = State()
+
+
 class MasterStates(StatesGroup):
     """FSM кабинета мастера — v.3 Phase 2 (self-serve записи)."""
     # Перенос своей записи: сначала дата, потом время

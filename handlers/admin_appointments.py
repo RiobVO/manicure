@@ -63,7 +63,11 @@ _ALLOWED_STATUSES = frozenset({"scheduled", "completed", "no_show", "cancelled"}
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 async def _build_day_view(date_str: str) -> tuple[str, object]:
-    """Возвращает (text, markup) для дневного вида."""
+    """Возвращает (text, markup) для дневного вида.
+
+    Даже на пустом дне отдаём клавиатуру (с кнопкой ➕ Записать клиента) —
+    чтобы владелец мог вручную записать на любой день одним тапом, не
+    выходя в другие меню. day_view_keyboard всегда добавляет ➕ в шапку."""
     all_appts = await get_appointments_by_date_full(date_str)
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
@@ -72,7 +76,7 @@ async def _build_day_view(date_str: str) -> tuple[str, object]:
         label = date_str
 
     if not all_appts:
-        return f"📭 На {label} записей нет.", None
+        return f"📭 На {label} записей нет.", day_view_keyboard([], date_str)
 
     scheduled = [a for a in all_appts if a["status"] == "scheduled"]
     archived  = [a for a in all_appts if a["status"] != "scheduled"]
