@@ -94,7 +94,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     # ─── 3. Booking flow ───────────────────────────────────────────────────
     "book_no_services": {
-        "ru": "Пока нет доступных услуг. Скоро вернёмся.",
+        "ru": "Пока услуг нет. Заглядывай позже — появятся.",
         "uz": "Hozircha xizmatlar yo'q. Tez orada qaytamiz.",
     },
     "book_category_prompt": {
@@ -138,15 +138,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "tayyor",
     },
     "book_ask_name": {
-        "ru": "<b>Как вас зовут?</b>",
+        "ru": "<b>Как тебя зовут?</b>",
         "uz": "<b>Ismingizni ayting</b>",
     },
     "book_name_too_short": {
-        "ru": "Имя коротковато. 2–64 символа, только буквы и пробелы.",
+        "ru": "Имя коротковато. От 2 до 64 символов, только буквы и пробелы — попробуй ещё раз.",
         "uz": "Ism juda qisqa. 2–64 belgi, faqat harflar va probel.",
     },
     "book_ask_phone": {
-        "ru": "📱 <b>Поделитесь номером</b>\nКнопкой ниже или текстом.",
+        "ru": "📱 <b>Поделись номером</b>\nКнопкой ниже или просто пришли текстом.",
         "uz": "📱 <b>Telefon raqamingizni ulashing</b>\nPastdagi tugma yoki matn orqali.",
     },
     "book_phone_share_btn": {
@@ -154,11 +154,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "📱 Raqamni ulashish",
     },
     "book_phone_invalid": {
-        "ru": "Непохоже на телефон. Пришлите ещё раз.",
+        "ru": "Не похоже на телефон. Попробуй ещё раз.",
         "uz": "Telefon raqamiga o'xshamaydi. Qayta yuboring.",
     },
     "book_confirm_header": {
-        "ru": "<b>Проверьте данные</b>",
+        "ru": "<b>Проверь данные</b>",
         "uz": "<b>Ma'lumotlarni tekshiring</b>",
     },
     "book_confirm_when": {"ru": "Когда:       ", "uz": "Sana:        "},
@@ -166,19 +166,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "book_confirm_duration": {"ru": "Длительность:", "uz": "Davomiyligi: "},
     "book_confirm_master": {"ru": "Мастер:      ", "uz": "Usta:        "},
     "book_service_unavailable": {
-        "ru": "услуга недоступна. начни заново: /start",
+        "ru": "Эта услуга больше не доступна. /start чтобы начать заново.",
         "uz": "xizmat mavjud emas. qayta boshlang: /start",
     },
     "book_master_unavailable": {
-        "ru": "⚠️ мастер больше недоступен.\nначни заново: /start",
+        "ru": "⚠️ Этот мастер больше не работает в это время.\n/start чтобы начать заново.",
         "uz": "⚠️ usta endi mavjud emas.\nqayta boshlang: /start",
     },
     "book_slot_taken": {
-        "ru": "⚠️ кто-то оказался быстрее. выбери другое время.",
+        "ru": "⚠️ Слот только что забрали. Выбери соседнее время.",
         "uz": "⚠️ kimdir siz bilan ayni vaqtga yozildi. boshqa vaqtni tanlang.",
     },
     "book_generic_error": {
-        "ru": "⚠️ что-то пошло не так.\nпопробуй /start.",
+        "ru": "⚠️ Что-то пошло не так. /start чтобы начать заново.",
         "uz": "⚠️ nimadir noto'g'ri ketdi.\n/start buyrug'ini yuboring.",
     },
     "book_profile_saved_question": {
@@ -198,7 +198,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "🔄 <b>TAKRORLAYMIZ</b>",
     },
     "book_repeat_appt_not_found": {
-        "ru": "Запись не найдена.",
+        "ru": "Не нашли эту запись — возможно, её уже удалили.",
         "uz": "Yozuv topilmadi.",
     },
     "book_repeat_service_inactive": {
@@ -208,7 +208,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     # ─── 4. История записей / мои записи ───────────────────────────────────
     "history_empty": {
-        "ru": "📋 <b>У вас пока нет записей</b>\n\nПервая запись — пара касаний.",
+        "ru": "📋 <b>У тебя пока нет записей</b>\n\nПервая запись — пара касаний.",
         "uz": "📋 <b>Hozircha yozuvlar yo'q</b>\n\nBirinchi yozilish — bir necha bosish.",
     },
     "history_title": {
@@ -216,7 +216,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "📋 <b>MENING YOZUVLARIM</b>",
     },
     "history_visit": {
-        "ru": "💅 <b>ВАШ ВИЗИТ</b>",
+        "ru": "💅 <b>ТВОЙ ВИЗИТ</b>",
         "uz": "💅 <b>SIZNING TASHRIFINGIZ</b>",
     },
     "history_when": {"ru": "Когда:    ", "uz": "Sana:     "},
@@ -297,11 +297,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "✅ qabul qilindi. keyingi safargacha.",
     },
     "review_not_available": {
-        "ru": "Отзыв недоступен.",
+        "ru": "Этот отзыв уже нельзя оставить.",
         "uz": "Fikr qoldirib bo'lmaydi.",
     },
     "review_already_saved": {
-        "ru": "Отзыв уже сохранён, спасибо!",
+        "ru": "Отзыв уже записан, спасибо!",
         "uz": "Fikr allaqachon saqlangan, rahmat!",
     },
     "review_rating_thanks": {
@@ -317,7 +317,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "🔁 Qayta yozilish",
     },
     "review_comment_input_prompt": {
-        "ru": "Напишите ваш комментарий:",
+        "ru": "Напиши свой комментарий:",
         "uz": "Fikringizni yozing:",
     },
 
@@ -354,15 +354,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     # Коротенькие общие алерты для callback'ов с напоминаний и истории.
     "cb_invalid_data": {
-        "ru": "Неверный формат данных.",
+        "ru": "Кнопка устарела. /start чтобы начать заново.",
         "uz": "Ma'lumot formati noto'g'ri.",
     },
     "appt_not_found_short": {
-        "ru": "Запись не найдена.",
+        "ru": "Этой записи больше нет — возможно, её отменили.",
         "uz": "Yozilish topilmadi.",
     },
     "cancel_failed": {
-        "ru": "Не удалось отменить запись.",
+        "ru": "Не получилось отменить — попробуй ещё раз.",
         "uz": "Yozilishni bekor qilib bo'lmadi.",
     },
     "history_more_count": {
@@ -374,7 +374,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "<b>Nima bo'ldi?</b>",
     },
     "book_confirm_no_text": {
-        "ru": "хорошо. ничего не создаём.",
+        "ru": "Ок, ничего не создаём — возвращайся когда будешь готова.",
         "uz": "yaxshi. yozilish bekor.",
     },
     "book_confirm_no_btn": {
@@ -382,11 +382,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": "← xizmatlarga",
     },
     "book_use_buttons_above": {
-        "ru": "👆 используй кнопки выше.",
+        "ru": "👆 Кнопочками сверху, так удобнее.",
         "uz": "👆 yuqoridagi tugmalardan foydalaning.",
     },
     "book_category_empty": {
-        "ru": "тут пока пусто. попробуй другую:",
+        "ru": "Здесь пока пусто. Посмотри другую категорию:",
         "uz": "bu bo'limda hali xizmatlar yo'q. boshqasini tanlang:",
     },
 
