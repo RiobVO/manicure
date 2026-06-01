@@ -20,6 +20,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 from constants import MONTHS_RU, WEEKDAYS_FULL_RU, WEEKDAYS_SHORT_RU
 from config import ADMIN_IDS
 from db import (
+    _price_fmt,
     add_master_day_off,
     count_master_scheduled_on_date,
     delete_master_day_off,
@@ -34,6 +35,12 @@ from db import (
     reschedule_appointment,
     update_appointment_status,
 )
+from db.stats import (
+    DEFAULT_PERIOD as STATS_DEFAULT_PERIOD,
+    PERIOD_DAYS as STATS_PERIOD_DAYS,
+    PERIOD_LABEL as STATS_PERIOD_LABEL,
+    get_master_personal_stats,
+)
 from keyboards.inline import (
     master_appt_actions_keyboard,
     master_back_to_schedule_keyboard,
@@ -43,6 +50,7 @@ from keyboards.inline import (
     master_rs_dates_keyboard,
     master_rs_times_keyboard,
     master_schedule_menu_keyboard,
+    master_stats_keyboard,
     master_today_list_keyboard,
     master_upcoming_list_keyboard,
 )
@@ -286,6 +294,120 @@ async def msg_schedule(message: Message, state: FSMContext) -> None:
 
     text, markup = await _render_schedule_payload(master["id"])
     await _nav(message, text, markup=markup, parse_mode="HTML")
+
+
+# ─── «📊 Моя статистика» ────────────────────────────────────────────────────
+
+def _master_stats_text(master_name: str, data: dict) -> str:
+    """Текст экрана личной статистики мастера. Дельта для completed —
+    в абсолютных числах («↑ 5 визитов» понятнее чем «↑ 13%»), для выручки —
+    в процентах. Если предыдущий период пустой, дельта не рисуется."""
+    period = data.get("period", STATS_DEFAULT_PERIOD)
+    label = STATS_PERIOD_LABEL.get(period, period)
+
+    completed = data.get("completed", 0)
+    revenue   = data.get("revenue", 0)
+    avg_check = data.get("avg_check", 0.0)
+    rating    = data.get("avg_rating") or 0.0
+    reviews_n = data.get("reviews_count", 0)
+    rank      = data.get("rank")
+    rank_total = data.get("rank_total", 0)
+
+    prev_completed = data.get("prev_completed", 0)
+    prev_revenue   = data.get("prev_revenue", 0)
+
+    # Дельта по визитам — в шт. Защита от деления-на-0 не нужна (целые).
+    completed_delta = ""
+    if prev_completed:
+        diff = completed - prev_completed
+        if diff > 0:
+            completed_delta = f"  ↑ {diff}"
+        elif diff < 0:
+            completed_delta = f"  ↓ {abs(diff)}"
+
+    # Дельта по выручке — в %. Меньше 1% = шум, не показываем.
+    revenue_delta = ""
+    if prev_revenue:
+        pct = (revenue - prev_revenue) / prev_revenue * 100
+        if abs(pct) >= 1:
+            arrow = "↑" if pct > 0 else "↓"
+            revenue_delta = f"  {arrow} {abs(pct):.0f}%"
+
+    if completed == 0:
+        # Мастер пока ничего не сделал в этом окне — не пугаем нулями.
+        return (
+            f"📊 <b>{h(master_name)} · {label}</b>\n\n"
+            f"<i>За этот период визитов пока нет.</i>\n"
+            f"Попробуй другой период ниже."
+        )
+
+    lines: list[str] = []
+    lines.append(f"📊 <b>{h(master_name)} · {label}</b>")
+    lines.append("")
+    lines.append(f"✅ Выполнено: <b>{completed}</b>{completed_delta}")
+    lines.append(f"💰 Выручка: <b>{_price_fmt(int(revenue))}</b> сум{revenue_delta}")
+    if completed:
+        lines.append(f"🧾 Средний чек: {_price_fmt(int(avg_check))} сум")
+
+    if reviews_n:
+        lines.append("")
+        lines.append(f"⭐ Рейтинг: <b>{rating}</b> ({reviews_n} отзывов)")
+
+    if rank and rank_total > 1:
+        # Подбираем «🏆 #1» только если ты реально первый, иначе нейтрально.
+        prefix = "🏆 " if rank == 1 else ""
+        lines.append("")
+        lines.append(f"{prefix}Ты <b>#{rank}</b> из {rank_total} мастеров по выручке")
+
+    return "\n".join(lines)
+
+
+async def _build_master_stats_payload(
+    master: dict, period: str,
+) -> tuple[str, InlineKeyboardMarkup]:
+    """(text, keyboard) для экрана статистики — общий код для msg и cb."""
+    if period not in STATS_PERIOD_DAYS:
+        period = STATS_DEFAULT_PERIOD
+    data = await get_master_personal_stats(master["id"], period)
+    text = _master_stats_text(master["name"], data)
+    return text, master_stats_keyboard(period)
+
+
+@router.message(StateFilter("*"), F.text == "📊 Моя статистика")
+async def msg_stats(message: Message, state: FSMContext) -> None:
+    """Reply-кнопка «📊 Моя статистика». Дефолтный период — месяц."""
+    await state.clear()
+    master = await get_master_by_user_id(message.from_user.id)
+    if master is None:
+        return
+    text, kb = await _build_master_stats_payload(master, STATS_DEFAULT_PERIOD)
+    await _nav(message, text, markup=kb, parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("mstats_period_"))
+async def cb_mstats_period(callback: CallbackQuery) -> None:
+    """Переключение периода прямо в сообщении статистики (edit_text)."""
+    parts = parse_callback(callback.data, "mstats_period", 1)
+    period = parts[0] if parts else STATS_DEFAULT_PERIOD
+
+    master = await get_master_by_user_id(callback.from_user.id)
+    if master is None:
+        try:
+            await callback.answer()
+        except TelegramBadRequest:
+            pass
+        return
+
+    text, kb = await _build_master_stats_payload(master, period)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:
+        # Сообщение устарело — тихо ack без edit, мастер тапнет ещё раз.
+        pass
+    try:
+        await callback.answer()
+    except TelegramBadRequest:
+        pass
 
 
 # ─── Self-serve day-off: callbacks ───────────────────────────────────────────
