@@ -329,6 +329,39 @@ async def cb_my_appt_detail(callback: CallbackQuery):
         await callback.answer(t("appt_not_found_short", lang), show_alert=True)
         return
 
+    # Уже отменённая запись — отдельный мягкий рендер. Без табличной
+    # сводки (мастер/цена/статус) и без кнопки «отменить» (она бы
+    # сломалась). Только заголовок, дата+время визита, причина (если
+    # есть в БД) и предложение записаться снова.
+    if appt["status"] == "cancelled":
+        when = f"{date_soft(appt['date'], lang)} · {appt['time']}"
+        lines = [
+            t("appt_already_cancelled_title", lang),
+            "",
+            t("appt_already_cancelled_was", lang, when=when),
+        ]
+        reason = (appt.get("cancel_reason") or "").strip()
+        if reason:
+            lines.append(t("appt_already_cancelled_reason", lang, reason=reason))
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text=f"📅 {t('appt_book_again_btn', lang).capitalize()}",
+                callback_data=f"quick_rebook_{appt_id}",
+            )],
+            [InlineKeyboardButton(
+                text=t("history_back_btn", lang),
+                callback_data="client_my_appointments",
+            )],
+        ])
+        try:
+            await callback.message.edit_text(
+                "\n".join(lines), reply_markup=kb, parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            pass
+        await callback.answer()
+        return
+
     emoji = _STATUS_EMOJI.get(appt["status"], "•")
     word = status_word(appt["status"], lang)
     master_name = "—"
@@ -551,7 +584,10 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
             f"{await refund_contact_line(lang)}"
         )
 
-    txt = f"{t('appt_cancelled_full', lang)}{refund_block}"
+    # Эхо причины обратно клиенту — closure после выбора reason.
+    # До B4 был просто appt_cancelled_full без подстановки — клиент не
+    # видел подтверждения что его выбор записался.
+    txt = f"{t('appt_cancelled_with_reason', lang, reason=reason_label)}{refund_block}"
     btn = f"📅 {t('appt_book_again_btn', lang).capitalize()}"
     try:
         await callback.message.edit_text(
