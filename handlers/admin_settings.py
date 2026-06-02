@@ -19,6 +19,7 @@ from keyboards.inline import (
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
 from utils.panel import edit_panel, edit_panel_with_callback
+from utils.ui import h
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -479,13 +480,15 @@ _CAT_LABEL_MAX_LEN = 30  # с запасом помещается в inline-кн
 
 
 def _categories_menu_text(cfg: dict) -> str:
-    """HTML-текст экрана «🏷 Категории услуг»."""
+    """HTML-текст экрана «🏷 Категории услуг».
+    Подписи категорий обёрнуты h() — владелец может ввести угловые скобки/амперсанды
+    в названии («<premium>», «Brows&Lashes»), без эскейпа parse_mode=HTML упадёт."""
     if cfg["use_categories"]:
         return (
             "🏷 <b>Категории услуг</b>\n\n"
             "Сейчас режим: <b>две категории</b>\n"
-            f"• Категория А: <b>{cfg['label_a']}</b>\n"
-            f"• Категория Б: <b>{cfg['label_b']}</b>\n\n"
+            f"• Категория А: <b>{h(cfg['label_a'])}</b>\n"
+            f"• Категория Б: <b>{h(cfg['label_b'])}</b>\n\n"
             "Клиент сначала выбирает категорию, потом услугу из этой категории.\n\n"
             "<i>Если у тебя салон одного типа (только депиляция, только массаж) — "
             "переключи на «плоский список», клиент будет сразу видеть все услуги.</i>"
@@ -544,7 +547,7 @@ async def cb_settings_categories_toggle(callback: CallbackQuery, state: FSMConte
 def _category_edit_prompt(which: str, current: str) -> str:
     return (
         f"✏ <b>Подпись категории {which}</b>\n\n"
-        f"Сейчас: <code>{current}</code>\n\n"
+        f"Сейчас: <code>{h(current)}</code>\n\n"
         "Пришли новую подпись одним сообщением. Можно с эмодзи в начале:\n"
         "<code>✂️ Стрижки</code>\n"
         "<code>🦷 Депиляция тела</code>\n\n"
