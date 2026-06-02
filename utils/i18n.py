@@ -145,6 +145,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "ru": "Имя коротковато. От 2 до 64 символов, только буквы и пробелы — попробуй ещё раз.",
         "uz": "Ism juda qisqa. 2–64 belgi, faqat harflar va probel.",
     },
+    "book_name_bad_chars": {
+        "ru": "В имени есть недопустимые символы (&lt;, &gt;, &amp;). Напиши, пожалуйста, без них.",
+        "uz": "Ismda taqiqlangan belgilar bor (&lt;, &gt;, &amp;). Iltimos, ularsiz yozing.",
+    },
     "book_ask_phone": {
         "ru": "📱 <b>Поделись номером</b>\nКнопкой ниже или просто пришли текстом.",
         "uz": "📱 <b>Telefon raqamingizni ulashing</b>\nPastdagi tugma yoki matn orqali.",

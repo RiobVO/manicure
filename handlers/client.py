@@ -564,7 +564,7 @@ async def choose_time(callback: CallbackQuery, state: FSMContext):
             await callback.message.edit_text(
                 f"{t('book_profile_saved_question', lang)}\n"
                 f"{DIVIDER_WHISPER}\n\n"
-                f"<b>{profile['name']}</b>  ·  <code>{profile['phone']}</code>",
+                f"<b>{h(profile['name'])}</b>  ·  <code>{h(profile['phone'])}</code>",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text=t("book_profile_use_saved", lang), callback_data="use_saved_profile")],
                     [InlineKeyboardButton(text=t("book_profile_new", lang), callback_data="change_profile")],
@@ -678,6 +678,11 @@ async def get_name(message: Message, state: FSMContext):
             or name.lower() in _RESERVED_NAMES or name.lower() in _RESERVED_NAMES_UZ
             or name.startswith("/")):
         await message.answer(t("book_name_too_short", lang), parse_mode="HTML")
+        return
+    # Защита от поломки parse_mode=HTML в downstream-рендерах (админ, мастер,
+    # напоминания). Цифры/латиница/кириллица не страдают, только спецсимволы.
+    if any(ch in name for ch in ("<", ">", "&")):
+        await message.answer(t("book_name_bad_chars", lang), parse_mode="HTML")
         return
     await state.update_data(name=name)
     try:
