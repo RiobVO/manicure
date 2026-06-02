@@ -63,10 +63,12 @@ def category_keyboard(
         else:
             label_a = label_a or "💅 Маникюр"
             label_b = label_b or "🦶 Педикюр"
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=label_a, callback_data="cat_hands"),
-        InlineKeyboardButton(text=label_b, callback_data="cat_feet"),
-    ]])
+    # По одной кнопке на ряд: длинные ярлыки не режутся на узких экранах,
+    # тап-зона крупнее, визуально просторнее.
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=label_a, callback_data="cat_hands")],
+        [InlineKeyboardButton(text=label_b, callback_data="cat_feet")],
+    ])
 
 
 def admin_category_picker(
