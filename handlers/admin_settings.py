@@ -5,11 +5,16 @@ from aiogram.fsm.context import FSMContext
 
 from constants import WEEKDAYS_FULL_RU
 from states import AdminStates
-from db import get_all_settings, set_setting, get_weekly_schedule, update_weekday_schedule
+from db import (
+    get_all_settings, set_setting,
+    get_weekly_schedule, update_weekday_schedule,
+    get_categories_config,
+)
 from db.connection import get_db
 from keyboards.inline import (
     settings_keyboard, admin_cancel_keyboard,
     weekly_schedule_keyboard, weekday_detail_keyboard,
+    categories_menu_keyboard,
 )
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
@@ -464,3 +469,163 @@ async def msg_sched_edit_end(message: Message, state: FSMContext):
         weekly_schedule_keyboard(schedule),
         parse_mode=parse_mode,
     )
+
+
+# ─── КАТЕГОРИИ УСЛУГ (универсальный режим) ──────────────────────────────────
+# settings.use_categories вкл/выкл + подписи cat_a_label/cat_b_label.
+# Под капотом БД всегда хранит services.category в enum {'hands','feet'} —
+# мы трогаем только UI-слой. Тесты не страдают.
+_CAT_LABEL_MAX_LEN = 30  # с запасом помещается в inline-кнопку
+
+
+def _categories_menu_text(cfg: dict) -> str:
+    """HTML-текст экрана «🏷 Категории услуг»."""
+    if cfg["use_categories"]:
+        return (
+            "🏷 <b>Категории услуг</b>\n\n"
+            "Сейчас режим: <b>две категории</b>\n"
+            f"• Категория А: <b>{cfg['label_a']}</b>\n"
+            f"• Категория Б: <b>{cfg['label_b']}</b>\n\n"
+            "Клиент сначала выбирает категорию, потом услугу из этой категории.\n\n"
+            "<i>Если у тебя салон одного типа (только депиляция, только массаж) — "
+            "переключи на «плоский список», клиент будет сразу видеть все услуги.</i>"
+        )
+    return (
+        "🏷 <b>Категории услуг</b>\n\n"
+        "Сейчас режим: <b>плоский список</b>\n\n"
+        "Клиент сразу видит все услуги без шага выбора категории. "
+        "Подходит для салонов одного типа.\n\n"
+        "<i>Если хочешь группировку (например «Стрижки» / «Окрашивание») — "
+        "переключи режим, потом задай подписи категорий.</i>"
+    )
+
+
+async def _show_categories_menu(callback: CallbackQuery) -> None:
+    cfg = await get_categories_config()
+    await edit_panel_with_callback(
+        callback,
+        _categories_menu_text(cfg),
+        categories_menu_keyboard(cfg["use_categories"]),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data == "settings_categories_menu")
+async def cb_settings_categories_menu(callback: CallbackQuery, state: FSMContext):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    await state.clear()
+    await _show_categories_menu(callback)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "settings_categories_toggle")
+async def cb_settings_categories_toggle(callback: CallbackQuery, state: FSMContext):
+    """Переключить use_categories. Остаёмся на том же экране — владелец
+    видит как изменилось состояние."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    await state.clear()
+    cfg = await get_categories_config()
+    new_value = "0" if cfg["use_categories"] else "1"
+    await set_setting("use_categories", new_value)
+    new_state_label = "две категории" if new_value == "1" else "плоский список"
+    try:
+        await callback.answer(f"✅ Режим: {new_state_label}", show_alert=False)
+    except Exception:
+        pass
+    await _show_categories_menu(callback)
+
+
+# ─── Редактирование подписей А / Б ──────────────────────────────────────────
+
+def _category_edit_prompt(which: str, current: str) -> str:
+    return (
+        f"✏ <b>Подпись категории {which}</b>\n\n"
+        f"Сейчас: <code>{current}</code>\n\n"
+        "Пришли новую подпись одним сообщением. Можно с эмодзи в начале:\n"
+        "<code>✂️ Стрижки</code>\n"
+        "<code>🦷 Депиляция тела</code>\n\n"
+        f"Макс. длина — {_CAT_LABEL_MAX_LEN} символов."
+    )
+
+
+@router.callback_query(F.data == "settings_edit_cat_a")
+async def cb_settings_edit_cat_a(callback: CallbackQuery, state: FSMContext):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    cfg = await get_categories_config()
+    await edit_panel_with_callback(
+        callback,
+        _category_edit_prompt("А", cfg["label_a"]),
+        admin_cancel_keyboard(),
+        parse_mode="HTML",
+    )
+    await state.set_state(AdminStates.settings_edit_cat_a_label)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "settings_edit_cat_b")
+async def cb_settings_edit_cat_b(callback: CallbackQuery, state: FSMContext):
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    cfg = await get_categories_config()
+    await edit_panel_with_callback(
+        callback,
+        _category_edit_prompt("Б", cfg["label_b"]),
+        admin_cancel_keyboard(),
+        parse_mode="HTML",
+    )
+    await state.set_state(AdminStates.settings_edit_cat_b_label)
+    await callback.answer()
+
+
+async def _save_cat_label(
+    message: Message, state: FSMContext, key: str,
+) -> None:
+    """Общая логика сохранения для cat_a/cat_b — отличается только key."""
+    if not is_admin_message(message):
+        await state.clear()
+        return
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    text = (message.text or "").strip()
+    if not text:
+        await edit_panel(
+            message.bot, message.chat.id,
+            "⚠️ Пустая подпись не подходит. Пришли непустой текст:",
+            admin_cancel_keyboard(),
+        )
+        return
+    if len(text) > _CAT_LABEL_MAX_LEN:
+        await edit_panel(
+            message.bot, message.chat.id,
+            f"⚠️ Слишком длинно (макс. {_CAT_LABEL_MAX_LEN} символов). Пришли короче:",
+            admin_cancel_keyboard(),
+        )
+        return
+    await set_setting(key, text)
+    await state.clear()
+    cfg = await get_categories_config()
+    await edit_panel(
+        message.bot, message.chat.id,
+        _categories_menu_text(cfg),
+        categories_menu_keyboard(cfg["use_categories"]),
+        parse_mode="HTML",
+    )
+
+
+@router.message(AdminStates.settings_edit_cat_a_label)
+async def msg_cat_a_label(message: Message, state: FSMContext):
+    await _save_cat_label(message, state, "cat_a_label")
+
+
+@router.message(AdminStates.settings_edit_cat_b_label)
+async def msg_cat_b_label(message: Message, state: FSMContext):
+    await _save_cat_label(message, state, "cat_b_label")

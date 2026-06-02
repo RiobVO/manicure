@@ -43,30 +43,47 @@ def _price_short(price: int) -> str:
     return f"{price:,}".replace(",", " ")
 
 
-def category_keyboard(lang: str = "ru") -> InlineKeyboardMarkup:
-    """Первый экран записи: выбор ручек/ножек."""
-    if lang == "uz":
-        hands = "💅 Manikyur"
-        feet = "🦶 Pedikyur"
-    else:
-        hands = "💅 Маникюр"
-        feet = "🦶 Педикюр"
+def category_keyboard(
+    lang: str = "ru",
+    label_a: str | None = None,
+    label_b: str | None = None,
+) -> InlineKeyboardMarkup:
+    """Первый экран записи: выбор категории А/Б.
+
+    Подписи берутся из settings (cat_a_label / cat_b_label) — параметры
+    label_a/label_b. Если не переданы — UZ-fallback на латинскую транслитерацию
+    дефолта, RU-fallback на «💅 Маникюр» / «🦶 Педикюр». UZ оставлен для
+    обратной совместимости со старыми вызовами без settings — реальный
+    клиентский flow всегда передаёт labels из get_categories_config().
+    """
+    if label_a is None or label_b is None:
+        if lang == "uz":
+            label_a = label_a or "💅 Manikyur"
+            label_b = label_b or "🦶 Pedikyur"
+        else:
+            label_a = label_a or "💅 Маникюр"
+            label_b = label_b or "🦶 Педикюр"
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=hands, callback_data="cat_hands"),
-        InlineKeyboardButton(text=feet, callback_data="cat_feet"),
+        InlineKeyboardButton(text=label_a, callback_data="cat_hands"),
+        InlineKeyboardButton(text=label_b, callback_data="cat_feet"),
     ]])
 
 
-def admin_category_picker() -> InlineKeyboardMarkup:
+def admin_category_picker(
+    label_a: str | None = None,
+    label_b: str | None = None,
+) -> InlineKeyboardMarkup:
     """
     Админский выбор категории при создании услуги. Отдельный callback-неймспейс
     (svc_cat_*), чтобы не пересекался с клиентским cat_hands/cat_feet.
-    Подписи кнопок симметричны клиентскому category_keyboard — админ узнаёт
-    свои же категории «маникюр/педикюр», а не внутренние «ручки/ножки».
+    Подписи симметричны клиентскому category_keyboard — admin видит свои же
+    подписи (которые он только что мог переименовать в Настройках).
     """
+    label_a = label_a or "💅 Маникюр"
+    label_b = label_b or "🦶 Педикюр"
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="💅 Маникюр", callback_data="svc_cat_hands"),
-        InlineKeyboardButton(text="🦶 Педикюр", callback_data="svc_cat_feet"),
+        InlineKeyboardButton(text=label_a, callback_data="svc_cat_hands"),
+        InlineKeyboardButton(text=label_b, callback_data="svc_cat_feet"),
     ]])
 
 
@@ -810,12 +827,25 @@ def settings_keyboard(s: dict) -> InlineKeyboardMarkup:
 
     contact_label = _short(s.get("salon_contact") or "", placeholder="не задан")
     name_label = _short(s.get("salon_name") or "")
+    # Категории: показываем краткое состояние прямо в кнопке —
+    # «🏷 Категории: вкл · Маникюр / Педикюр» или «выкл · плоский список».
+    use_cats = (s.get("use_categories") or "1").strip() != "0"
+    if use_cats:
+        cat_a = _short(s.get("cat_a_label") or "💅 Маникюр", placeholder="—")
+        cat_b = _short(s.get("cat_b_label") or "🦶 Педикюр", placeholder="—")
+        cat_button = f"🏷 Категории: {cat_a} / {cat_b}"
+    else:
+        cat_button = "🏷 Категории: выкл · плоский список"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text=f"⏱ Шаг слотов: {s.get('slot_step', 30)} мин",
             callback_data="settings_edit_step"
         )],
         [InlineKeyboardButton(text="📅 График по дням", callback_data="sched_weekly")],
+        [InlineKeyboardButton(
+            text=cat_button,
+            callback_data="settings_categories_menu",
+        )],
         [InlineKeyboardButton(
             text=f"🏷 Название салона: {name_label}",
             callback_data="settings_edit_name"
@@ -826,6 +856,33 @@ def settings_keyboard(s: dict) -> InlineKeyboardMarkup:
         )],
         [InlineKeyboardButton(text="📵 Блокировки", callback_data="admin_blocks")],
     ])
+
+
+def categories_menu_keyboard(use_categories: bool) -> InlineKeyboardMarkup:
+    """Экран «🏷 Категории услуг»: переключатель режима + редактирование меток.
+    Кнопки редактирования меток скрыты в плоском режиме — там подписи
+    некуда применять."""
+    rows: list[list[InlineKeyboardButton]] = []
+    toggle_label = (
+        "🔄 Переключить на «плоский список»"
+        if use_categories else
+        "🔄 Переключить на «две категории»"
+    )
+    rows.append([InlineKeyboardButton(
+        text=toggle_label,
+        callback_data="settings_categories_toggle",
+    )])
+    if use_categories:
+        rows.append([InlineKeyboardButton(
+            text="✏ Изменить категорию А",
+            callback_data="settings_edit_cat_a",
+        )])
+        rows.append([InlineKeyboardButton(
+            text="✏ Изменить категорию Б",
+            callback_data="settings_edit_cat_b",
+        )])
+    rows.append([InlineKeyboardButton(text="↩ К настройкам", callback_data="admin_settings")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def weekly_schedule_keyboard(schedule: dict) -> InlineKeyboardMarkup:
