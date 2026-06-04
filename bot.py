@@ -32,6 +32,7 @@ from handlers import reviews, admin_export, admin_masters, admin_master_schedule
 from handlers import client_reminders, client_history, admin_status, admin_traffic
 from handlers import admin_quick_add
 from handlers import master
+from middlewares.anti_spam import AntiSpamCallbackMiddleware
 from middlewares.license_gate import LicenseGateMiddleware
 from middlewares.timing import TimingMiddleware
 from scheduler import setup_scheduler
@@ -130,6 +131,12 @@ async def main() -> None:
     timing = TimingMiddleware()
     dp.message.middleware(timing)
     dp.callback_query.middleware(timing)
+
+    # AntiSpam — режет дубли callback'ов <600мс от одного user'а на ту же
+    # кнопку. Без этого нервный двойной тап создавал очередь в edit_panel
+    # lock'е и спиннер висел до 2-3 секунд. Только для callback_query —
+    # на message не вешаем.
+    dp.callback_query.middleware(AntiSpamCallbackMiddleware())
 
     gate = LicenseGateMiddleware(license_state, LICENSE_CONTACT)
     dp.message.middleware(gate)

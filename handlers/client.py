@@ -192,7 +192,12 @@ async def _show_master_step(
     """
     Показывает выбор мастера. Если мастер один — пропускает шаг и сразу переходит к датам.
     service_header — уже сформированная строка с названием/ценой услуги.
+
+    Caller обязан НЕ вызывать callback.answer() до этой функции — ack делает
+    она сама (первой строкой), чтобы убрать спиннер до серии DB-запросов
+    (get_active_masters, get_day_off_weekdays_for_master, get_all_masters_ratings).
     """
+    await callback.answer()  # ранний ack — спиннер уходит мгновенно
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
@@ -210,7 +215,6 @@ async def _show_master_step(
         except TelegramBadRequest:
             pass
         await state.set_state(BookingStates.choose_date)
-        await callback.answer()
         return
 
     if len(masters) == 1:
@@ -226,7 +230,6 @@ async def _show_master_step(
         except TelegramBadRequest:
             pass
         await state.set_state(BookingStates.choose_date)
-        await callback.answer()
         return
 
     ratings = await get_all_masters_ratings()
@@ -239,7 +242,6 @@ async def _show_master_step(
     except TelegramBadRequest:
         pass
     await state.set_state(BookingStates.choose_master)
-    await callback.answer()
 
 
 @router.message(F.text.regexp(r"^/start(?:\s|$)"))
@@ -329,20 +331,27 @@ async def cmd_start(message: Message, state: FSMContext):
 
 @router.callback_query(BookingStates.choose_service, F.data.startswith("service_"))
 async def choose_service(callback: CallbackQuery, state: FSMContext):
-    from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "service", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
         return
+    # Ранний ack для happy path: спиннер уходит сразу, перед DB-запросами.
+    # В редкой ветке «услуга недоступна» алерт не сработает (Telegram даёт
+    # только первый ack), поэтому показываем сообщение в чате.
+    await callback.answer()
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     service_id = int(parts[0])
     service = await get_service_by_id(service_id)
 
     if service is None or not service["is_active"]:
         logger.warning("Unknown/inactive service_id=%s from user_id=%s", service_id, callback.from_user.id)
-        await callback.answer(t("book_service_unavailable", lang), show_alert=True)
+        try:
+            await callback.message.answer(t("book_service_unavailable", lang), parse_mode="HTML")
+        except TelegramBadRequest:
+            pass
         await state.clear()
         return
 
@@ -376,7 +385,6 @@ async def choose_service(callback: CallbackQuery, state: FSMContext):
         except TelegramBadRequest:
             pass
         await state.set_state(BookingStates.choose_addons)
-        await callback.answer()
         return
 
     await _show_master_step(callback, state, service_card)
@@ -425,6 +433,11 @@ async def cb_toggle_addon(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(BookingStates.choose_addons, F.data == "addons_done")
 async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
     """Завершить выбор доп. опций — перейти к дате."""
+    # Ранний ack: дальше идут 5+ DB-запросов (через _show_master_step),
+    # без раннего ack спиннер бы крутился 200-800ms.
+    # Внимание: _show_master_step тоже делает callback.answer() — повторный
+    # ack безопасен (Telegram игнорирует второй вызов).
+    await callback.answer()
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
@@ -455,18 +468,24 @@ async def cb_addons_done(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.choose_master, F.data.startswith("master_"))
 async def choose_master(callback: CallbackQuery, state: FSMContext):
-    from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
     parts = parse_callback(callback.data, "master", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
         return
+    # Ранний ack: спиннер уходит сразу, до 3 DB-запросов ниже.
+    await callback.answer()
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     master_id = int(parts[0])
     master = await get_master(master_id)
     if not master or not master["is_active"]:
-        await callback.answer(t("book_master_unavailable", lang), show_alert=True)
+        # Алерт после раннего ack не сработает — показываем сообщением.
+        try:
+            await callback.message.answer(t("book_master_unavailable", lang), parse_mode="HTML")
+        except TelegramBadRequest:
+            pass
         return
 
     await state.update_data(master_id=master_id, master_name=master["name"])
@@ -1198,6 +1217,9 @@ async def btn_book(message: Message, state: FSMContext):
 @router.callback_query(F.data.in_({"lang_set_ru", "lang_set_uz"}))
 async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
     """Сохранить выбор языка клиента + запустить обычный /start-флоу."""
+    # Ранний ack: дальше идёт DB-write + 2 message.answer + 2 sleep,
+    # без ack спиннер бы висел до конца цепочки (~700ms+).
+    await callback.answer()
     from db import set_user_lang
     from utils.i18n import t, Lang
     lang = Lang.UZ if callback.data == "lang_set_uz" else Lang.RU
@@ -1208,7 +1230,6 @@ async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(t("lang_changed", lang), parse_mode="HTML")
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
     await callback.message.answer(
         "\u2063", reply_markup=client_reply_keyboard(lang)
@@ -1261,26 +1282,35 @@ async def cmd_change_lang(message: Message, state: FSMContext):
 @router.callback_query(F.data.regexp(r"^quick_rebook_(\d+)$"))
 async def cb_quick_rebook(callback: CallbackQuery, state: FSMContext):
     """Быстрая повторная запись — берёт услугу из последней завершённой записи."""
-    from utils.i18n import t
-    from db import get_user_lang
-    lang = await get_user_lang(callback.from_user.id)
-
     parts = parse_callback(callback.data, "quick_rebook", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
         return
+    # Ранний ack: 4 DB-запроса + _show_master_step ниже.
+    # Edge-case ветки (запись/услуга недоступны) теперь показывают
+    # сообщение в чате вместо алерта (повторный ack не сработает).
+    await callback.answer()
+    from utils.i18n import t
+    from db import get_user_lang
+    lang = await get_user_lang(callback.from_user.id)
     appt_id = int(parts[0])
     appt = await get_appointment_by_id(appt_id)
 
     if not appt or appt["user_id"] != callback.from_user.id:
-        await callback.answer(t("book_repeat_appt_not_found", lang), show_alert=True)
+        try:
+            await callback.message.answer(t("book_repeat_appt_not_found", lang), parse_mode="HTML")
+        except TelegramBadRequest:
+            pass
         return
 
     # Проверяем, что услуга ещё активна
     service = await get_service_by_id(appt["service_id"])
     if not service or not service.get("is_active"):
-        await callback.answer(t("book_repeat_service_inactive", lang), show_alert=True)
+        try:
+            await callback.message.answer(t("book_repeat_service_inactive", lang), parse_mode="HTML")
+        except TelegramBadRequest:
+            pass
         return
 
     await state.clear()
