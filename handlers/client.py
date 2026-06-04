@@ -115,7 +115,7 @@ async def _send_category_picker(
     if cats["use_categories"]:
         sent = await message.answer(
             t("book_category_prompt", lang),
-            reply_markup=category_keyboard(lang, cats["label_a"], cats["label_b"]),
+            reply_markup=category_keyboard(lang, cats["labels"]),
             parse_mode="HTML",
         )
         _remember_services_msg(message.chat.id, sent.message_id)
@@ -151,7 +151,7 @@ async def _edit_to_category_picker(callback: CallbackQuery, state: FSMContext) -
         try:
             await callback.message.edit_text(
                 t("book_category_prompt", lang),
-                reply_markup=category_keyboard(lang, cats["label_a"], cats["label_b"]),
+                reply_markup=category_keyboard(lang, cats["labels"]),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:
@@ -1135,14 +1135,19 @@ async def cb_client_restart(callback: CallbackQuery, state: FSMContext):
     await _edit_to_category_picker(callback, state)
 
 
-@router.callback_query(F.data.in_({"cat_hands", "cat_feet"}))
+@router.callback_query(F.data.startswith("cat_") & ~F.data.in_({"cat_back"}))
 async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
     """Клиент выбрал категорию — показываем услуги в ней с ценами."""
     await callback.answer()  # ранний ack
     from utils.i18n import t
     from db import get_user_lang
+    from constants import CATEGORY_KEYS
     lang = await get_user_lang(callback.from_user.id)
-    category = "hands" if callback.data == "cat_hands" else "feet"
+    category = callback.data.removeprefix("cat_")
+    # Защита от мусорных callback'ов (старые сообщения / форк UI / ручной ввод).
+    if category not in CATEGORY_KEYS:
+        logger.warning("неизвестная категория в callback: %s", callback.data)
+        return
     services = await get_services(active_only=True, category=category)
     if not services:
         from db import get_categories_config
@@ -1150,7 +1155,7 @@ async def cb_pick_category(callback: CallbackQuery, state: FSMContext):
         try:
             await callback.message.edit_text(
                 f"{t('book_category_empty', lang)}\n\n{t('book_category_prompt', lang)}",
-                reply_markup=category_keyboard(lang, cats["label_a"], cats["label_b"]),
+                reply_markup=category_keyboard(lang, cats["labels"]),
                 parse_mode="HTML",
             )
         except TelegramBadRequest:

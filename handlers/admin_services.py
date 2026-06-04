@@ -17,8 +17,9 @@ from db import (
 from keyboards.inline import (
     services_list_keyboard, service_detail_keyboard, admin_cancel_keyboard,
     addon_manage_keyboard, addon_detail_keyboard,
-    admin_category_picker, confirm_delete_keyboard,
+    admin_category_picker, admin_category_swap_picker, confirm_delete_keyboard,
 )
+from constants import CATEGORY_KEYS
 from utils.admin import is_admin_callback, is_admin_message, deny_access, IsAdminFilter
 from utils.callbacks import parse_callback
 from utils.panel import edit_panel, edit_panel_with_callback
@@ -57,7 +58,8 @@ async def _show_service_detail(callback: CallbackQuery, service_id: int):
     cfg = await get_categories_config()
     cat_label: str | None = None
     if cfg["use_categories"]:
-        cat_label = cfg["label_a"] if service.get("category") == "hands" else cfg["label_b"]
+        cur = service.get("category") or "hands"
+        cat_label = cfg["labels"].get(cur) or cfg["labels"]["hands"]
     await edit_panel_with_callback(
         callback, _service_text(service),
         service_detail_keyboard(service, cat_label=cat_label),
@@ -88,16 +90,16 @@ async def cb_svc_detail(callback: CallbackQuery):
     await _show_service_detail(callback, service_id)
 
 
-@router.callback_query(F.data.startswith("svc_swapcat_"))
-async def cb_svc_swapcat(callback: CallbackQuery):
-    """Переключить категорию услуги между hands и feet (двустороний toggle).
-    Нужно когда владелец переключал режим (плоский ↔ две категории) и часть
-    услуг застряла в категории создания. Без этого пришлось бы пересоздавать
-    услуги, теряя историю записей."""
+@router.callback_query(F.data.startswith("svc_setcat_open_"))
+async def cb_svc_setcat_open(callback: CallbackQuery):
+    """Открыть селектор смены категории у существующей услуги.
+    Заменяет старый toggle hands↔feet (бессмыслен с 6 категориями).
+    Нужен когда владелец перенёс услугу не в ту категорию или после
+    переключения режима (плоский ↔ категории) и услуга «застряла»."""
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
-    parts = parse_callback(callback.data, "svc_swapcat", 1)
+    parts = parse_callback(callback.data, "svc_setcat_open", 1)
     if not parts:
         logger.warning("Некорректный callback: %s", callback.data)
         await callback.answer()
@@ -107,17 +109,62 @@ async def cb_svc_swapcat(callback: CallbackQuery):
     if not service:
         await callback.answer("Эта услуга больше не доступна.", show_alert=True)
         return
-    new_cat = "feet" if service.get("category") == "hands" else "hands"
+    cfg = await get_categories_config()
+    await callback.answer()
+    await edit_panel_with_callback(
+        callback,
+        f"🏷 Выбери категорию для услуги «{service['name']}»:",
+        admin_category_swap_picker(
+            service_id=service_id,
+            current_category=service.get("category"),
+            labels=cfg["labels"],
+        ),
+    )
+
+
+@router.callback_query(F.data.regexp(r"^svc_setcat_(\d+)_([a-z_]+)$"))
+async def cb_svc_setcat_apply(callback: CallbackQuery):
+    """Применить выбранную категорию к услуге."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    # callback.data вида svc_setcat_<id>_<key>
+    rest = callback.data.removeprefix("svc_setcat_")
+    sep = rest.find("_")
+    if sep == -1:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    try:
+        service_id = int(rest[:sep])
+    except ValueError:
+        logger.warning("Некорректный service_id в callback: %s", callback.data)
+        await callback.answer()
+        return
+    new_cat = rest[sep + 1:]
+    if new_cat not in CATEGORY_KEYS:
+        logger.warning("Неизвестная категория в callback: %s", callback.data)
+        await callback.answer("Неизвестная категория.", show_alert=True)
+        return
+    service = await get_service_by_id(service_id)
+    if not service:
+        await callback.answer("Эта услуга больше не доступна.", show_alert=True)
+        return
+    old_cat = service.get("category")
+    if old_cat == new_cat:
+        await callback.answer("Категория и так такая.", show_alert=False)
+        await _show_service_detail(callback, service_id)
+        return
     await update_service_category(service_id, new_cat)
     await log_admin_action(
         admin_id=callback.from_user.id,
-        action="swap_category",
+        action="set_category",
         target_type="service",
         target_id=service_id,
-        details=f"{service['name']}: {service.get('category')} → {new_cat}",
+        details=f"{service['name']}: {old_cat} → {new_cat}",
     )
     cfg = await get_categories_config()
-    new_label = cfg["label_a"] if new_cat == "hands" else cfg["label_b"]
+    new_label = cfg["labels"].get(new_cat, new_cat)
     try:
         await callback.answer(f"✅ Категория: {new_label}", show_alert=False)
     except Exception:
@@ -552,20 +599,24 @@ async def msg_svc_add_dur(message: Message, state: FSMContext):
     await edit_panel(
         message.bot, message.chat.id,
         "🗂 К какой категории относится услуга?",
-        admin_category_picker(cats["label_a"], cats["label_b"]),
+        admin_category_picker(cats["labels"]),
     )
     await state.set_state(AdminStates.service_add_category)
 
 
 @router.callback_query(
     AdminStates.service_add_category,
-    F.data.in_({"svc_cat_hands", "svc_cat_feet"}),
+    F.data.startswith("svc_cat_"),
 )
 async def cb_svc_add_category(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
-    category = "hands" if callback.data == "svc_cat_hands" else "feet"
+    category = callback.data.removeprefix("svc_cat_")
+    if category not in CATEGORY_KEYS:
+        logger.warning("Неизвестная категория при добавлении услуги: %s", callback.data)
+        await callback.answer("Неизвестная категория.", show_alert=True)
+        return
     data = await state.get_data()
 
     service_id = await add_service(

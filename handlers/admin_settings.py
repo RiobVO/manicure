@@ -483,16 +483,20 @@ def _categories_menu_text(cfg: dict) -> str:
     """HTML-текст экрана «🏷 Категории услуг».
     Подписи категорий обёрнуты h() — владелец может ввести угловые скобки/амперсанды
     в названии («<premium>», «Brows&Lashes»), без эскейпа parse_mode=HTML упадёт."""
+    from constants import CATEGORY_KEYS, CATEGORY_ALPHA
     if cfg["use_categories"]:
-        return (
-            "🏷 <b>Категории услуг</b>\n\n"
-            "Сейчас режим: <b>две категории</b>\n"
-            f"• Категория А: <b>{h(cfg['label_a'])}</b>\n"
-            f"• Категория Б: <b>{h(cfg['label_b'])}</b>\n\n"
-            "Клиент сначала выбирает категорию, потом услугу из этой категории.\n\n"
+        lines = ["🏷 <b>Категории услуг</b>\n", "Сейчас режим: <b>6 категорий</b>"]
+        for cat_key, alpha in zip(CATEGORY_KEYS, CATEGORY_ALPHA):
+            label = cfg["labels"].get(cat_key, "")
+            lines.append(f"• Категория {alpha}: <b>{h(label)}</b>")
+        lines.append(
+            "\nКлиент сначала выбирает категорию, потом услугу из этой категории.\n"
+        )
+        lines.append(
             "<i>Если у тебя салон одного типа (только депиляция, только массаж) — "
             "переключи на «плоский список», клиент будет сразу видеть все услуги.</i>"
         )
+        return "\n".join(lines)
     return (
         "🏷 <b>Категории услуг</b>\n\n"
         "Сейчас режим: <b>плоский список</b>\n\n"
@@ -508,7 +512,7 @@ async def _show_categories_menu(callback: CallbackQuery) -> None:
     await edit_panel_with_callback(
         callback,
         _categories_menu_text(cfg),
-        categories_menu_keyboard(cfg["use_categories"]),
+        categories_menu_keyboard(cfg["use_categories"], cfg["labels"]),
         parse_mode="HTML",
     )
 
@@ -555,42 +559,66 @@ def _category_edit_prompt(which: str, current: str) -> str:
     )
 
 
-@router.callback_query(F.data == "settings_edit_cat_a")
-async def cb_settings_edit_cat_a(callback: CallbackQuery, state: FSMContext):
+# Универсальный обработчик settings_edit_cat_<a..f>: один callback per letter.
+# Букву преобразуем в FSM-state и в ключ settings (cat_<letter>_label).
+_CAT_SLOT_BY_LETTER: dict[str, tuple] = {}  # filled below by _build_cat_slot_map()
+
+
+def _build_cat_slot_map() -> None:
+    """Маппинг 'a'..'f' → (alpha-буква, ключ settings, FSM state).
+    Собираем один раз при импорте модуля. Параллельно constants.CATEGORY_*."""
+    from constants import CATEGORY_LABEL_KEYS, CATEGORY_ALPHA
+    states_seq = (
+        AdminStates.settings_edit_cat_a_label,
+        AdminStates.settings_edit_cat_b_label,
+        AdminStates.settings_edit_cat_c_label,
+        AdminStates.settings_edit_cat_d_label,
+        AdminStates.settings_edit_cat_e_label,
+        AdminStates.settings_edit_cat_f_label,
+    )
+    for label_key, alpha, st in zip(CATEGORY_LABEL_KEYS, CATEGORY_ALPHA, states_seq):
+        letter = label_key.split("_")[1]  # 'a'..'f'
+        _CAT_SLOT_BY_LETTER[letter] = (alpha, label_key, st)
+
+
+_build_cat_slot_map()
+
+
+@router.callback_query(F.data.regexp(r"^settings_edit_cat_[a-f]$"))
+async def cb_settings_edit_cat(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
-    cfg = await get_categories_config()
-    await edit_panel_with_callback(
-        callback,
-        _category_edit_prompt("А", cfg["label_a"]),
-        admin_cancel_keyboard(),
-        parse_mode="HTML",
-    )
-    await state.set_state(AdminStates.settings_edit_cat_a_label)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "settings_edit_cat_b")
-async def cb_settings_edit_cat_b(callback: CallbackQuery, state: FSMContext):
-    if not is_admin_callback(callback):
-        await deny_access(callback)
+    letter = callback.data.removeprefix("settings_edit_cat_")
+    slot = _CAT_SLOT_BY_LETTER.get(letter)
+    if not slot:
+        await callback.answer()
         return
+    alpha, label_key, fsm_state = slot
     cfg = await get_categories_config()
+    current = cfg["labels"].get(_label_key_to_cat_key(label_key), "")
     await edit_panel_with_callback(
         callback,
-        _category_edit_prompt("Б", cfg["label_b"]),
+        _category_edit_prompt(alpha, current),
         admin_cancel_keyboard(),
         parse_mode="HTML",
     )
-    await state.set_state(AdminStates.settings_edit_cat_b_label)
+    await state.set_state(fsm_state)
     await callback.answer()
+
+
+def _label_key_to_cat_key(label_key: str) -> str:
+    """cat_a_label → hands; cat_b_label → feet; ... (по индексу)."""
+    from constants import CATEGORY_KEYS, CATEGORY_LABEL_KEYS
+    idx = CATEGORY_LABEL_KEYS.index(label_key)
+    return CATEGORY_KEYS[idx]
 
 
 async def _save_cat_label(
     message: Message, state: FSMContext, key: str,
 ) -> None:
-    """Общая логика сохранения для cat_a/cat_b — отличается только key."""
+    """Общая логика сохранения подписи категории — отличается только ключом
+    settings (cat_a_label..cat_f_label)."""
     if not is_admin_message(message):
         await state.clear()
         return
@@ -619,7 +647,7 @@ async def _save_cat_label(
     await edit_panel(
         message.bot, message.chat.id,
         _categories_menu_text(cfg),
-        categories_menu_keyboard(cfg["use_categories"]),
+        categories_menu_keyboard(cfg["use_categories"], cfg["labels"]),
         parse_mode="HTML",
     )
 
@@ -632,3 +660,23 @@ async def msg_cat_a_label(message: Message, state: FSMContext):
 @router.message(AdminStates.settings_edit_cat_b_label)
 async def msg_cat_b_label(message: Message, state: FSMContext):
     await _save_cat_label(message, state, "cat_b_label")
+
+
+@router.message(AdminStates.settings_edit_cat_c_label)
+async def msg_cat_c_label(message: Message, state: FSMContext):
+    await _save_cat_label(message, state, "cat_c_label")
+
+
+@router.message(AdminStates.settings_edit_cat_d_label)
+async def msg_cat_d_label(message: Message, state: FSMContext):
+    await _save_cat_label(message, state, "cat_d_label")
+
+
+@router.message(AdminStates.settings_edit_cat_e_label)
+async def msg_cat_e_label(message: Message, state: FSMContext):
+    await _save_cat_label(message, state, "cat_e_label")
+
+
+@router.message(AdminStates.settings_edit_cat_f_label)
+async def msg_cat_f_label(message: Message, state: FSMContext):
+    await _save_cat_label(message, state, "cat_f_label")
