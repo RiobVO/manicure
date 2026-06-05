@@ -14,9 +14,9 @@ Seed-данные для первого запуска.
   sugar  — шугаринг (руки/ноги/бикини + подмышки)
   care   — уходовые процедуры (УЗ-чистка, механическая чистка, отбеливание зубов)
 
-Шаблон записи: {id, name, price, duration, category, is_active?}.
-is_active=0 → услуга в каталоге, но клиенту не показывается. Используется
-для новых категорий — заказчица проставит цены и активирует через админку.
+Шаблон записи: {id, name, price, duration, category}.
+Все услуги активны по умолчанию (is_active=1) — заказчица проставит цены
+в админке для тех у кого price=0, остальные доступны клиенту сразу.
 
 Имена услуг внутри депиляционных категорий (wax/sugar) не содержат метода
 («Воск — руки полностью»), а только зону («Руки полностью»). Метод видно
@@ -32,39 +32,39 @@ SERVICES = [
     {"id": 5, "name": "Педикюр без покрытия",    "price": 180000, "duration": 60,  "category": "feet"},
     {"id": 6, "name": "Педикюр с гель-лаком",    "price": 280000, "duration": 120, "category": "feet"},
 
-    # ─── Лицо (face) — is_active=0, цены проставит салон ─────────────────────
-    {"id": 7,  "name": "Лицо полностью", "price": 0, "duration": 30, "category": "face", "is_active": 0},
-    {"id": 8,  "name": "Брови",          "price": 0, "duration": 30, "category": "face", "is_active": 0},
-    {"id": 9,  "name": "Усики",          "price": 0, "duration": 30, "category": "face", "is_active": 0},
-    {"id": 10, "name": "Подбородок",     "price": 0, "duration": 30, "category": "face", "is_active": 0},
-    {"id": 11, "name": "Щёки",           "price": 0, "duration": 30, "category": "face", "is_active": 0},
+    # ─── Лицо (face) ─────────────────────────────────────────────────────────
+    {"id": 7,  "name": "Лицо полностью", "price": 0, "duration": 30, "category": "face"},
+    {"id": 8,  "name": "Брови",          "price": 0, "duration": 30, "category": "face"},
+    {"id": 9,  "name": "Усики",          "price": 0, "duration": 30, "category": "face"},
+    {"id": 10, "name": "Подбородок",     "price": 0, "duration": 30, "category": "face"},
+    {"id": 11, "name": "Щёки",           "price": 0, "duration": 30, "category": "face"},
 
     # ─── Воск (wax) — 8 услуг (БЕЗ подмышек) ─────────────────────────────────
-    {"id": 12, "name": "Руки полностью",        "price": 0, "duration": 30, "category": "wax", "is_active": 0},
-    {"id": 13, "name": "Руки до локтя",         "price": 0, "duration": 30, "category": "wax", "is_active": 0},
-    {"id": 14, "name": "Руки с захватом локтя", "price": 0, "duration": 30, "category": "wax", "is_active": 0},
-    {"id": 15, "name": "Ноги полностью",        "price": 0, "duration": 30, "category": "wax", "is_active": 0},
-    {"id": 16, "name": "Ноги до колена",        "price": 0, "duration": 30, "category": "wax", "is_active": 0},
-    {"id": 17, "name": "Ноги с захватом колена","price": 0, "duration": 30, "category": "wax", "is_active": 0},
-    {"id": 18, "name": "Бикини глубокое",       "price": 0, "duration": 30, "category": "wax", "is_active": 0},
-    {"id": 19, "name": "Бикини классическое",   "price": 0, "duration": 30, "category": "wax", "is_active": 0},
+    {"id": 12, "name": "Руки полностью",        "price": 0, "duration": 30, "category": "wax"},
+    {"id": 13, "name": "Руки до локтя",         "price": 0, "duration": 30, "category": "wax"},
+    {"id": 14, "name": "Руки с захватом локтя", "price": 0, "duration": 30, "category": "wax"},
+    {"id": 15, "name": "Ноги полностью",        "price": 0, "duration": 30, "category": "wax"},
+    {"id": 16, "name": "Ноги до колена",        "price": 0, "duration": 30, "category": "wax"},
+    {"id": 17, "name": "Ноги с захватом колена","price": 0, "duration": 30, "category": "wax"},
+    {"id": 18, "name": "Бикини глубокое",       "price": 0, "duration": 30, "category": "wax"},
+    {"id": 19, "name": "Бикини классическое",   "price": 0, "duration": 30, "category": "wax"},
 
     # ─── Шугаринг (sugar) — 9 услуг (включая подмышки) ───────────────────────
-    {"id": 20, "name": "Руки полностью",        "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 21, "name": "Руки до локтя",         "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 22, "name": "Руки с захватом локтя", "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 23, "name": "Ноги полностью",        "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 24, "name": "Ноги до колена",        "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 25, "name": "Ноги с захватом колена","price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 26, "name": "Бикини глубокое",       "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 27, "name": "Бикини классическое",   "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
-    {"id": 28, "name": "Подмышки",              "price": 0, "duration": 30, "category": "sugar", "is_active": 0},
+    {"id": 20, "name": "Руки полностью",        "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 21, "name": "Руки до локтя",         "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 22, "name": "Руки с захватом локтя", "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 23, "name": "Ноги полностью",        "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 24, "name": "Ноги до колена",        "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 25, "name": "Ноги с захватом колена","price": 0, "duration": 30, "category": "sugar"},
+    {"id": 26, "name": "Бикини глубокое",       "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 27, "name": "Бикини классическое",   "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 28, "name": "Подмышки",              "price": 0, "duration": 30, "category": "sugar"},
 
     # ─── Уходовые процедуры (care) ───────────────────────────────────────────
     # ⚠ юридический риск: отбеливание зубов = медицинская услуга. Активировать
-    # ТОЛЬКО если у салона партнёр-стоматолог с лицензией. Иначе оставить
-    # is_active=0 или удалить из каталога через админку.
-    {"id": 29, "name": "Ультразвуковая чистка", "price": 0, "duration": 30, "category": "care", "is_active": 0},
-    {"id": 30, "name": "Механическая чистка",   "price": 0, "duration": 30, "category": "care", "is_active": 0},
-    {"id": 31, "name": "Отбеливание зубов",     "price": 0, "duration": 30, "category": "care", "is_active": 0},
+    # ТОЛЬКО если у салона партнёр-стоматолог с лицензией. Иначе деактивировать
+    # через админку или удалить.
+    {"id": 29, "name": "Ультразвуковая чистка", "price": 0, "duration": 30, "category": "care"},
+    {"id": 30, "name": "Механическая чистка",   "price": 0, "duration": 30, "category": "care"},
+    {"id": 31, "name": "Отбеливание зубов",     "price": 0, "duration": 30, "category": "care"},
 ]

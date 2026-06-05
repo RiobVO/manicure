@@ -9,9 +9,11 @@ tools/seed_v4_categories.py — добавить новые услуги (face/d
 руками. Этот скрипт это и делает — идемпотентно.
 
 ЧТО ДЕЛАЕТ:
-  • Для каждой услуги из db/seed.py с category in {'face','depil','skincare','dental'}:
-    — если в services уже есть строка с тем же name — пропускает (idempotent),
-    — иначе INSERT с is_active=0, price=0.
+  • Для каждой услуги из db/seed.py с category in {'face','wax','sugar','care'}:
+    — если в services уже есть строка с тем же name И той же category —
+      пропускает (idempotent),
+    — иначе INSERT с is_active=1, price=0 — услуга появляется в каталоге
+      сразу, клиент видит её на экране категории.
   • НЕ трогает существующие услуги (включая hands/feet) — историю записей
     и цены салона мы не переписываем.
   • НЕ удаляет ничего.
@@ -22,8 +24,9 @@ tools/seed_v4_categories.py — добавить новые услуги (face/d
 Повторный запуск ничего не меняет (отчёт «0 добавлено, N пропущено»).
 
 После запуска: владелец заходит в админку → Услуги → видит новые услуги
-помеченными 🔴 (неактивные), проставляет цены/длительность и активирует
-по мере готовности.
+помеченными 🟢 с ценой 0 сум, проставляет цены/длительность через карточку.
+Услуги где price=0 клиент тоже увидит — заказчица должна проставить цены
+СРАЗУ после запуска скрипта, иначе клиенты будут тапать «0 сум».
 """
 from __future__ import annotations
 
@@ -61,9 +64,12 @@ async def main() -> int:
             base_sort = (await cursor.fetchone())[0]
             offset = 1
             for s in new_services:
-                # Проверка дубля по name — у services нет UNIQUE-индекса, делаем руками.
+                # Проверка дубля по (name, category) — у services нет UNIQUE-индекса,
+                # делаем руками. Чек по обоим полям важен потому что одинаковые
+                # имена есть в разных категориях («Руки полностью» в wax и sugar).
                 cur = await db.execute(
-                    "SELECT id FROM services WHERE name = ?", (s["name"],)
+                    "SELECT id FROM services WHERE name = ? AND category = ?",
+                    (s["name"], s["category"]),
                 )
                 if await cur.fetchone():
                     skipped += 1
@@ -76,7 +82,10 @@ async def main() -> int:
                         s["name"],
                         int(s.get("price", 0)),
                         int(s.get("duration", 30)),
-                        int(s.get("is_active", 0)),
+                        # Дефолт активный — услуга сразу видна клиенту в категории.
+                        # Заказчица потом проставит цену и при необходимости
+                        # деактивирует через админку (например стоматологию).
+                        int(s.get("is_active", 1)),
                         base_sort + offset,
                         s["category"],
                     ),
