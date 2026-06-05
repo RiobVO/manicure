@@ -165,9 +165,9 @@ async def init_db() -> None:
             category TEXT NOT NULL DEFAULT 'hands'
         )
     """)
-    # Seed из services.py только если таблица пуста.
-    # is_active по умолчанию 1, но новые категории (face/depil/skincare/dental)
-    # сидятся как is_active=0 — салон проставит цены и активирует через админку.
+    # Seed из services.py только если таблица пуста. Все услуги активны
+    # по умолчанию (is_active=1) и попадают в каталог сразу — заказчица
+    # потом скорректирует цены через админку.
     cursor = await db.execute("SELECT COUNT(*) FROM services")
     if (await cursor.fetchone())[0] == 0:
         await db.executemany(
@@ -541,6 +541,59 @@ async def init_db() -> None:
                 leftover,
             )
         await db.execute("PRAGMA user_version = 9")
+
+    # v9 → v10: дедуп услуг по (name, category) + UNIQUE-индекс на будущее.
+    # У некоторых инстансов накопились дубли из-за повторных запусков seed_demo
+    # без --reset, наложения старого seed_v4_categories.py и миграций. Симптом —
+    # клиент в категории видит «руки полностью · 0» и «руки полностью · 200000»
+    # рядом, не понимает что выбирать.
+    #
+    # Логика: для каждой группы (name, category) с >1 строкой оставляем строку
+    # с минимальным id (самую старую — там обычно правильная цена), переносим
+    # на неё все appointments и аддоны от дублей, остальные удаляем. После —
+    # CREATE UNIQUE INDEX, чтобы дубли не могли появиться вновь.
+    if current_version < 10:
+        cur = await db.execute(
+            "SELECT name, category, GROUP_CONCAT(id) AS ids "
+            "FROM services GROUP BY name, category HAVING COUNT(*) > 1"
+        )
+        dup_groups = await cur.fetchall()
+        for name, category, ids_str in dup_groups:
+            ids = sorted(int(x) for x in ids_str.split(","))
+            keep_id = ids[0]
+            drop_ids = ids[1:]
+            placeholders = ",".join("?" for _ in drop_ids)
+            # Переносим записи на сохраняемую услугу — иначе при удалении
+            # дублей потеряем историю прошлых записей клиентов.
+            await db.execute(
+                f"UPDATE appointments SET service_id = ? WHERE service_id IN ({placeholders})",
+                (keep_id, *drop_ids),
+            )
+            # Переносим аддоны на сохраняемую услугу. Дубли аддонов могут
+            # появиться (одинаковые name под одним service_id) — после
+            # переноса можно дополнительно дедупить, но пока оставляем,
+            # админ почистит вручную через карточку.
+            await db.execute(
+                f"UPDATE service_addons SET service_id = ? WHERE service_id IN ({placeholders})",
+                (keep_id, *drop_ids),
+            )
+            # Удаляем дубли. CASCADE на appointment_addons не страшен —
+            # appointments уже перевязаны, на удаляемые услуги ссылок нет.
+            await db.execute(
+                f"DELETE FROM services WHERE id IN ({placeholders})",
+                tuple(drop_ids),
+            )
+            logger.info(
+                "Миграция v9→v10: дедуп %r/%r — оставлен id=%d, удалено id=%s",
+                name, category, keep_id, drop_ids,
+            )
+        # Теперь дублей нет — можно вешать UNIQUE-индекс. IF NOT EXISTS
+        # на случай если миграция перезапустится после сбоя.
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_services_name_category "
+            "ON services(name, category)"
+        )
+        await db.execute("PRAGMA user_version = 10")
 
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
