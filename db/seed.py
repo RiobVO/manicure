@@ -15,15 +15,16 @@ Seed-данные для первого запуска.
   care   — уходовые процедуры (УЗ-чистка, механическая чистка, отбеливание зубов)
 
 Шаблон записи: {id, name, price, duration, category}.
-Все услуги активны по умолчанию (is_active=1) — заказчица проставит цены
-в админке для тех у кого price=0, остальные доступны клиенту сразу.
+Все услуги активны по умолчанию (is_active=1) и попадают в каталог сразу.
+Цены — ориентир по рынку Ташкента 2026 года; владелец салона должен
+проверить и скорректировать через админку перед запуском.
 
 Имена услуг внутри депиляционных категорий (wax/sugar) не содержат метода
 («Воск — руки полностью»), а только зону («Руки полностью»). Метод видно
 из категории на первом экране.
 """
 SERVICES = [
-    # ─── Маникюр (исторический seed v.0) ─────────────────────────────────────
+    # ─── Маникюр ─────────────────────────────────────────────────────────────
     {"id": 1, "name": "Маникюр без покрытия",   "price": 150000, "duration": 45,  "category": "hands"},
     {"id": 2, "name": "Маникюр с лаком",         "price": 180000, "duration": 60,  "category": "hands"},
     {"id": 3, "name": "Маникюр с гель-лаком",    "price": 250000, "duration": 120, "category": "hands"},
@@ -33,38 +34,38 @@ SERVICES = [
     {"id": 6, "name": "Педикюр с гель-лаком",    "price": 280000, "duration": 120, "category": "feet"},
 
     # ─── Лицо (face) ─────────────────────────────────────────────────────────
-    {"id": 7,  "name": "Лицо полностью", "price": 0, "duration": 30, "category": "face"},
-    {"id": 8,  "name": "Брови",          "price": 0, "duration": 30, "category": "face"},
-    {"id": 9,  "name": "Усики",          "price": 0, "duration": 30, "category": "face"},
-    {"id": 10, "name": "Подбородок",     "price": 0, "duration": 30, "category": "face"},
-    {"id": 11, "name": "Щёки",           "price": 0, "duration": 30, "category": "face"},
+    {"id": 7,  "name": "Лицо полностью", "price": 80000,  "duration": 30, "category": "face"},
+    {"id": 8,  "name": "Брови",          "price": 50000,  "duration": 20, "category": "face"},
+    {"id": 9,  "name": "Усики",          "price": 30000,  "duration": 15, "category": "face"},
+    {"id": 10, "name": "Подбородок",     "price": 40000,  "duration": 15, "category": "face"},
+    {"id": 11, "name": "Щёки",           "price": 35000,  "duration": 20, "category": "face"},
 
     # ─── Воск (wax) — 8 услуг (БЕЗ подмышек) ─────────────────────────────────
-    {"id": 12, "name": "Руки полностью",        "price": 0, "duration": 30, "category": "wax"},
-    {"id": 13, "name": "Руки до локтя",         "price": 0, "duration": 30, "category": "wax"},
-    {"id": 14, "name": "Руки с захватом локтя", "price": 0, "duration": 30, "category": "wax"},
-    {"id": 15, "name": "Ноги полностью",        "price": 0, "duration": 30, "category": "wax"},
-    {"id": 16, "name": "Ноги до колена",        "price": 0, "duration": 30, "category": "wax"},
-    {"id": 17, "name": "Ноги с захватом колена","price": 0, "duration": 30, "category": "wax"},
-    {"id": 18, "name": "Бикини глубокое",       "price": 0, "duration": 30, "category": "wax"},
-    {"id": 19, "name": "Бикини классическое",   "price": 0, "duration": 30, "category": "wax"},
+    {"id": 12, "name": "Руки полностью",        "price": 100000, "duration": 30, "category": "wax"},
+    {"id": 13, "name": "Руки до локтя",         "price": 60000,  "duration": 20, "category": "wax"},
+    {"id": 14, "name": "Руки с захватом локтя", "price": 80000,  "duration": 25, "category": "wax"},
+    {"id": 15, "name": "Ноги полностью",        "price": 200000, "duration": 60, "category": "wax"},
+    {"id": 16, "name": "Ноги до колена",        "price": 130000, "duration": 40, "category": "wax"},
+    {"id": 17, "name": "Ноги с захватом колена","price": 160000, "duration": 50, "category": "wax"},
+    {"id": 18, "name": "Бикини глубокое",       "price": 250000, "duration": 45, "category": "wax"},
+    {"id": 19, "name": "Бикини классическое",   "price": 150000, "duration": 30, "category": "wax"},
 
     # ─── Шугаринг (sugar) — 9 услуг (включая подмышки) ───────────────────────
-    {"id": 20, "name": "Руки полностью",        "price": 0, "duration": 30, "category": "sugar"},
-    {"id": 21, "name": "Руки до локтя",         "price": 0, "duration": 30, "category": "sugar"},
-    {"id": 22, "name": "Руки с захватом локтя", "price": 0, "duration": 30, "category": "sugar"},
-    {"id": 23, "name": "Ноги полностью",        "price": 0, "duration": 30, "category": "sugar"},
-    {"id": 24, "name": "Ноги до колена",        "price": 0, "duration": 30, "category": "sugar"},
-    {"id": 25, "name": "Ноги с захватом колена","price": 0, "duration": 30, "category": "sugar"},
-    {"id": 26, "name": "Бикини глубокое",       "price": 0, "duration": 30, "category": "sugar"},
-    {"id": 27, "name": "Бикини классическое",   "price": 0, "duration": 30, "category": "sugar"},
-    {"id": 28, "name": "Подмышки",              "price": 0, "duration": 30, "category": "sugar"},
+    {"id": 20, "name": "Руки полностью",        "price": 120000, "duration": 30, "category": "sugar"},
+    {"id": 21, "name": "Руки до локтя",         "price": 70000,  "duration": 20, "category": "sugar"},
+    {"id": 22, "name": "Руки с захватом локтя", "price": 90000,  "duration": 25, "category": "sugar"},
+    {"id": 23, "name": "Ноги полностью",        "price": 230000, "duration": 60, "category": "sugar"},
+    {"id": 24, "name": "Ноги до колена",        "price": 150000, "duration": 40, "category": "sugar"},
+    {"id": 25, "name": "Ноги с захватом колена","price": 180000, "duration": 50, "category": "sugar"},
+    {"id": 26, "name": "Бикини глубокое",       "price": 280000, "duration": 50, "category": "sugar"},
+    {"id": 27, "name": "Бикини классическое",   "price": 170000, "duration": 35, "category": "sugar"},
+    {"id": 28, "name": "Подмышки",              "price": 70000,  "duration": 20, "category": "sugar"},
 
     # ─── Уходовые процедуры (care) ───────────────────────────────────────────
     # ⚠ юридический риск: отбеливание зубов = медицинская услуга. Активировать
     # ТОЛЬКО если у салона партнёр-стоматолог с лицензией. Иначе деактивировать
     # через админку или удалить.
-    {"id": 29, "name": "Ультразвуковая чистка", "price": 0, "duration": 30, "category": "care"},
-    {"id": 30, "name": "Механическая чистка",   "price": 0, "duration": 30, "category": "care"},
-    {"id": 31, "name": "Отбеливание зубов",     "price": 0, "duration": 30, "category": "care"},
+    {"id": 29, "name": "Ультразвуковая чистка", "price": 250000, "duration": 60, "category": "care"},
+    {"id": 30, "name": "Механическая чистка",   "price": 200000, "duration": 75, "category": "care"},
+    {"id": 31, "name": "Отбеливание зубов",     "price": 800000, "duration": 90, "category": "care"},
 ]
