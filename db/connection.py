@@ -476,6 +476,72 @@ async def init_db() -> None:
             )
         await db.execute("PRAGMA user_version = 8")
 
+    # v8 → v9: реструктуризация категорий по новой архитектуре заказчицы.
+    # Депиляция распадается на воск/шугаринг как отдельные категории, лицо/уход
+    # переименовываются в «уходовые процедуры», стоматология сливается туда же.
+    # Параллельно убираем дубль метода в name (была «Воск — руки полностью»,
+    # стало просто «Руки полностью» — метод теперь видно из категории).
+    #
+    # Перенос:
+    #   depil + name LIKE 'Воск — %'      → wax,  без префикса 'Воск — '
+    #   depil + name LIKE 'Шугаринг — %'  → sugar, без префикса 'Шугаринг — '
+    #   skincare                          → care
+    #   dental                            → care
+    #
+    # Дополнительно: «Воск — подмышки» удаляем (на воск подмышки обычно не
+    # делают, заказчица решила оставить только в шугаринге). Если у услуги
+    # уже есть будущие записи — UPDATE категории не сломает их (FK через
+    # service_id, а не category).
+    if current_version < 9:
+        await db.execute(
+            "UPDATE settings SET value = '🪒 Воск' "
+            "WHERE key = 'cat_d_label' AND value = '🪒 Депиляция'"
+        )
+        await db.execute(
+            "UPDATE settings SET value = '🍯 Шугаринг' "
+            "WHERE key = 'cat_e_label' AND value = '✨ Уход за лицом'"
+        )
+        await db.execute(
+            "UPDATE settings SET value = '✨ Уходовые процедуры' "
+            "WHERE key = 'cat_f_label' AND value = '🦷 Стоматология'"
+        )
+        # Воск × 9 зон (включая подмышки на этом шаге).
+        await db.execute(
+            "UPDATE services "
+            "SET category = 'wax', name = SUBSTR(name, LENGTH('Воск — ') + 1) "
+            "WHERE category = 'depil' AND name LIKE 'Воск — %'"
+        )
+        # Сразу удаляем «Подмышки» из воска — заказчица решила оставить только
+        # в шугаринге. Удаляем только если на услугу нет записей (защита от
+        # потери истории). Если есть — админ уберёт её через админку вручную.
+        await db.execute(
+            "DELETE FROM services WHERE category = 'wax' "
+            "AND LOWER(name) = 'подмышки' "
+            "AND id NOT IN (SELECT DISTINCT service_id FROM appointments WHERE service_id IS NOT NULL)"
+        )
+        # Шугаринг × 9 зон (вкл. подмышки).
+        await db.execute(
+            "UPDATE services "
+            "SET category = 'sugar', name = SUBSTR(name, LENGTH('Шугаринг — ') + 1) "
+            "WHERE category = 'depil' AND name LIKE 'Шугаринг — %'"
+        )
+        # Уходовые процедуры — слияние skincare и dental.
+        await db.execute(
+            "UPDATE services SET category = 'care' "
+            "WHERE category IN ('skincare', 'dental')"
+        )
+        # Хвосты depil без префикса метода (например «Гелевая — руки») — не
+        # трогаем, остаются как есть и попадут в «прочее»; админ перенесёт
+        # руками через svc_setcat. Если такие найдутся — пишем WARN.
+        cur = await db.execute("SELECT COUNT(*) FROM services WHERE category = 'depil'")
+        leftover = (await cur.fetchone())[0]
+        if leftover > 0:
+            logger.warning(
+                "Миграция v8→v9: %d услуг остались в category='depil' — перенеси через админку.",
+                leftover,
+            )
+        await db.execute("PRAGMA user_version = 9")
+
     # --- миграция: дефолтный мастер при переходе с одно-мастерной схемы ---
     # Если таблица masters пуста — создаём одного мастера из legacy-настроек.
     cursor_m = await db.execute("SELECT COUNT(*) FROM masters")

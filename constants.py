@@ -47,7 +47,7 @@ WEEKDAYS_FULL_RU: Final[tuple[str, ...]] = (
 # где админ переименовывает подписи без перезапуска.
 # Порядок важен: в этом же порядке кнопки рисуются клиенту и админу.
 CATEGORY_KEYS: Final[tuple[str, ...]] = (
-    "hands", "feet", "face", "depil", "skincare", "dental",
+    "hands", "feet", "face", "wax", "sugar", "care",
 )
 CATEGORY_LABEL_KEYS: Final[tuple[str, ...]] = (
     "cat_a_label", "cat_b_label", "cat_c_label",
@@ -62,9 +62,9 @@ CATEGORY_DEFAULT_LABELS: Final[dict[str, str]] = {
     "cat_a_label": "💅 Маникюр",
     "cat_b_label": "🦶 Педикюр",
     "cat_c_label": "👁 Лицо",
-    "cat_d_label": "🪒 Депиляция",
-    "cat_e_label": "✨ Уход за лицом",
-    "cat_f_label": "🦷 Стоматология",
+    "cat_d_label": "🪒 Воск",
+    "cat_e_label": "🍯 Шугаринг",
+    "cat_f_label": "✨ Уходовые процедуры",
 }
 
 
