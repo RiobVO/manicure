@@ -18,6 +18,7 @@ import time
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,18 @@ class TimingMiddleware(BaseMiddleware):
         t0 = time.monotonic()
         try:
             return await handler(event, data)
+        except TelegramRetryAfter as exc:
+            # TG говорит «слишком быстро шлёшь» — частая причина «залипания
+            # на 8-9 тапе». aiogram сам ретраит после retry_after, но клиент
+            # видит задержку. Явно логируем чтобы можно было искать в логах.
+            dt_ms = int((time.monotonic() - t0) * 1000)
+            context = _describe(event) or "?"
+            logger.error(
+                "TG-FLOOD: %s retry_after=%ss duration=%dms — "
+                "Telegram троттлит бот, проверь частоту edit_message",
+                context, exc.retry_after, dt_ms,
+            )
+            raise
         finally:
             dt_ms = int((time.monotonic() - t0) * 1000)
             context = _describe(event)
