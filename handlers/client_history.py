@@ -604,22 +604,39 @@ async def cb_cancel_with_reason(callback: CallbackQuery):
 
 @router.message(F.text.in_({"мои записи", "mening yozilishlarim", "Mening yozuvlarim", "📋 Мои записи", "📋 Yozuvlarim"}))
 async def btn_my_appointments(message: Message, state: FSMContext):
-    """Кнопка reply-клавиатуры — сбрасывает FSM и показывает записи клиента (B-стиль)."""
+    """Кнопка reply-клавиатуры — сбрасывает FSM и показывает записи клиента (B-стиль).
+
+    Перед показом чистим предыдущий live-экран (выбор категорий / прошлый
+    список «мои записи»), чтобы повторные тапы не плодили дубли в чате.
+    Late import — handlers.client.* импортится изнутри, на верхнем уровне
+    создал бы цикл (client.py не зависит от client_history, но мы зависим
+    от него). Вынос инфраструктуры в utils — отдельная задача, сейчас
+    не трогаем.
+    """
     await state.clear()
     lang = await get_user_lang(message.from_user.id)
+
+    from handlers.client import _cleanup_services_msg, _remember_services_msg
+    from utils.panel import delete_in_bg
+
+    # Удаляем само нажатое сообщение reply-кнопки и предыдущий live-экран.
+    delete_in_bg(message)
+    await _cleanup_services_msg(message.bot, message.chat.id)
 
     # Один SELECT вместо count+fetch — fetch сам знает len(appts).
     appts = await get_user_appointments_full(message.from_user.id, limit=_FETCH_LIMIT)
     if not appts:
         book_btn = t("btn_book", lang)
-        await message.answer(
+        sent = await message.answer(
             t("history_empty", lang),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text=f"{ARROW_DO} {book_btn}", callback_data="client_restart"),
             ]]),
             parse_mode="HTML",
         )
+        _remember_services_msg(message.chat.id, sent.message_id)
         return
 
     text, kb = await _render_history_b_style(appts, lang)
-    await message.answer(text, reply_markup=kb, parse_mode="HTML")
+    sent = await message.answer(text, reply_markup=kb, parse_mode="HTML")
+    _remember_services_msg(message.chat.id, sent.message_id)
