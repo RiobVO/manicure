@@ -23,6 +23,10 @@ from config import (
     LICENSE_KEY,
     REDIS_URL,
     TENANT_SLUG,
+    WEBHOOK_URL,
+    WEBHOOK_PORT,
+    WEBHOOK_SECRET,
+    WEBHOOK_PATH,
 )
 from db import init_db, close_db
 from handlers import client, admin
@@ -266,10 +270,25 @@ async def main() -> None:
         await _warn_grace(bot, license_state)
     logger.info("Бот запущен")
 
+    # Webhook vs polling: если WEBHOOK_URL задан — поднимаем aiohttp-сервер
+    # и регистрируем webhook у Telegram. Иначе классический long-polling.
+    # Webhook выигрывает 100-500мс на каждом callback — TG толкает событие
+    # без ожидания getUpdates round-trip.
+    webhook_runner = None
     try:
-        await dp.start_polling(bot)
+        if WEBHOOK_URL:
+            webhook_runner = await _start_webhook(bot, dp)
+            logger.info(
+                "Webhook listening on :%d%s, registered at %s",
+                WEBHOOK_PORT, WEBHOOK_PATH, WEBHOOK_URL,
+            )
+            # Веб-сервер запущен в фоне, ждём отмены событийным циклом.
+            await asyncio.Event().wait()
+        else:
+            logger.info("WEBHOOK_URL пуст → polling mode")
+            await dp.start_polling(bot)
     except asyncio.CancelledError:
-        logger.info("Polling cancelled, shutting down")
+        logger.info("Stop signal received, shutting down")
     finally:
         logger.info("Бот останавливается.")
         # wait=False — не висим на running jobs: send_document бэкапа (50МБ)
@@ -281,6 +300,15 @@ async def main() -> None:
         # до close_db()/session.close() ниже; их ошибки при закрытом connection —
         # best-effort, следующий тик повторит.
         scheduler.shutdown(wait=False)
+        if webhook_runner is not None:
+            try:
+                await bot.delete_webhook()
+            except Exception:
+                logger.warning("delete_webhook на shutdown упал — игнор")
+            try:
+                await webhook_runner.cleanup()
+            except Exception:
+                logger.warning("webhook_runner cleanup: игнор")
         if payment_runner is not None:
             try:
                 await payment_runner.cleanup()
@@ -289,6 +317,51 @@ async def main() -> None:
         await close_db()
         await bot.session.close()
         logger.info("Бот остановлен")
+
+
+async def _start_webhook(bot: Bot, dp: Dispatcher):
+    """
+    Поднимает aiohttp-сервер на WEBHOOK_PORT и регистрирует webhook
+    в Telegram. Возвращает AppRunner для последующего cleanup.
+
+    Параллельно polling — нельзя; перед регистрацией делаем delete_webhook
+    + drop_pending_updates=True на set_webhook, чтобы:
+      • Очистить накопленные апдейты при переходе с polling (иначе
+        старые клики выстрелят дважды).
+      • Снять чужой/устаревший webhook (например с предыдущего деплоя).
+
+    secret_token: если задан — Telegram добавит заголовок
+    X-Telegram-Bot-Api-Secret-Token=<token> к каждому POST. aiogram сам
+    проверит и отбросит чужие запросы (важно если webhook на публичном URL).
+    """
+    from aiohttp import web
+    from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+
+    secret = WEBHOOK_SECRET or None
+
+    # drop_pending_updates: при переходе с polling в очереди могут лежать
+    # необработанные клики — без drop они придут после set_webhook и
+    # выстрелят как «двойной тап» по старым FSM-state'ам.
+    await bot.set_webhook(
+        url=WEBHOOK_URL,
+        secret_token=secret,
+        drop_pending_updates=True,
+        allowed_updates=dp.resolve_used_update_types(),
+    )
+
+    app = web.Application()
+    SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+        secret_token=secret,
+    ).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=WEBHOOK_PORT)
+    await site.start()
+    return runner
 
 
 if __name__ == "__main__":
