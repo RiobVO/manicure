@@ -232,6 +232,9 @@ async def cb_appt_status(callback: CallbackQuery):
         await callback.answer()
         return
 
+    # Ранний ack: дальше DB-update + 3 фоновые задачи. Без раннего ack
+    # админ видел залипание кнопки статуса до 1с в часы пик.
+    await callback.answer()
     appt = await get_appointment_by_id(appt_id)
     await update_appointment_status(appt_id, status)
 
@@ -371,9 +374,19 @@ async def cb_appt_cancel_confirm(callback: CallbackQuery):
         await callback.answer()
         return
     appt_id = int(parts[0])
+    # Ранний ack: дальше get_appointment + update_status + 4 фоновые задачи.
+    # При спаме отмен админ видел залипание кнопки до 2с.
+    await callback.answer()
     appt = await get_appointment_by_id(appt_id)
     if not appt:
-        await callback.answer("Эта запись больше не существует — возможно, её отменили.", show_alert=True)
+        # Алерт после раннего ack не сработает — показываем сообщением.
+        try:
+            await callback.message.answer(
+                "⚠️ Эта запись больше не существует — возможно, её отменили.",
+                parse_mode="HTML",
+            )
+        except TelegramBadRequest:
+            pass
         return
 
     # Критичный путь: обновить БД + UI админа. Всё что касается

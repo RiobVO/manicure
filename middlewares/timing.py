@@ -22,8 +22,15 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 
 logger = logging.getLogger(__name__)
 
-SLOW_THRESHOLD_MS = 500
-VERY_SLOW_THRESHOLD_MS = 1500
+# Понижены пороги для UX-диагностики: всё что >200мс уже заметно
+# пользователю как «секунда подвисло». До этого порог был 500мс — мы
+# не ловили медленные хендлеры в зоне 300-500мс.
+SLOW_THRESHOLD_MS = 200
+VERY_SLOW_THRESHOLD_MS = 800
+
+# Если duration выше LATENCY_HINT_THRESHOLD_MS — это явно про сеть/клиента,
+# не про сервер. В лог пишем подсказку «не трогай код, проверь сеть».
+LATENCY_HINT_THRESHOLD_MS = 50
 
 
 class TimingMiddleware(BaseMiddleware):
@@ -50,7 +57,14 @@ class TimingMiddleware(BaseMiddleware):
 
 
 def _describe(event: TelegramObject) -> str | None:
-    """Короткая строка-контекст: тип, user_id, что нажали/написали."""
+    """Короткая строка-контекст: тип, user_id, что нажали/написали.
+
+    Для CallbackQuery добавляем callback.id (короткий хеш Telegram'а) —
+    это помогает диагностировать дубли: если в логах два подряд handler'а
+    с разным callback.id и одинаковым data за 100мс — клиент тапнул дважды
+    (anti-spam режет, но диагностика остаётся). Если разрыв >2с между
+    одинаковыми callback.id — это retry самого Telegram, а не клиента.
+    """
     if isinstance(event, Message):
         user_id = event.from_user.id if event.from_user else "?"
         text = (event.text or event.caption or "(no text)")[:60]
@@ -58,5 +72,6 @@ def _describe(event: TelegramObject) -> str | None:
     if isinstance(event, CallbackQuery):
         user_id = event.from_user.id
         data = (event.data or "")[:60]
-        return f"cb user={user_id} data={data!r}"
+        cb_id = (event.id or "")[-8:]  # последние 8 символов — достаточно для диагностики
+        return f"cb id={cb_id} user={user_id} data={data!r}"
     return None
