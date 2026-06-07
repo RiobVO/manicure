@@ -603,12 +603,26 @@ def calendar_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
 
 # ─── APPOINTMENTS ─────────────────────────────────────────────────────────────
 
-def all_appointments_keyboard(appointments: list[dict]) -> InlineKeyboardMarkup | None:
-    """Все предстоящие записи — каждая как кнопка с датой и временем."""
+APPTS_PER_PAGE = 10
+
+
+def all_appointments_keyboard(
+    appointments: list[dict],
+    page: int = 0,
+    per_page: int = APPTS_PER_PAGE,
+) -> InlineKeyboardMarkup | None:
+    """Все предстоящие записи — пагинация по 10 на страницу. Кнопка-запись
+    тапается → карточка записи. Стрелки скрываются на крайних страницах."""
     if not appointments:
         return None
-    buttons = []
-    for appt in appointments:
+    total = len(appointments)
+    per_page = max(1, per_page)
+    total_pages = (total + per_page - 1) // per_page
+    page = max(0, min(page, total_pages - 1))
+    start = page * per_page
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    for appt in appointments[start:start + per_page]:
         try:
             dt = datetime.strptime(appt["date"], "%Y-%m-%d")
             date_label = f"{dt.day:02d}.{dt.month:02d}"
@@ -619,6 +633,19 @@ def all_appointments_keyboard(appointments: list[dict]) -> InlineKeyboardMarkup 
             text=f"📅 {date_label} {appt['time']} — {name_trunc}",
             callback_data=f"appt_detail_{appt['id']}",
         )])
+
+    if total_pages > 1:
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="◀", callback_data=f"apptlist_page_{page - 1}"))
+        nav.append(InlineKeyboardButton(
+            text=f"{page + 1}/{total_pages}",
+            callback_data="cal_noop",
+        ))
+        if page < total_pages - 1:
+            nav.append(InlineKeyboardButton(text="▶", callback_data=f"apptlist_page_{page + 1}"))
+        buttons.append(nav)
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -645,7 +672,10 @@ def day_view_keyboard(scheduled: list[dict], date_str: str) -> InlineKeyboardMar
         )])
 
     today_str = now_local().strftime("%Y-%m-%d")
-    if date_str >= today_str:
+    if date_str > today_str:
+        # Только строго будущие дни. На «Сегодня» закрывать смысла нет —
+        # рабочий день идёт, записи активны; админ всё равно их не успеет
+        # перенести, и UX здесь ложноположительный.
         buttons.append([InlineKeyboardButton(
             text="🚫 Сделать выходным",
             callback_data=f"caldayoff_{date_str}",
@@ -871,63 +901,43 @@ def client_card_keyboard() -> InlineKeyboardMarkup:
 
 # ─── SERVICES ─────────────────────────────────────────────────────────────────
 
+SERVICES_PER_PAGE = 8
+
+
 def services_list_keyboard(
     services: list[dict],
-    labels: dict[str, str] | None = None,
+    page: int = 0,
+    per_page: int = SERVICES_PER_PAGE,
 ) -> InlineKeyboardMarkup:
     """
-    Список услуг в админке.
-
-    labels=None → плоский список (legacy). С labels — группируем по CATEGORY_KEYS
-    в фиксированном порядке (маникюр → педикюр → лицо → воск → шугаринг → уход).
-    Услуги без категории или с неизвестной — в бакет «✨ Прочее» в конце.
-    Заголовки категорий — некликабельные (callback `cal_noop`, общий silent-ack).
-    Пустые категории не выводятся.
+    Пагинированный список услуг в админке. ~8 на страницу — без скролла на
+    стандартном экране телефона. Footer: «◀» «N/M» «▶» (стрелки на крайних
+    страницах скрыты, счётчик не кликабельный — cal_noop).
     """
-    from constants import CATEGORY_DEFAULT_LABELS
-
-    def _btn(s: dict) -> list[InlineKeyboardButton]:
-        status = "🟢" if s["is_active"] else "🔴"
-        return [InlineKeyboardButton(
-            text=f"{status} {s['name']} — {s['price']:,} сум",
-            callback_data=f"svc_detail_{s['id']}",
-        )]
-
     buttons: list[list[InlineKeyboardButton]] = []
-
-    if labels is None:
-        for s in services:
-            buttons.append(_btn(s))
-    else:
-        known = set(CATEGORY_KEYS)
-        bucket: dict[str, list[dict]] = {k: [] for k in CATEGORY_KEYS}
-        other: list[dict] = []
-        for s in services:
-            cat = s.get("category") or ""
-            if cat in known:
-                bucket[cat].append(s)
-            else:
-                other.append(s)
-
-        for cat_key, label_key in zip(CATEGORY_KEYS, CATEGORY_LABEL_KEYS):
-            items = bucket[cat_key]
-            if not items:
-                continue
-            label = labels.get(cat_key) or CATEGORY_DEFAULT_LABELS[label_key]
+    total = len(services)
+    if total > 0:
+        per_page = max(1, per_page)
+        total_pages = (total + per_page - 1) // per_page
+        page = max(0, min(page, total_pages - 1))
+        start = page * per_page
+        for s in services[start:start + per_page]:
+            status = "🟢" if s["is_active"] else "🔴"
             buttons.append([InlineKeyboardButton(
-                text=f"━━ {label} ━━",
-                callback_data="cal_noop",
+                text=f"{status} {s['name']} — {s['price']:,} сум",
+                callback_data=f"svc_detail_{s['id']}",
             )])
-            for s in items:
-                buttons.append(_btn(s))
-
-        if other:
-            buttons.append([InlineKeyboardButton(
-                text="━━ ✨ Прочее ━━",
+        if total_pages > 1:
+            nav: list[InlineKeyboardButton] = []
+            if page > 0:
+                nav.append(InlineKeyboardButton(text="◀", callback_data=f"svc_page_{page - 1}"))
+            nav.append(InlineKeyboardButton(
+                text=f"{page + 1}/{total_pages}",
                 callback_data="cal_noop",
-            )])
-            for s in other:
-                buttons.append(_btn(s))
+            ))
+            if page < total_pages - 1:
+                nav.append(InlineKeyboardButton(text="▶", callback_data=f"svc_page_{page + 1}"))
+            buttons.append(nav)
 
     buttons.append([InlineKeyboardButton(text="➕ Добавить услугу", callback_data="svc_add")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
