@@ -45,7 +45,12 @@ def _service_text(service: dict) -> str:
 
 async def _show_services(callback: CallbackQuery):
     services = await get_services(active_only=False)
-    await edit_panel_with_callback(callback, "💅 Управление услугами:", services_list_keyboard(services))
+    cfg = await get_categories_config()
+    await edit_panel_with_callback(
+        callback,
+        "💅 Управление услугами:",
+        services_list_keyboard(services, labels=cfg["labels"]),
+    )
 
 
 async def _show_service_detail(callback: CallbackQuery, service_id: int):
@@ -589,10 +594,11 @@ async def msg_svc_add_dur(message: Message, state: FSMContext):
         )
         await state.clear()
         services = await get_services(active_only=False)
+        cfg2 = await get_categories_config()
         await edit_panel(
             message.bot, message.chat.id,
             f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
-            services_list_keyboard(services),
+            services_list_keyboard(services, labels=cfg2["labels"]),
         )
         return
 
@@ -640,10 +646,11 @@ async def cb_svc_add_category(callback: CallbackQuery, state: FSMContext):
     await state.clear()
 
     services = await get_services(active_only=False)
+    cfg3 = await get_categories_config()
     await edit_panel_with_callback(
         callback,
         f"✅ Услуга добавлена: {data['new_service_name']}\n\n💅 Управление услугами:",
-        services_list_keyboard(services),
+        services_list_keyboard(services, labels=cfg3["labels"]),
     )
     await callback.answer()
 

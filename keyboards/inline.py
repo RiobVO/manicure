@@ -871,14 +871,64 @@ def client_card_keyboard() -> InlineKeyboardMarkup:
 
 # ─── SERVICES ─────────────────────────────────────────────────────────────────
 
-def services_list_keyboard(services: list[dict]) -> InlineKeyboardMarkup:
-    buttons = []
-    for s in services:
+def services_list_keyboard(
+    services: list[dict],
+    labels: dict[str, str] | None = None,
+) -> InlineKeyboardMarkup:
+    """
+    Список услуг в админке.
+
+    labels=None → плоский список (legacy). С labels — группируем по CATEGORY_KEYS
+    в фиксированном порядке (маникюр → педикюр → лицо → воск → шугаринг → уход).
+    Услуги без категории или с неизвестной — в бакет «✨ Прочее» в конце.
+    Заголовки категорий — некликабельные (callback `cal_noop`, общий silent-ack).
+    Пустые категории не выводятся.
+    """
+    from constants import CATEGORY_DEFAULT_LABELS
+
+    def _btn(s: dict) -> list[InlineKeyboardButton]:
         status = "🟢" if s["is_active"] else "🔴"
-        buttons.append([InlineKeyboardButton(
+        return [InlineKeyboardButton(
             text=f"{status} {s['name']} — {s['price']:,} сум",
-            callback_data=f"svc_detail_{s['id']}"
-        )])
+            callback_data=f"svc_detail_{s['id']}",
+        )]
+
+    buttons: list[list[InlineKeyboardButton]] = []
+
+    if labels is None:
+        for s in services:
+            buttons.append(_btn(s))
+    else:
+        known = set(CATEGORY_KEYS)
+        bucket: dict[str, list[dict]] = {k: [] for k in CATEGORY_KEYS}
+        other: list[dict] = []
+        for s in services:
+            cat = s.get("category") or ""
+            if cat in known:
+                bucket[cat].append(s)
+            else:
+                other.append(s)
+
+        for cat_key, label_key in zip(CATEGORY_KEYS, CATEGORY_LABEL_KEYS):
+            items = bucket[cat_key]
+            if not items:
+                continue
+            label = labels.get(cat_key) or CATEGORY_DEFAULT_LABELS[label_key]
+            buttons.append([InlineKeyboardButton(
+                text=f"━━ {label} ━━",
+                callback_data="cal_noop",
+            )])
+            for s in items:
+                buttons.append(_btn(s))
+
+        if other:
+            buttons.append([InlineKeyboardButton(
+                text="━━ ✨ Прочее ━━",
+                callback_data="cal_noop",
+            )])
+            for s in other:
+                buttons.append(_btn(s))
+
     buttons.append([InlineKeyboardButton(text="➕ Добавить услугу", callback_data="svc_add")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
