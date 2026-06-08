@@ -37,13 +37,13 @@ from db import (
     log_admin_action, _price_fmt, get_day_schedule,
     get_review_by_appointment, get_master,
     get_day_schedule_for_master, get_time_blocks_for_master,
-    get_calendar_marks,
+    get_calendar_marks, cancel_all_scheduled_on_date,
 )
 import calendar as _stdlib_calendar
 from keyboards.inline import (
     admin_keyboard, day_view_keyboard, appointment_actions_keyboard,
     cancel_confirm_keyboard, reschedule_dates_keyboard, reschedule_times_keyboard,
-    calendar_keyboard, review_rating_keyboard,
+    calendar_keyboard, review_rating_keyboard, daycancel_confirm_keyboard,
 )
 from utils.slots import generate_free_slots
 from utils.admin import STATUS_LABEL, is_admin_callback, deny_access, IsAdminFilter
@@ -216,6 +216,156 @@ async def cb_cal_day(callback: CallbackQuery):
 @router.callback_query(F.data == "cal_noop")
 async def cb_cal_noop(callback: CallbackQuery):
     await callback.answer()
+
+
+# ─── МАССОВАЯ ОТМЕНА ВСЕХ ЗАПИСЕЙ ДНЯ ───────────────────────────────────────
+
+@router.callback_query(
+    F.data.startswith("daycancel_") & ~F.data.startswith("daycancel_confirm_")
+)
+async def cb_daycancel_ask(callback: CallbackQuery):
+    """Шаг 1: подтверждение массовой отмены."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "daycancel", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    date_str = parts[0]
+
+    # Считаем актуальное число scheduled — за время между показом
+    # day-view и нажатием могло измениться.
+    appts = await get_appointments_by_date_full(date_str)
+    scheduled = [a for a in appts if a["status"] == "scheduled"]
+    if not scheduled:
+        await callback.answer("На эту дату активных записей нет.", show_alert=True)
+        await show_day_view(callback, date_str)
+        return
+
+    try:
+        label = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except ValueError:
+        label = date_str
+
+    text = (
+        f"❌ <b>Отменить все записи на {label}?</b>\n\n"
+        f"Будет отменено: <b>{len(scheduled)}</b> запис.\n"
+        f"Каждый клиент получит уведомление об отмене.\n\n"
+        f"<i>Действие необратимо.</i>"
+    )
+    await edit_panel_with_callback(
+        callback, text,
+        daycancel_confirm_keyboard(date_str, len(scheduled)),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("daycancel_confirm_"))
+async def cb_daycancel_confirm(callback: CallbackQuery):
+    """Шаг 2: батч-отмена + уведомления + audit + refund-алерты."""
+    if not is_admin_callback(callback):
+        await deny_access(callback)
+        return
+    parts = parse_callback(callback.data, "daycancel_confirm", 1)
+    if not parts:
+        logger.warning("Некорректный callback: %s", callback.data)
+        await callback.answer()
+        return
+    date_str = parts[0]
+    await callback.answer()  # ранний ack — дальше DB + N фоновых задач
+
+    cancelled = await cancel_all_scheduled_on_date(date_str)
+    if not cancelled:
+        await edit_panel_with_callback(
+            callback, "ℹ️ На эту дату активных записей не было.", None,
+        )
+        return
+
+    # Audit-log одной строкой — не N штук.
+    _fire(
+        log_admin_action(
+            admin_id=callback.from_user.id,
+            action="cancel_all_day",
+            target_type="appointment_batch",
+            target_id=0,
+            details=f"{date_str}: отменено {len(cancelled)} записей "
+                    + ", ".join(f"#{a['id']}" for a in cancelled),
+        ),
+        context="log mass cancel",
+    )
+
+    # Уведомления клиентам — fire-and-forget по каждой записи.
+    # Ловим TG-ошибки внутри: если клиент заблокировал бота, пропускаем.
+    async def _notify_one(appt: dict) -> None:
+        from db import get_user_lang
+        client_lang = await get_user_lang(appt["user_id"])
+        if client_lang == "uz":
+            msg = (
+                f"❌ Yozilishingiz usta tomonidan bekor qilindi.\n\n"
+                f"📅 {appt['date']} · {appt['time']}\n"
+                f"💅 {appt['service_name']}\n\n"
+                f"Boshqa vaqtga yozilish uchun usta bilan bog'laning."
+            )
+        else:
+            msg = (
+                f"❌ Ваша запись отменена мастером.\n\n"
+                f"📅 {appt['date']} в {appt['time']}\n"
+                f"💅 {appt['service_name']}\n\n"
+                f"Пожалуйста, свяжитесь с мастером для записи на другое время."
+            )
+        if appt.get("paid_at"):
+            from utils.salon_info import refund_contact_line
+            from utils.i18n import t
+            msg += "\n\n" + t("refund_needed_intro", client_lang)
+            msg += "\n" + await refund_contact_line(client_lang)
+        try:
+            await callback.bot.send_message(appt["user_id"], msg)
+        except Exception:
+            logger.warning(
+                "Could not notify user_id=%s about mass cancel",
+                appt["user_id"],
+            )
+
+    for appt in cancelled:
+        _fire(_notify_one(appt), context=f"notify mass cancel #{appt['id']}")
+
+    # Refund-алерты админам — по каждой оплаченной записи.
+    paid = [a for a in cancelled if a.get("paid_at")]
+    if paid:
+        from utils.notifications import admin_dismiss_kb, broadcast_to_admins
+        for appt in paid:
+            price = appt.get("service_price", 0)
+            text = (
+                f"🔴 <b>Нужен возврат</b>\n"
+                f"Запись #{appt['id']} отменена в массовой отмене дня.\n"
+                f"Клиент: {h(appt['name'])}\n"
+                f"Сумма: {price:,} UZS\n".replace(",", " ") +
+                f"Провайдер: <code>{appt.get('payment_provider') or '—'}</code>\n"
+                f"Инвойс: <code>{appt.get('payment_invoice_id') or '—'}</code>"
+            )
+            _fire(
+                broadcast_to_admins(
+                    callback.bot, text,
+                    reply_markup=admin_dismiss_kb("✅ Возврат сделан"),
+                    log_context="mass refund needed",
+                ),
+                context="mass refund alert",
+            )
+
+    try:
+        label = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m.%Y")
+    except ValueError:
+        label = date_str
+    await edit_panel_with_callback(
+        callback,
+        f"✅ Отменено записей: <b>{len(cancelled)}</b> на {label}.\n"
+        f"Уведомления клиентам отправлены.",
+        None,
+        parse_mode="HTML",
+    )
 
 
 # ─── СТАТУС ЗАПИСИ ───────────────────────────────────────────────────────────

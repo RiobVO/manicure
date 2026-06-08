@@ -675,6 +675,9 @@ def day_view_keyboard(scheduled: list[dict], date_str: str) -> InlineKeyboardMar
     Внизу — «🚫 Сделать выходным» (только для today/future): тап = блокировка
     дня без захода в «📵 Блокировки → добавить → выбор даты из 14 дней».
     Прошлые дни не показывают кнопку — закрывать вчера бессмысленно.
+
+    Если ≥2 scheduled — ещё «❌ Отменить все»: для случая «заболела, надо
+    закрыть день». При 1 записи — обычный single-cancel из карточки.
     """
     buttons: list[list[InlineKeyboardButton]] = []
     buttons.append([InlineKeyboardButton(
@@ -698,7 +701,28 @@ def day_view_keyboard(scheduled: list[dict], date_str: str) -> InlineKeyboardMar
             callback_data=f"caldayoff_{date_str}",
         )])
 
+    if len(scheduled) >= 2:
+        buttons.append([InlineKeyboardButton(
+            text=f"❌ Отменить все ({len(scheduled)})",
+            callback_data=f"daycancel_{date_str}",
+        )])
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def daycancel_confirm_keyboard(date_str: str, count: int) -> InlineKeyboardMarkup:
+    """Подтверждение массовой отмены — деструктивная операция, нужен явный
+    yes/no. «↩️ Отмена» возвращает в day-view через cal_day_back_<date>."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=f"❌ Да, отменить {count}",
+            callback_data=f"daycancel_confirm_{date_str}",
+        )],
+        [InlineKeyboardButton(
+            text="↩️ Нет, оставить",
+            callback_data=f"cal_day_back_{date_str}",
+        )],
+    ])
 
 
 def caldayoff_master_picker_keyboard(date_str: str, masters: list[dict]) -> InlineKeyboardMarkup:

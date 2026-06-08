@@ -32,6 +32,7 @@ from db.appointments import (
     count_user_appointments,
     save_appointment_addons,
     get_calendar_marks,
+    cancel_all_scheduled_on_date,
 )
 
 # --- services ---
