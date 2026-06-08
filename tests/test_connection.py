@@ -1,5 +1,6 @@
 """Тесты connection-слоя: get_db, init_db, close_db, миграции, PRAGMA."""
 import asyncio
+import sqlite3
 
 import db.connection as dbc
 from db import init_db, close_db, get_db
@@ -134,3 +135,25 @@ async def test_pragma_journal_mode_wal(fresh_db):
     cursor = await db.execute("PRAGMA journal_mode")
     val = (await cursor.fetchone())[0]
     assert val.lower() == "wal"
+
+
+async def test_backup_db_copies_wal_snapshot(fresh_db, tmp_path):
+    db = await get_db()
+    await db.execute(
+        """INSERT INTO appointments
+           (user_id, name, phone, service_id, service_name, service_duration,
+            date, time, status, service_price)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (123, "Анна", "+998901234567", 1, "Маникюр", 60, "2026-05-01", "10:00", "scheduled", 200000),
+    )
+    await db.commit()
+
+    backup_path = await dbc.backup_db(str(tmp_path))
+
+    assert backup_path is not None
+    with sqlite3.connect(backup_path) as backup:
+        row = backup.execute(
+            "SELECT COUNT(*) FROM appointments WHERE user_id = ? AND phone = ?",
+            (123, "+998901234567"),
+        ).fetchone()
+    assert row[0] == 1

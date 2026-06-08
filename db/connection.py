@@ -14,7 +14,7 @@ import asyncio
 import glob
 import logging
 import os
-import shutil
+import sqlite3
 from typing import Any, Iterable
 
 import aiosqlite
@@ -636,34 +636,36 @@ async def init_db() -> None:
     await db.commit()
 
 
+def _create_backup_file_sync(backup_dir: str) -> str:
+    from utils.timezone import now_local
+
+    os.makedirs(backup_dir, exist_ok=True)
+
+    timestamp = now_local().strftime("%Y-%m-%d_%H-%M")
+    backup_name = f"manicure_backup_{timestamp}.db"
+    backup_path = os.path.join(backup_dir, backup_name)
+
+    with sqlite3.connect(DB_PATH, timeout=30) as source:
+        source.execute("PRAGMA busy_timeout=30000")
+        with sqlite3.connect(backup_path) as target:
+            source.backup(target)
+
+    existing = sorted(glob.glob(os.path.join(backup_dir, "manicure_backup_*.db")))
+    for old_file in existing[:-7]:
+        try:
+            os.remove(old_file)
+        except OSError as exc:
+            logger.warning("Не удалось удалить старый бэкап %s: %s", old_file, exc)
+
+    return backup_path
+
+
 async def backup_db(backup_dir: str = "backups") -> str | None:
     """Создаёт бэкап БД. Ротация: последние 7 файлов."""
     try:
-        os.makedirs(backup_dir, exist_ok=True)
-
-        from utils.timezone import now_local
-        timestamp = now_local().strftime("%Y-%m-%d_%H-%M")
-        backup_name = f"manicure_backup_{timestamp}.db"
-        backup_path = os.path.join(backup_dir, backup_name)
-
-        # Сброс WAL перед копированием — гарантия целостности бэкапа.
-        # Checkpoint + copy выполняются под write_lock: иначе между checkpoint
-        # и copy может пройти INSERT → он уйдёт в свежий WAL, а shutil.copy2
-        # копирует только .db (не -wal/-shm), и запись потеряется в бэкапе.
-        db = await get_db()
-        lock = await get_write_lock()
-        async with lock:
-            await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            shutil.copy2(DB_PATH, backup_path)
-
-        # Ротация: оставляем только 7 последних бэкапов
-        existing = sorted(glob.glob(os.path.join(backup_dir, "manicure_backup_*.db")))
-        for old_file in existing[:-7]:
-            try:
-                os.remove(old_file)
-            except OSError as exc:
-                logger.warning("Не удалось удалить старый бэкап %s: %s", old_file, exc)
-
+        # SQLite backup API копирует консистентный snapshot с учётом WAL, а
+        # to_thread не даёт дисковой копии заморозить event loop бота.
+        backup_path = await asyncio.to_thread(_create_backup_file_sync, backup_dir)
         logger.info("Бэкап создан: %s", backup_path)
         return backup_path
     except Exception:
