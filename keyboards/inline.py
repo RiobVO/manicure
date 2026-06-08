@@ -925,11 +925,15 @@ def services_list_keyboard(
     services: list[dict],
     page: int = 0,
     per_page: int = SERVICES_PER_PAGE,
+    addon_counts: dict[int, int] | None = None,
 ) -> InlineKeyboardMarkup:
     """
     Пагинированный список услуг в админке. ~8 на страницу — без скролла на
     стандартном экране телефона. Footer: «◀» «N/M» «▶» (стрелки на крайних
     страницах скрыты, счётчик не кликабельный — cal_noop).
+
+    addon_counts: {service_id: число активных аддонов}. Если передан и >0 —
+    к тексту дописывается «· ➕N». Без него — без бейджа (legacy).
     """
     buttons: list[list[InlineKeyboardButton]] = []
     total = len(services)
@@ -940,8 +944,13 @@ def services_list_keyboard(
         start = page * per_page
         for s in services[start:start + per_page]:
             status = "🟢" if s["is_active"] else "🔴"
+            label = f"{status} {s['name']} — {s['price']:,} сум"
+            if addon_counts:
+                n = addon_counts.get(s["id"], 0)
+                if n > 0:
+                    label += f" · ➕{n}"
             buttons.append([InlineKeyboardButton(
-                text=f"{status} {s['name']} — {s['price']:,} сум",
+                text=label,
                 callback_data=f"svc_detail_{s['id']}",
             )])
         if total_pages > 1:

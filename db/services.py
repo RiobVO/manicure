@@ -91,6 +91,18 @@ async def update_service_category(service_id: int, category: str) -> None:
     await db.commit()
 
 
+async def get_active_addon_counts() -> dict[int, int]:
+    """{service_id: количество активных аддонов}. Для бейджа в админ-списке.
+    Один GROUP BY вместо N+1 запросов."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT service_id, COUNT(*) FROM service_addons "
+        "WHERE is_active = 1 GROUP BY service_id"
+    )
+    rows = await cursor.fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
 async def get_addons_for_service(service_id: int, active_only: bool = True) -> list[dict[str, Any]]:
     """Доп. опции для услуги."""
     if active_only:

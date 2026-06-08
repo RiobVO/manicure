@@ -316,7 +316,9 @@ async def msg_services(message: Message, state: FSMContext):
         return
     await state.clear()
     services = await get_services(active_only=False)
-    await _nav(message, "💅 Управление услугами:", services_list_keyboard(services))
+    from db import get_active_addon_counts
+    addon_counts = await get_active_addon_counts()
+    await _nav(message, "💅 Управление услугами:", services_list_keyboard(services, addon_counts=addon_counts))
 
 
 @router.message(StateFilter("*"), F.text == "📊 Статистика")
