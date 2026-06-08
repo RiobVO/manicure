@@ -949,6 +949,11 @@ def services_list_keyboard(
                 n = addon_counts.get(s["id"], 0)
                 if n > 0:
                     label += f" · ➕{n}"
+            # Активная услуга с price=0 видна клиенту бесплатно — почти всегда
+            # это забытый placeholder («Лицо», «Брови»). Флажок ⚠️ заметен
+            # в списке, в карточке (svc_detail) Сабина увидит подробности.
+            if s["is_active"] and s["price"] == 0:
+                label += " ⚠️"
             buttons.append([InlineKeyboardButton(
                 text=label,
                 callback_data=f"svc_detail_{s['id']}",
