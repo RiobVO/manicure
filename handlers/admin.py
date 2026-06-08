@@ -305,7 +305,9 @@ async def msg_calendar(message: Message, state: FSMContext):
         return
     await state.clear()
     now = now_local()
-    await _nav(message, "🗓 Выберите дату:", calendar_keyboard(now.year, now.month))
+    from handlers.admin_appointments import _calendar_marks_for
+    marks = await _calendar_marks_for(now.year, now.month)
+    await _nav(message, "🗓 Выберите дату:", calendar_keyboard(now.year, now.month, marks=marks))
 
 
 @router.message(StateFilter("*"), F.text == "💅 Услуги")
