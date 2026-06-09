@@ -31,9 +31,29 @@ async def create_appointment(
 ) -> int:
     """
     Создаёт запись атомарно (BEGIN IMMEDIATE).
-    Бросает ValueError если слот занят.
+    Бросает ValueError если слот занят, день выходной, время вне рабочих часов
+    или попадает в blocked_slots.
     Возвращает ID созданной записи.
+
+    Defence-in-depth: хендлер уже фильтрует слоты через compute_free_slots, но
+    подделка callback time_<HH:MM> или TOCTOU (админ закрыл день, пока клиент
+    вводил имя/телефон) прошли бы guard и без проверки в БД-слое создали бы
+    бронь на закрытый день / в перерыв. БД — последняя линия (зеркало
+    reschedule_appointment).
     """
+    # Импорты здесь, а не наверху: get_*_schedule живут в db/settings.py и
+    # db/masters.py, которые импортят db.connection. Top-level — цикл.
+    from db.settings import get_day_schedule, is_day_off, get_time_blocks
+    from db.masters import get_day_schedule_for_master, get_time_blocks_for_master
+
+    # Парсинг времени — дешёвый и без БД, делаем до lock'а.
+    try:
+        hh, mm = time.split(":")
+        slot_start_min = int(hh) * 60 + int(mm)
+    except (ValueError, IndexError) as exc:
+        raise ValueError("Некорректное время.") from exc
+    slot_end_min = slot_start_min + service_duration
+
     db = await get_db()
     lock = await get_write_lock()
     # Lock нужен из-за ограничения aiosqlite: на одном connection
@@ -41,6 +61,42 @@ async def create_appointment(
     async with lock:
         await db.execute("BEGIN IMMEDIATE")
         try:
+            # Валидация дня/часов/блоков внутри lock+BEGIN IMMEDIATE: иначе
+            # TOCTOU — админ может поставить day_off между чтением и INSERT.
+            if master_id is not None:
+                day_sched = await get_day_schedule_for_master(master_id, date)
+                if day_sched is None:
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Этот день — выходной или заблокирован для мастера.")
+                blocks = await get_time_blocks_for_master(master_id, date)
+            else:
+                if await is_day_off(date):
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Этот день заблокирован.")
+                day_sched = await get_day_schedule(date)
+                if day_sched is None:
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Салон не работает в этот день недели.")
+                blocks = await get_time_blocks(date)
+
+            work_start_h, work_end_h = day_sched
+            if slot_start_min < work_start_h * 60 or slot_end_min > work_end_h * 60:
+                await db.execute("ROLLBACK")
+                raise ValueError("Время вне рабочих часов.")
+
+            for b_start, b_end in blocks:
+                try:
+                    bh1, bm1 = b_start.split(":")
+                    bh2, bm2 = b_end.split(":")
+                except (ValueError, IndexError):
+                    continue
+                block_start_min = int(bh1) * 60 + int(bm1)
+                block_end_min = int(bh2) * 60 + int(bm2)
+                # Симметричный overlap с blocked-диапазоном.
+                if slot_start_min < block_end_min and slot_end_min > block_start_min:
+                    await db.execute("ROLLBACK")
+                    raise ValueError("Время попадает в заблокированный диапазон.")
+
             if master_id is not None:
                 cursor = await db.execute(
                     """SELECT COUNT(*) FROM appointments
@@ -533,18 +589,25 @@ async def get_appointments_for_export(period: str) -> list[dict[str, Any]]:
     Выборка записей для экспорта.
     period: 'today' | 'week' | 'month' | 'all'
     """
-    filters = {
-        "today": "WHERE date = date('now')",
-        "week":  "WHERE strftime('%Y-%W', date) = strftime('%Y-%W', 'now')",
-        "month": "WHERE strftime('%Y-%m', date) = strftime('%Y-%m', 'now')",
-        "all":   "",
+    # date('now')/strftime(...,'now') в SQLite = UTC; Asia/Tashkent отстаёт на
+    # 5ч, поэтому 00:00–05:00 локально 'now' всё ещё вчерашний день → «выгрузить
+    # сегодня» сразу после полуночи отдавало бы вчерашние записи под сегодняшним
+    # именем файла. Считаем границу локально и биндим параметром (как соседние
+    # get_upcoming_appointments / get_stats).
+    today = now_local().strftime("%Y-%m-%d")
+    filters: dict[str, tuple[str, tuple]] = {
+        "today": ("WHERE date = ?", (today,)),
+        "week":  ("WHERE strftime('%Y-%W', date) = strftime('%Y-%W', ?)", (today,)),
+        "month": ("WHERE strftime('%Y-%m', date) = strftime('%Y-%m', ?)", (today,)),
+        "all":   ("", ()),
     }
-    where = filters.get(period, "")
+    where, params = filters.get(period, ("", ()))
     return await _dict_rows(
         f"""SELECT date, time, name, phone, service_name, service_price, status
             FROM appointments
             {where}
-            ORDER BY date DESC, time DESC"""
+            ORDER BY date DESC, time DESC""",
+        params,
     )
 
 

@@ -585,6 +585,41 @@ async def choose_time(callback: CallbackQuery, state: FSMContext):
         logger.warning("Некорректный callback: %s", callback.data)
         return
     time_str = parts[0]
+
+    # Defence-in-depth: callback time_<HH:MM> можно подделать (префикс + любая
+    # строка), либо слот мог занятьcя/попасть под блокировку, пока клиент думал.
+    # Сверяем с актуальным списком — иначе бронь вне рабочих часов / в перерыв.
+    data = await state.get_data()
+    duration = data.get("service_duration")
+    master_id: int | None = data.get("master_id")
+    date_str = data.get("date")
+    if duration is None or not date_str:
+        logger.warning("choose_time без duration/date в state: %s", data)
+        return
+    _, free_slots = await compute_free_slots(master_id, date_str, duration)
+    if time_str not in free_slots:
+        if master_id is not None:
+            day_off_weekdays = await get_day_off_weekdays_for_master(master_id)
+        else:
+            day_off_weekdays = await _day_off_weekdays()
+        try:
+            if free_slots:
+                await callback.message.edit_text(
+                    f"📅 <b>{date_soft(date_str, lang)}</b>\n\n"
+                    f"{t('book_time_prompt', lang)}",
+                    reply_markup=times_keyboard(free_slots),
+                    parse_mode="HTML",
+                )
+            else:
+                await callback.message.edit_text(
+                    t("book_no_free_slots", lang),
+                    reply_markup=dates_keyboard(day_off_weekdays, lang),
+                    parse_mode="HTML",
+                )
+        except TelegramBadRequest:
+            pass
+        return
+
     await state.update_data(time=time_str)
 
     profile = await get_client_profile(callback.from_user.id)

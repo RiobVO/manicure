@@ -40,6 +40,21 @@ class _ClickPrepare(Exception):
         self.click_trans_id = click_trans_id
 
 
+class _ClickAmountError(Exception):
+    """
+    Сумма webhook'а не совпала с ценой услуги. server.py отвечает Click
+    error=-2 (Incorrect parameter amount) — запись НЕ помечается оплаченной,
+    Click откатывает/возвращает платёж клиенту. Зеркало Payme -31001:
+    без этой проверки устаревший инвойс (мастер поднял цену) или
+    скорректированный платёж пометил бы запись оплаченной на любую сумму.
+    """
+    def __init__(self, merchant_trans_id: str, got: str, expected: int):
+        self.merchant_trans_id = merchant_trans_id
+        self.got = got
+        self.expected = expected
+        super().__init__(f"amount mismatch: got {got!r}, expected {expected}")
+
+
 class ClickProvider(PaymentProvider):
     name = "click"
 
@@ -126,6 +141,25 @@ class ClickProvider(PaymentProvider):
 
         if not hmac.compare_digest(expected, sign_string):
             raise PermissionError("click: signature mismatch")
+
+        # Сумма: Click шлёт amount в сумах (строка вида "150000.00"). Сверяем
+        # с ценой услуги ДО пометки оплаты — иначе любой устаревший/некорректный
+        # инвойс пометит запись оплаченной на произвольную сумму. Проверяем и на
+        # Prepare (action=0), и на Complete (action=1), чтобы отказать ещё до
+        # захвата денег. Если записи нет (state is None) — не вмешиваемся, дальше
+        # mark_paid вернёт not_found, поведение прежнее.
+        if action in ("0", "1") and merchant_trans_id.isdigit():
+            from db.payments import get_payment_state
+            state = await get_payment_state(int(merchant_trans_id))
+            if state is not None:
+                try:
+                    amount_uzs = int(round(float(amount)))
+                except (TypeError, ValueError):
+                    amount_uzs = -1
+                if amount_uzs != int(state["service_price"]):
+                    raise _ClickAmountError(
+                        merchant_trans_id, amount, int(state["service_price"])
+                    )
 
         if action == "0":
             # Prepare: говорим «принимаем», но paid не ставим.
