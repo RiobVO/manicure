@@ -91,6 +91,7 @@ from db.clients import (
     get_dormant_clients,
     get_client_card,
     get_user_lang,
+    get_user_langs,
     set_user_lang,
 )
 
