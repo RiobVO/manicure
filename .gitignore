@@ -19,6 +19,9 @@ node_modules/
 .idea/
 .vscode/
 
+# macOS
+.DS_Store
+
 # Env
 .env
 .env.local
