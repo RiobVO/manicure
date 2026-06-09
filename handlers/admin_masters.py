@@ -203,9 +203,9 @@ async def cb_master_add(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     await edit_panel_with_callback(callback, "👨\u200d🎨 Введите имя мастера:", admin_cancel_keyboard())
     await state.set_state(AdminStates.master_add_name)
-    await callback.answer()
 
 
 @router.message(AdminStates.master_add_name)

@@ -204,16 +204,16 @@ async def cb_admin_stats(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    try:
+        await callback.answer()
+    except TelegramBadRequest:
+        pass
 
     text, kb = await build_stats_payload(DEFAULT_PERIOD)
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except TelegramBadRequest:
         # Сообщение не редактируется (старое/удалено) — ack без edit.
-        pass
-    try:
-        await callback.answer()
-    except TelegramBadRequest:
         pass
 
 
@@ -223,16 +223,16 @@ async def cb_stats_period(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    try:
+        # Подтверждаем нажатие до DB+TG-вызовов: иначе крутилка висит весь RTT.
+        # Текст в alert НЕ показываем — данные уже на экране.
+        await callback.answer()
+    except TelegramBadRequest:
+        pass
     period = callback.data.removeprefix("stats_period_")
     text, kb = await build_stats_payload(period)
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-    except TelegramBadRequest:
-        pass
-    try:
-        # Подтверждаем нажатие, чтобы крутилка ушла. Текст в alert НЕ показываем —
-        # данные уже на экране, дополнительная плашка отвлекает.
-        await callback.answer()
     except TelegramBadRequest:
         pass
 
@@ -244,6 +244,10 @@ async def cb_stats_by_master(callback: CallbackQuery):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    try:
+        await callback.answer()
+    except TelegramBadRequest:
+        pass
 
     from db import get_stats_by_master  # локальный импорт — функция не нужна выше
     stats = await get_stats_by_master()
@@ -253,7 +257,6 @@ async def cb_stats_by_master(callback: CallbackQuery):
             await callback.message.edit_text("Нет данных по мастерам.")
         except TelegramBadRequest:
             pass
-        await callback.answer()
         return
 
     lines = ["📊 <b>Статистика по мастерам</b>\n"]

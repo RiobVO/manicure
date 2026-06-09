@@ -1110,6 +1110,8 @@ async def _do_confirm(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(BookingStates.confirm, F.data == "confirm_no")
 async def confirm_no(callback: CallbackQuery, state: FSMContext):
+    # Клиентский путь — ack первым делом, чтобы часики ушли мгновенно.
+    await callback.answer()
     from utils.i18n import t
     from db import get_user_lang
     lang = await get_user_lang(callback.from_user.id)
@@ -1127,7 +1129,6 @@ async def confirm_no(callback: CallbackQuery, state: FSMContext):
         )
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
 
 @router.message(BookingStates.get_phone)
@@ -1272,6 +1273,7 @@ async def cb_lang_set(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "lang_picker")
 async def cb_lang_picker(callback: CallbackQuery, state: FSMContext):
     """Открыть переключатель языка из «мои записи»."""
+    await callback.answer()
     await state.clear()
     from utils.i18n import t
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -1286,7 +1288,6 @@ async def cb_lang_picker(callback: CallbackQuery, state: FSMContext):
         )
     except TelegramBadRequest:
         pass
-    await callback.answer()
 
 
 @router.message(F.text.regexp(r"^/(language|til|lang)(?:\s|$)") | (F.text == "🌐 Язык / Til"))

@@ -152,6 +152,7 @@ async def cb_block_add(callback: CallbackQuery, state: FSMContext):
     if not is_admin_callback(callback):
         await deny_access(callback)
         return
+    await callback.answer()
     masters = await get_active_masters()
     if masters:
         await edit_panel_with_callback(
@@ -165,7 +166,6 @@ async def cb_block_add(callback: CallbackQuery, state: FSMContext):
         await state.update_data(block_master_id=None)
         await edit_panel_with_callback(callback, "📵 Выберите дату для блокировки:", block_date_keyboard())
         await state.set_state(AdminStates.block_pick_date)
-    await callback.answer()
 
 
 @router.callback_query(AdminStates.block_pick_master, F.data.startswith("block_master_"))
