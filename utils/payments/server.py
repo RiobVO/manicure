@@ -27,7 +27,7 @@ from config import PAYMENT_WEBHOOK_PORT
 from db.payments import get_payment_state, mark_paid
 from utils.notifications import broadcast_to_admins
 from utils.payments import get_provider
-from utils.payments.click import _ClickPrepare
+from utils.payments.click import _ClickPrepare, _ClickAmountError
 from utils.payments.payme import _PaymeError, _PaymeNonPerform
 
 logger = logging.getLogger(__name__)
@@ -131,6 +131,16 @@ async def _click_handler(request: web.Request) -> web.Response:
             "merchant_prepare_id": int(prep.merchant_trans_id) if prep.merchant_trans_id.isdigit() else 0,
             "error": 0,
             "error_note": "Success",
+        })
+    except _ClickAmountError as exc:
+        # Сумма не совпала с ценой услуги — отказываем (-2). Запись не помечена
+        # оплаченной, Click возвращает деньги клиенту. Зеркало Payme -31001.
+        logger.warning("click webhook amount mismatch from %s: %s", ip, exc)
+        return web.json_response({
+            "click_trans_id": 0,
+            "merchant_trans_id": exc.merchant_trans_id,
+            "error": -2,
+            "error_note": "Incorrect parameter amount",
         })
     except PermissionError as exc:
         logger.warning("click webhook 401 from %s: %s", ip, exc)
