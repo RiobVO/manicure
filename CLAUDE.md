@@ -261,7 +261,7 @@ Click/Payme полностью реализованы, но **по умолча�
 
 - **`utils/license.py`** — Ed25519-подписанные ключи. Публичный ключ вмёрзнут в `PUBLIC_KEY_PEM` (запущенный бот не читает файлов). Приватный ключ — у автора в `license_private_key.pem` (gitignored).
 - **Режимы (`LicenseMode`):** `DEV` (placeholder в `PUBLIC_KEY_PEM` — пропускает всё), `OK`, `GRACE` (истекла ≤ `GRACE_DAYS=90` назад), `RESTRICTED` (нет/невалид/истекла >90 дн.).
-- **`middlewares/license_gate.py`** — **enforcement on**, gate зарегистрирован в `bot.py` сразу после `TimingMiddleware`. В `RESTRICTED` бот отвечает только на `/start` с текстом про лицензию и `LICENSE_CONTACT`. На callback'и — `show_alert` «Лицензия бота истекла».
+- **`middlewares/license_gate.py`** — **enforcement on**, gate зарегистрирован в `bot.py` после `TimingMiddleware` и `AntiSpamCallbackMiddleware` (последним перед хендлерами). В `RESTRICTED` бот отвечает только на `/start` с текстом про лицензию и `LICENSE_CONTACT`. На callback'и — `show_alert` «Лицензия бота истекла».
 - **На старте в `GRACE`** — `_warn_grace` рассылает админам «лицензия истекла, до блокировки N дн.».
 - **Проактивный алерт** автору за ≤60 дн. до истечения — в `ERROR_CHAT_ID`, дедуп 7 дн. через файл `<DB_PATH>/.license_alert`. Команда продления печатается прямо в алерте.
 - Инструменты автора: `tools/generate_keys.py` (разово), `tools/issue_license.py` (на каждую продажу). Полный флоу — `docs/LICENSING.md`.
